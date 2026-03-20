@@ -59,6 +59,7 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                     i.total_usd AS TotalUsd,
                     i.paid_syp AS PaidSyp,
                     i.paid_usd AS PaidUsd,
+                    i.sales_rep_id AS SalesRepId,
                     i.invoice_type AS Type
                 FROM invoices i
                 INNER JOIN customers c ON c.id = i.customer_id
@@ -243,6 +244,45 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
             WHERE id = @InvoiceId;
             """,
             new { request.InvoiceId, PostedBy = _currentUser.UserId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        var outboxMessage = OutboxMessage.Create(
+            OutboxEventTypes.InvoicePosted,
+            "Invoice",
+            request.InvoiceId,
+            new InvoicePostedPayload(
+                request.InvoiceId,
+                (Guid)header.CustomerId,
+                (decimal)header.TotalSyp,
+                (decimal)header.TotalUsd,
+                DateOnly.FromDateTime((DateTime)header.InvoiceDate),
+                header.SalesRepId is null ? null : (Guid?)header.SalesRepId,
+                lines.Length),
+            _currentUser.CorrelationId);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO outbox_messages (
+                id, event_type, aggregate_type, aggregate_id, payload_json, occurred_at,
+                processed_at, processing_error, retry_count, correlation_id)
+            VALUES (
+                @Id, @EventType, @AggregateType, @AggregateId, @PayloadJson, @OccurredAt,
+                @ProcessedAt, @ProcessingError, @RetryCount, @CorrelationId);
+            """,
+            new
+            {
+                outboxMessage.Id,
+                outboxMessage.EventType,
+                outboxMessage.AggregateType,
+                outboxMessage.AggregateId,
+                outboxMessage.PayloadJson,
+                outboxMessage.OccurredAt,
+                outboxMessage.ProcessedAt,
+                outboxMessage.ProcessingError,
+                outboxMessage.RetryCount,
+                outboxMessage.CorrelationId
+            },
             transaction,
             cancellationToken: cancellationToken));
 

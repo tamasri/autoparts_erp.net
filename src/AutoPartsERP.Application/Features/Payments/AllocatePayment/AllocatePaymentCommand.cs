@@ -67,6 +67,9 @@ public sealed class AllocatePaymentCommandHandler : IRequestHandler<AllocatePaym
             return Result<Guid>.Failure(new Error("Payment.NotFound", "Payment was not found."));
         }
 
+        var remainingSyp = payment.UnallocatedSyp;
+        var remainingUsd = payment.UnallocatedUsd;
+
         foreach (var allocation in request.Allocations)
         {
             var invoice = await connection.QuerySingleOrDefaultAsync<(Guid Id, decimal BalanceSyp, decimal BalanceUsd, string Status)>(
@@ -94,7 +97,7 @@ public sealed class AllocatePaymentCommandHandler : IRequestHandler<AllocatePaym
                 return Result<Guid>.Failure(new Error("Invoice.InvalidState", "Cannot allocate payments to a void invoice."));
             }
 
-            if (allocation.AllocatedSyp > payment.UnallocatedSyp || allocation.AllocatedUsd > payment.UnallocatedUsd)
+            if (allocation.AllocatedSyp > remainingSyp || allocation.AllocatedUsd > remainingUsd)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return Result<Guid>.Failure(new Error("Payment.OverAllocation", "Payment allocation exceeds remaining balance."));
@@ -157,6 +160,46 @@ public sealed class AllocatePaymentCommandHandler : IRequestHandler<AllocatePaym
                     PaymentId = request.PaymentId,
                     allocation.AllocatedSyp,
                     allocation.AllocatedUsd
+                },
+                transaction,
+                cancellationToken: cancellationToken));
+
+            remainingSyp -= allocation.AllocatedSyp;
+            remainingUsd -= allocation.AllocatedUsd;
+
+            var outboxMessage = OutboxMessage.Create(
+                OutboxEventTypes.PaymentAllocated,
+                "Payment",
+                request.PaymentId,
+                new PaymentAllocatedPayload(
+                    request.PaymentId,
+                    allocation.InvoiceId,
+                    allocation.AllocatedSyp,
+                    allocation.AllocatedUsd,
+                    DateOnly.FromDateTime(DateTime.UtcNow)),
+                _currentUser.CorrelationId);
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO outbox_messages (
+                    id, event_type, aggregate_type, aggregate_id, payload_json, occurred_at,
+                    processed_at, processing_error, retry_count, correlation_id)
+                VALUES (
+                    @Id, @EventType, @AggregateType, @AggregateId, @PayloadJson, @OccurredAt,
+                    @ProcessedAt, @ProcessingError, @RetryCount, @CorrelationId);
+                """,
+                new
+                {
+                    outboxMessage.Id,
+                    outboxMessage.EventType,
+                    outboxMessage.AggregateType,
+                    outboxMessage.AggregateId,
+                    outboxMessage.PayloadJson,
+                    outboxMessage.OccurredAt,
+                    outboxMessage.ProcessedAt,
+                    outboxMessage.ProcessingError,
+                    outboxMessage.RetryCount,
+                    outboxMessage.CorrelationId
                 },
                 transaction,
                 cancellationToken: cancellationToken));

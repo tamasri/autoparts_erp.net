@@ -106,6 +106,9 @@ builder.Services
     .AddNpgSql(databaseConnectionString, name: "postgresql")
     .AddRedis(redisConnectionString, name: "redis");
 
+// OpenTelemetry + business metrics
+builder.Services.AddObservability(builder.Configuration);
+
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -126,6 +129,7 @@ builder.Services.AddApiVersioning(options =>
 // OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 // IdempotentMinimalAPI
 builder.Services.AddApiIdempotency();
@@ -153,6 +157,8 @@ builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IWarrantyRepository, WarrantyRepository>();
+builder.Services.AddScoped<IPartyRepository, PartyRepository>();
+builder.Services.AddScoped<IOutboxRepository, OutboxRepository>();
 
 builder.Services.AddSingleton<InventoryExcelExporter>();
 builder.Services.AddSingleton<AccountStatementExcelExporter>();
@@ -166,6 +172,9 @@ builder.Services.AddScoped<RefreshMonthlyPlJob>();
 builder.Services.AddScoped<ExpireWarrantyRecordsJob>();
 builder.Services.AddScoped<LowStockAlertJob>();
 builder.Services.AddSingleton<HangfireAuthorizationFilter>();
+builder.Services.AddHostedService<OutboxDispatcherService>();
+builder.Services.AddScoped<IOutboxEventHandler, InvoicePostedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, PaymentAllocatedOutboxHandler>();
 
 // Audit configuration
 AuditConfiguration.Configure(builder.Configuration);
@@ -185,6 +194,8 @@ app.UseApiIdempotency();
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready");
+app.MapPrometheusScrapingEndpoint("/metrics");
+app.MapHub<ErpHub>("/hubs/erp");
 
 if (!app.Environment.IsEnvironment("Testing"))
 {

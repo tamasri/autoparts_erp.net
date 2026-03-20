@@ -115,6 +115,42 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
             transaction,
             cancellationToken: cancellationToken));
 
+        var outboxMessage = OutboxMessage.Create(
+            OutboxEventTypes.InvoiceVoided,
+            "Invoice",
+            request.InvoiceId,
+            new InvoiceVoidedPayload(
+                request.InvoiceId,
+                reversalId,
+                request.Reason,
+                _currentUser.UserId),
+            _currentUser.CorrelationId);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO outbox_messages (
+                id, event_type, aggregate_type, aggregate_id, payload_json, occurred_at,
+                processed_at, processing_error, retry_count, correlation_id)
+            VALUES (
+                @Id, @EventType, @AggregateType, @AggregateId, @PayloadJson, @OccurredAt,
+                @ProcessedAt, @ProcessingError, @RetryCount, @CorrelationId);
+            """,
+            new
+            {
+                outboxMessage.Id,
+                outboxMessage.EventType,
+                outboxMessage.AggregateType,
+                outboxMessage.AggregateId,
+                outboxMessage.PayloadJson,
+                outboxMessage.OccurredAt,
+                outboxMessage.ProcessedAt,
+                outboxMessage.ProcessingError,
+                outboxMessage.RetryCount,
+                outboxMessage.CorrelationId
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(reversalId);
     }

@@ -84,6 +84,21 @@ public static class PermissionCodes
         public const string BatchTrace = "reports:batch_trace";
     }
 
+    public static class Party
+    {
+        public const string Read = "party:read";
+        public const string Create = "party:create";
+        public const string Update = "party:update";
+        public const string Deactivate = "party:deactivate";
+        public const string AssignType = "party:assign_type";
+    }
+
+    public static class System
+    {
+        public const string ConfigRead = "system:config_read";
+        public const string ConfigWrite = "system:config_write";
+    }
+
     public static readonly IReadOnlyCollection<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         UsersRead,
@@ -133,6 +148,13 @@ public static class PermissionCodes
         Reports.ProfitLoss,
         Reports.AccountStatement,
         Reports.InventoryValue,
-        Reports.BatchTrace
+        Reports.BatchTrace,
+        Party.Read,
+        Party.Create,
+        Party.Update,
+        Party.Deactivate,
+        Party.AssignType,
+        System.ConfigRead,
+        System.ConfigWrite
     };
 }

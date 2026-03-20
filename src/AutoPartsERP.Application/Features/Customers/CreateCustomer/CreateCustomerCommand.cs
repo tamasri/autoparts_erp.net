@@ -43,22 +43,64 @@ public sealed class CreateCustomerCommandHandler : IRequestHandler<CreateCustome
 
         await using var connection = await _connectionFactory.CreateAsync(cancellationToken);
         await EnsureOpenAsync(connection, cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        var partyId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var partyCode = await GetNextPartyCodeAsync(connection, transaction, cancellationToken);
+
+        await using (var partyCommand = connection.CreateCommand())
+        {
+            partyCommand.Transaction = transaction;
+            partyCommand.CommandText = """
+                INSERT INTO parties
+                    (id, code, display_name, display_name_ar, tax_number, website, notes, is_active, created_at, created_by)
+                VALUES
+                    (@Id, @Code, @DisplayName, @DisplayNameAr, NULL, NULL, @Notes, TRUE, now(), @CreatedBy);
+                """;
+
+            AddParameter(partyCommand, "Id", partyId);
+            AddParameter(partyCommand, "Code", partyCode);
+            AddParameter(partyCommand, "DisplayName", request.Request.Name.Trim());
+            AddParameter(partyCommand, "DisplayNameAr", request.Request.Name.Trim());
+            AddParameter(partyCommand, "Notes", (object?)request.Request.Notes?.Trim() ?? DBNull.Value);
+            AddParameter(partyCommand, "CreatedBy", _currentUser.UserId);
+            await partyCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var typeAssignmentCommand = connection.CreateCommand())
+        {
+            typeAssignmentCommand.Transaction = transaction;
+            typeAssignmentCommand.CommandText = """
+                INSERT INTO party_type_assignments
+                    (id, party_id, type_code, is_active, requested_by, approved_by, activated_at, created_at)
+                VALUES
+                    (@Id, @PartyId, 'CUSTOMER', TRUE, @RequestedBy, @RequestedBy, now(), now());
+                """;
+
+            AddParameter(typeAssignmentCommand, "Id", Guid.NewGuid());
+            AddParameter(typeAssignmentCommand, "PartyId", partyId);
+            AddParameter(typeAssignmentCommand, "RequestedBy", _currentUser.UserId);
+            await typeAssignmentCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO customers
-                (id, code, name, type, phone, phone2, address, city, region, tax_number,
+                (id, party_id, code, name, type, phone, phone2, address, city, region, tax_number,
                  credit_limit_syp, credit_limit_usd, payment_terms_days, is_active,
                  assigned_sales_rep, notes, created_by, updated_by)
             VALUES
-                (@Id, @Code, @Name, @Type, @Phone, @Phone2, @Address, @City, @Region, @TaxNumber,
+                (@Id, @PartyId, @Code, @Name, @Type, @Phone, @Phone2, @Address, @City, @Region, @TaxNumber,
                  @CreditLimitSyp, @CreditLimitUsd, @PaymentTermsDays, TRUE,
                  @AssignedSalesRep, @Notes, @CreatedBy, NULL)
             RETURNING id, code, name, type, phone, address, credit_limit_syp, credit_limit_usd,
                       payment_terms_days, is_active, assigned_sales_rep, created_at, updated_at;
             """;
 
-        AddParameter(command, "Id", Guid.NewGuid());
+        AddParameter(command, "Id", customerId);
+        AddParameter(command, "PartyId", partyId);
         AddParameter(command, "Code", request.Request.Code.Trim().ToUpperInvariant());
         AddParameter(command, "Name", request.Request.Name.Trim());
         AddParameter(command, "Type", customerType.ToString().ToUpperInvariant());
@@ -75,13 +117,20 @@ public sealed class CreateCustomerCommandHandler : IRequestHandler<CreateCustome
         AddParameter(command, "Notes", (object?)request.Request.Notes?.Trim() ?? DBNull.Value);
         AddParameter(command, "CreatedBy", _currentUser.UserId);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        CustomerDto created;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            return Result<CustomerDto>.Failure(new Error("Customer.CreateFailed", "Customer could not be created."));
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<CustomerDto>.Failure(new Error("Customer.CreateFailed", "Customer could not be created."));
+            }
+
+            created = MapCustomer(reader);
         }
 
-        return Result<CustomerDto>.Success(MapCustomer(reader));
+        await transaction.CommitAsync(cancellationToken);
+        return Result<CustomerDto>.Success(created);
     }
 
     private static async Task EnsureOpenAsync(DbConnection connection, CancellationToken cancellationToken)
@@ -98,6 +147,18 @@ public sealed class CreateCustomerCommandHandler : IRequestHandler<CreateCustome
         parameter.ParameterName = name;
         parameter.Value = value ?? DBNull.Value;
         command.Parameters.Add(parameter);
+    }
+
+    private static async Task<string> GetNextPartyCodeAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 'PTY-' || LPAD(nextval('party_code_seq')::text, 4, '0');";
+        var raw = await command.ExecuteScalarAsync(cancellationToken);
+        return raw?.ToString() ?? $"PTY-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
     }
 
     private static CustomerDto MapCustomer(DbDataReader reader)

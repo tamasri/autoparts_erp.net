@@ -174,6 +174,43 @@ public sealed class ReceiveBatchCommandHandler : IRequestHandler<ReceiveBatchCom
                     transaction,
                     cancellationToken: cancellationToken));
 
+            var outboxMessage = OutboxMessage.Create(
+                OutboxEventTypes.BatchReceived,
+                "Batch",
+                batchId,
+                new BatchReceivedPayload(
+                    batchId,
+                    request.SkuId,
+                    request.LocationId,
+                    request.Quantity),
+                _currentUser.CorrelationId);
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    INSERT INTO outbox_messages (
+                        id, event_type, aggregate_type, aggregate_id, payload_json, occurred_at,
+                        processed_at, processing_error, retry_count, correlation_id)
+                    VALUES (
+                        @Id, @EventType, @AggregateType, @AggregateId, @PayloadJson, @OccurredAt,
+                        @ProcessedAt, @ProcessingError, @RetryCount, @CorrelationId);
+                    """,
+                    new
+                    {
+                        outboxMessage.Id,
+                        outboxMessage.EventType,
+                        outboxMessage.AggregateType,
+                        outboxMessage.AggregateId,
+                        outboxMessage.PayloadJson,
+                        outboxMessage.OccurredAt,
+                        outboxMessage.ProcessedAt,
+                        outboxMessage.ProcessingError,
+                        outboxMessage.RetryCount,
+                        outboxMessage.CorrelationId
+                    },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
             await transaction.CommitAsync(cancellationToken);
             return Result<Guid>.Success(batchId);
         }

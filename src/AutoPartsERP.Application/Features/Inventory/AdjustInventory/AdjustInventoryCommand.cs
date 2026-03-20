@@ -109,6 +109,43 @@ public sealed class AdjustInventoryCommandHandler : IRequestHandler<AdjustInvent
             transaction,
             cancellationToken: cancellationToken));
 
+        var outboxMessage = OutboxMessage.Create(
+            OutboxEventTypes.StockAdjusted,
+            "InventoryStock",
+            stock.Id,
+            new StockAdjustedPayload(
+                request.SkuId,
+                request.LocationId,
+                request.BatchId,
+                request.QuantityDelta,
+                request.Reason),
+            _currentUser.CorrelationId);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO outbox_messages (
+                id, event_type, aggregate_type, aggregate_id, payload_json, occurred_at,
+                processed_at, processing_error, retry_count, correlation_id)
+            VALUES (
+                @Id, @EventType, @AggregateType, @AggregateId, @PayloadJson, @OccurredAt,
+                @ProcessedAt, @ProcessingError, @RetryCount, @CorrelationId);
+            """,
+            new
+            {
+                outboxMessage.Id,
+                outboxMessage.EventType,
+                outboxMessage.AggregateType,
+                outboxMessage.AggregateId,
+                outboxMessage.PayloadJson,
+                outboxMessage.OccurredAt,
+                outboxMessage.ProcessedAt,
+                outboxMessage.ProcessingError,
+                outboxMessage.RetryCount,
+                outboxMessage.CorrelationId
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(movementId);
     }

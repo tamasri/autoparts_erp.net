@@ -56,6 +56,8 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.prod.template
+.env.prod
 
 # Docker overrides / local
 *.local.yml

@@ -6,6 +6,7 @@ public sealed class Customer : AuditableEntity
 {
     private Customer(
         Guid id,
+        Guid partyId,
         string code,
         string name,
         CustomerType type,
@@ -15,6 +16,7 @@ public sealed class Customer : AuditableEntity
         Guid createdBy)
         : base(id)
     {
+        PartyId = partyId;
         Code = code;
         Name = name;
         Type = type;
@@ -26,6 +28,8 @@ public sealed class Customer : AuditableEntity
     }
 
     public string Code { get; private set; } = string.Empty;
+
+    public Guid PartyId { get; private set; }
 
     public string Name { get; private set; } = string.Empty;
 
@@ -62,6 +66,7 @@ public sealed class Customer : AuditableEntity
     public Guid? UpdatedBy { get; private set; }
 
     public static Result<Customer> Create(
+        Guid partyId,
         string code,
         string name,
         CustomerType type,
@@ -70,6 +75,11 @@ public sealed class Customer : AuditableEntity
         int paymentTermsDays,
         Guid createdBy)
     {
+        if (partyId == Guid.Empty)
+        {
+            return Result<Customer>.Failure(new Error("Customer.PartyRequired", "A party is required."));
+        }
+
         if (string.IsNullOrWhiteSpace(code))
         {
             return Result<Customer>.Failure(new Error("Customer.CodeRequired", "Customer code is required."));
@@ -92,6 +102,7 @@ public sealed class Customer : AuditableEntity
 
         return Result<Customer>.Success(new Customer(
             Guid.NewGuid(),
+            partyId,
             code.Trim().ToUpperInvariant(),
             name.Trim(),
             type,

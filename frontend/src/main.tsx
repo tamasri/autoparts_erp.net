@@ -16,6 +16,10 @@ import { LoginPage } from './pages/Login';
 import { PeriodLocksPage } from './pages/PeriodLocks';
 import { RolesPage } from './pages/Roles';
 import { UsersPage } from './pages/Users';
+import { PartiesPage } from './pages/parties/Parties';
+import { PartyCreatePage } from './pages/parties/PartyCreate';
+import { PartyProfilePage } from './pages/parties/PartyProfile';
+import { useErpHub } from './hooks/useErpHub';
 
 const queryClient = new QueryClient();
 const rtlCache = createCache({
@@ -25,6 +29,7 @@ const rtlCache = createCache({
 
 function AppShell(): JSX.Element {
   const { t } = useTranslation();
+  useErpHub(true);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -60,6 +65,9 @@ function AppShell(): JSX.Element {
             <Link component={RouterLink} color="inherit" to="/audit" underline="hover">
               {t('nav.audit')}
             </Link>
+            <Link component={RouterLink} color="inherit" to="/parties" underline="hover">
+              {t('nav.parties')}
+            </Link>
           </Stack>
         </Box>
 
@@ -72,6 +80,9 @@ function AppShell(): JSX.Element {
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/period-locks" element={<PeriodLocksPage />} />
           <Route path="/audit" element={<AuditLogPage />} />
+          <Route path="/parties" element={<PartiesPage />} />
+          <Route path="/parties/new" element={<PartyCreatePage />} />
+          <Route path="/parties/:id" element={<PartyProfilePage />} />
         </Routes>
       </Stack>
     </Container>

@@ -37,6 +37,8 @@ public sealed class ReversePaymentCommandHandler : IRequestHandler<ReversePaymen
     public async Task<Result<Guid>> Handle(ReversePaymentCommand request, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
         var updated = await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE payments
@@ -49,10 +51,48 @@ public sealed class ReversePaymentCommandHandler : IRequestHandler<ReversePaymen
               AND is_reversed = false;
             """,
             new { request.PaymentId, Reason = request.Reason, ReversedBy = _currentUser.UserId },
+            transaction,
             cancellationToken: cancellationToken));
 
-        return updated == 0
-            ? Result<Guid>.Failure(new Error("Payment.AlreadyReversed", "Payment is already reversed."))
-            : Result<Guid>.Success(request.PaymentId);
+        if (updated == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(new Error("Payment.AlreadyReversed", "Payment is already reversed."));
+        }
+
+        var outboxMessage = OutboxMessage.Create(
+            OutboxEventTypes.PaymentReversed,
+            "Payment",
+            request.PaymentId,
+            new PaymentReversedPayload(request.PaymentId, request.Reason, _currentUser.UserId),
+            _currentUser.CorrelationId);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO outbox_messages (
+                id, event_type, aggregate_type, aggregate_id, payload_json, occurred_at,
+                processed_at, processing_error, retry_count, correlation_id)
+            VALUES (
+                @Id, @EventType, @AggregateType, @AggregateId, @PayloadJson, @OccurredAt,
+                @ProcessedAt, @ProcessingError, @RetryCount, @CorrelationId);
+            """,
+            new
+            {
+                outboxMessage.Id,
+                outboxMessage.EventType,
+                outboxMessage.AggregateType,
+                outboxMessage.AggregateId,
+                outboxMessage.PayloadJson,
+                outboxMessage.OccurredAt,
+                outboxMessage.ProcessedAt,
+                outboxMessage.ProcessingError,
+                outboxMessage.RetryCount,
+                outboxMessage.CorrelationId
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        await transaction.CommitAsync(cancellationToken);
+        return Result<Guid>.Success(request.PaymentId);
     }
 }

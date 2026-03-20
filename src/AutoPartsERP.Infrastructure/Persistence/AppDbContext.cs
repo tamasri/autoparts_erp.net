@@ -48,6 +48,22 @@ public sealed class AppDbContext : IdentityDbContext<AppUser, AppRole, Guid,
 
     public DbSet<WarrantyRecord> WarrantyRecords => Set<WarrantyRecord>();
 
+    public DbSet<Party> Parties => Set<Party>();
+
+    public DbSet<PartyTypeAssignment> PartyTypeAssignments => Set<PartyTypeAssignment>();
+
+    public DbSet<PartyContact> PartyContacts => Set<PartyContact>();
+
+    public DbSet<PartyAddress> PartyAddresses => Set<PartyAddress>();
+
+    public DbSet<PartyNote> PartyNotes => Set<PartyNote>();
+
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    public DbSet<KpiDefinition> KpiDefinitions => Set<KpiDefinition>();
+
+    public DbSet<KpiThreshold> KpiThresholds => Set<KpiThreshold>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

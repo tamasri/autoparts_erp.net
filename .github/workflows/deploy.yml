@@ -1,0 +1,52 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: dotnet restore AutoPartsERP.sln
+      - run: dotnet build AutoPartsERP.sln -c Release
+      - run: dotnet test AutoPartsERP.sln --no-build -c Release
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t autoparts-erp-api:${{ github.sha }} .
+
+      - name: Save image
+        run: docker save autoparts-erp-api:${{ github.sha }} | gzip > api.tar.gz
+
+      - name: Copy to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "api.tar.gz,docker-compose.prod.yml"
+          target: "/opt/autoparts-erp"
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/autoparts-erp
+            docker load < api.tar.gz
+            docker compose -f docker-compose.prod.yml up -d --no-deps api
+            docker compose -f docker-compose.prod.yml exec api dotnet ef database update || true
+            rm api.tar.gz
