@@ -1,0 +1,61 @@
+﻿# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+*.sln.iml
+
+# Visual Studio
+*.VC.db
+*.VC.VC.opendb
+
+# .NET
+bin/
+obj/
+out/
+TestResults/
+*.nupkg
+*.snupkg
+*.cache
+*.pdb
+*.mdb
+*.opendb
+*.svclog
+*.dbmdl
+
+# EF Core local tools
+.migrations/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Docker overrides / local
+*.local.yml

@@ -1,0 +1,22 @@
+{
+  "appName": "نظام حوكمة قطع الغيار",
+  "nav.login": "تسجيل الدخول",
+  "nav.dashboard": "لوحة التحكم",
+  "nav.users": "المستخدمون",
+  "nav.roles": "الأدوار",
+  "nav.approvals": "الاعتمادات",
+  "nav.periodLocks": "إقفال الفترات",
+  "nav.audit": "سجل التدقيق",
+  "auth.username": "اسم المستخدم أو البريد",
+  "auth.password": "كلمة المرور",
+  "auth.signIn": "دخول",
+  "pages.stub": "صفحة مبدئية سيتم استكمالها لاحقًا.",
+  "pages.login.title": "الدخول إلى نظام الحوكمة",
+  "pages.dashboard.title": "لوحة الحوكمة",
+  "pages.dashboard.subtitle": "متابعة الاعتمادات، الصلاحيات، وإقفال الفترات.",
+  "pages.users.title": "إدارة المستخدمين",
+  "pages.roles.title": "إدارة الأدوار والصلاحيات",
+  "pages.approvals.title": "طلبات الاعتماد",
+  "pages.periodLocks.title": "إقفال الفترات المحاسبية",
+  "pages.audit.title": "سجل التدقيق اليدوي"
+}

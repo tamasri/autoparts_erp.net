@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AssemblyName>AutoPartsERP.IntegrationTests</AssemblyName>
+    <RootNamespace>AutoPartsERP.IntegrationTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="FluentAssertions" Version="6.*" />
+    <PackageReference Include="NSubstitute" Version="5.*" />
+    <PackageReference Include="Bogus" Version="35.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.*" />
+    <PackageReference Include="Testcontainers.Redis" Version="4.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AutoPartsERP.Api\AutoPartsERP.Api.csproj" />
+    <ProjectReference Include="..\..\src\AutoPartsERP.Application\AutoPartsERP.Application.csproj" />
+    <ProjectReference Include="..\..\src\AutoPartsERP.Domain\AutoPartsERP.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AutoPartsERP.Infrastructure\AutoPartsERP.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

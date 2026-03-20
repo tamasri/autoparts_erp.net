@@ -1,0 +1,22 @@
+{
+  "appName": "Auto Parts Governance",
+  "nav.login": "Login",
+  "nav.dashboard": "Dashboard",
+  "nav.users": "Users",
+  "nav.roles": "Roles",
+  "nav.approvals": "Approvals",
+  "nav.periodLocks": "Period Locks",
+  "nav.audit": "Audit Log",
+  "auth.username": "Username or email",
+  "auth.password": "Password",
+  "auth.signIn": "Sign in",
+  "pages.stub": "Stub page to be completed in the next sprint.",
+  "pages.login.title": "Sign in to governance",
+  "pages.dashboard.title": "Governance dashboard",
+  "pages.dashboard.subtitle": "Track approvals, permissions, and period locks.",
+  "pages.users.title": "User management",
+  "pages.roles.title": "Role and permission management",
+  "pages.approvals.title": "Approval queue",
+  "pages.periodLocks.title": "Accounting period locks",
+  "pages.audit.title": "Manual audit log"
+}

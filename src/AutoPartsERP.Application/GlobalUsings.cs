@@ -1,0 +1,24 @@
+global using System.Data.Common;
+global using System.Security.Claims;
+global using System.Security.Cryptography;
+global using System.Text;
+global using System.Text.Json;
+
+global using AutoPartsERP.Contracts.Approvals;
+global using AutoPartsERP.Contracts.Audit;
+global using AutoPartsERP.Contracts.Auth;
+global using AutoPartsERP.Contracts.Common;
+global using AutoPartsERP.Contracts.Periods;
+global using AutoPartsERP.Contracts.ReasonCodes;
+global using AutoPartsERP.Contracts.Roles;
+global using AutoPartsERP.Contracts.Users;
+global using AutoPartsERP.Application.Common.Abstractions;
+global using AutoPartsERP.Application.Common.Abstractions.Markers;
+global using AutoPartsERP.Application.Common.Models;
+global using AutoPartsERP.Domain.Common;
+global using AutoPartsERP.Domain.Constants;
+global using AutoPartsERP.Domain.Governance;
+global using AutoPartsERP.Domain.Identity;
+global using FluentValidation;
+global using Mapster;
+global using MediatR;

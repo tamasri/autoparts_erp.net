@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>AutoPartsERP.Api</AssemblyName>
+    <RootNamespace>AutoPartsERP.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.*" />
+    <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="Mapster.DependencyInjection" Version="1.*" />
+    <!-- Endpoint organization -->
+    <PackageReference Include="Carter" Version="8.*" />
+    <!-- Auth -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.*" />
+    <!-- Problem Details -->
+    <PackageReference Include="Hellang.Middleware.ProblemDetails" Version="6.*" />
+    <!-- Logging -->
+    <PackageReference Include="Serilog.AspNetCore" Version="8.*" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.*" />
+    <PackageReference Include="Serilog.Sinks.Seq" Version="8.*" />
+    <PackageReference Include="Serilog.Enrichers.CorrelationId" Version="3.*" />
+    <!-- API Docs -->
+    <PackageReference Include="Scalar.AspNetCore" Version="2.*" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.*" />
+    <!-- Idempotency for Minimal APIs -->
+    <PackageReference Include="IdempotentAPI.MinimalAPI" Version="3.*" />
+    <!-- Health checks -->
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.*" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="9.*" />
+    <PackageReference Include="AspNetCore.HealthChecks.UI" Version="9.*" />
+    <PackageReference Include="AspNetCore.HealthChecks.UI.Client" Version="9.*" />
+    <PackageReference Include="AspNetCore.HealthChecks.UI.InMemory.Storage" Version="9.*" />
+    <!-- API versioning -->
+    <PackageReference Include="Asp.Versioning.Http" Version="8.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoPartsERP.Application\AutoPartsERP.Application.csproj" />
+    <ProjectReference Include="..\AutoPartsERP.Infrastructure\AutoPartsERP.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
