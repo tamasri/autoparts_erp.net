@@ -9,13 +9,13 @@ namespace AutoPartsERP.IntegrationTests;
 
 public sealed class ErpWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16")
         .WithDatabase("autoparts_erp_test")
         .WithUsername("postgres")
         .WithPassword("postgres")
         .Build();
 
-    private readonly RedisContainer _redis = new RedisBuilder().Build();
+    private readonly RedisContainer _redis = new RedisBuilder("redis:7").Build();
 
     public bool ContainersAvailable { get; private set; }
 
@@ -57,7 +57,7 @@ public sealed class ErpWebFactory : WebApplicationFactory<Program>, IAsyncLifeti
         }
     }
 
-    public async Task DisposeAsync()
+    public new async Task DisposeAsync()
     {
         await _postgres.DisposeAsync();
         await _redis.DisposeAsync();

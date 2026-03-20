@@ -143,8 +143,28 @@ builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IGovernanceService, GovernanceService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IDbConnectionFactory, NpgsqlConnectionFactory>();
+builder.Services.AddSingleton<IHumanizerService, HumanizerService>();
+
+builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
+builder.Services.AddScoped<IFxRateRepository, FxRateRepository>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<ISkuRepository, SkuRepository>();
+builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
+builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IWarrantyRepository, WarrantyRepository>();
+
+builder.Services.AddSingleton<InventoryExcelExporter>();
+builder.Services.AddSingleton<AccountStatementExcelExporter>();
+builder.Services.AddSingleton<ProfitLossExcelExporter>();
+
 builder.Services.AddScoped<ExpiredApprovalJob>();
 builder.Services.AddScoped<IdempotencyCleanupJob>();
+builder.Services.AddScoped<RefreshAccountSummaryJob>();
+builder.Services.AddScoped<RefreshStockSummaryJob>();
+builder.Services.AddScoped<RefreshMonthlyPlJob>();
+builder.Services.AddScoped<ExpireWarrantyRecordsJob>();
+builder.Services.AddScoped<LowStockAlertJob>();
 builder.Services.AddSingleton<HangfireAuthorizationFilter>();
 
 // Audit configuration
@@ -197,6 +217,36 @@ if (!app.Environment.IsEnvironment("Testing"))
         "governance",
         job => job.RunAsync(CancellationToken.None),
         Cron.Daily);
+
+    RecurringJob.AddOrUpdate<RefreshAccountSummaryJob>(
+        "operational-refresh-account-summary",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        "*/15 * * * *");
+
+    RecurringJob.AddOrUpdate<RefreshStockSummaryJob>(
+        "operational-refresh-stock-summary",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        "*/10 * * * *");
+
+    RecurringJob.AddOrUpdate<RefreshMonthlyPlJob>(
+        "operational-refresh-monthly-pl",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        Cron.Daily(0, 5));
+
+    RecurringJob.AddOrUpdate<ExpireWarrantyRecordsJob>(
+        "operational-expire-warranty-records",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        Cron.Daily(0, 10));
+
+    RecurringJob.AddOrUpdate<LowStockAlertJob>(
+        "operational-low-stock-alert",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        Cron.Daily(8, 0));
 }
 
 // auto-migrate

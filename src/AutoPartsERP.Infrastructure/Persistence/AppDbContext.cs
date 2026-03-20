@@ -20,6 +20,34 @@ public sealed class AppDbContext : IdentityDbContext<AppUser, AppRole, Guid,
 
     public DbSet<IdempotencyKey> IdempotencyKeys => Set<IdempotencyKey>();
 
+    public DbSet<Customer> Customers => Set<Customer>();
+
+    public DbSet<FxRate> FxRates => Set<FxRate>();
+
+    public DbSet<Category> Categories => Set<Category>();
+
+    public DbSet<AttributeSchema> AttributeSchemas => Set<AttributeSchema>();
+
+    public DbSet<Sku> Skus => Set<Sku>();
+
+    public DbSet<Location> Locations => Set<Location>();
+
+    public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
+
+    public DbSet<Batch> Batches => Set<Batch>();
+
+    public DbSet<BatchMovement> BatchMovements => Set<BatchMovement>();
+
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+
+    public DbSet<Payment> Payments => Set<Payment>();
+
+    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
+
+    public DbSet<WarrantyRecord> WarrantyRecords => Set<WarrantyRecord>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

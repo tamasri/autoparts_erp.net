@@ -6,4 +6,9 @@
     <AssemblyName>AutoPartsERP.Domain</AssemblyName>
     <RootNamespace>AutoPartsERP.Domain</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Humanizer.Core" Version="3.*" />
+    <PackageReference Include="Humanizer.Core.ar" Version="3.*" />
+  </ItemGroup>
 </Project>
