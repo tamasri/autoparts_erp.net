@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 
 export function useErpHub(isEnabled = true): HubConnection | null {
   const connectionRef = useRef<HubConnection | null>(null);
-  const token = useAuthStore((state) => state.accessToken);
+  const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
     if (!isEnabled || !token) {
@@ -22,7 +22,7 @@ export function useErpHub(isEnabled = true): HubConnection | null {
     connectionRef.current = connection;
 
     connection.start().catch(() => {
-      // Phase 3: scaffold only, ignore startup errors.
+      // Ignore transient startup errors in local dev.
     });
 
     return () => {

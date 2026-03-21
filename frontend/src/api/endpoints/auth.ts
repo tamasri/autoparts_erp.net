@@ -1,13 +1,12 @@
-import { apiClient } from '../client';
-
-export type LoginPayload = {
-  userNameOrEmail: string;
-  password: string;
-};
+import { client } from '../client';
 
 export const authApi = {
-  login: (payload: LoginPayload) => apiClient.post('/auth/login', payload),
-  refresh: (refreshToken: string) => apiClient.post('/auth/refresh', { refreshToken }),
-  logout: (refreshToken: string) => apiClient.post('/auth/logout', { refreshToken }),
-  currentUser: () => apiClient.get('/auth/me'),
+  login: (userNameOrEmail: string, password: string) =>
+    client.post('/auth/login', { userNameOrEmail, password }),
+  logout: () =>
+    client.post('/auth/logout'),
+  me: () =>
+    client.get('/auth/me'),
+  refresh: (refreshToken: string) =>
+    client.post('/auth/refresh', { refreshToken }),
 };

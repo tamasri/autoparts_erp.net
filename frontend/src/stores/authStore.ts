@@ -1,27 +1,53 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+type AuthUser = {
+  id: string;
+  username: string;
+  fullName: string;
+  roles: string[];
+};
+
+type LoginPayload = {
+  token: string;
+  refreshToken: string;
+  user: AuthUser;
+  permissions?: string[];
+};
+
 type AuthState = {
-  accessToken: string | null;
+  token: string | null;
   refreshToken: string | null;
+  user: AuthUser | null;
   permissions: string[];
-  setSession: (accessToken: string, refreshToken: string, permissions: string[]) => void;
-  clearSession: () => void;
+  isAuthenticated: boolean;
+  login: (payload: LoginPayload) => void;
+  logout: () => void;
 };
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      accessToken: null,
+      token: null,
       refreshToken: null,
+      user: null,
       permissions: [],
-      setSession: (accessToken, refreshToken, permissions) =>
-        set({ accessToken, refreshToken, permissions }),
-      clearSession: () =>
+      isAuthenticated: false,
+      login: (payload) =>
         set({
-          accessToken: null,
+          token: payload.token,
+          refreshToken: payload.refreshToken,
+          user: payload.user,
+          permissions: payload.permissions ?? [],
+          isAuthenticated: payload.token !== null,
+        }),
+      logout: () =>
+        set({
+          token: null,
           refreshToken: null,
+          user: null,
           permissions: [],
+          isAuthenticated: false,
         }),
     }),
     {

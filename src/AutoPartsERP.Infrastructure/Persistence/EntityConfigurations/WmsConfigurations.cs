@@ -35,7 +35,10 @@ public sealed class ItemAliasConfiguration : IEntityTypeConfiguration<ItemAlias>
         builder.Property(x => x.Source).HasMaxLength(32).IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone");
         builder.HasIndex(x => new { x.ItemId, x.AliasCanonical }).IsUnique();
-        builder.HasOne<Item>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Item>()
+            .WithMany(i => i.Aliases)
+            .HasForeignKey(x => x.ItemId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 

@@ -1,24 +1,27 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 
-export const apiClient = axios.create({
+export const client = axios.create({
   baseURL: '/api/v1',
-  timeout: 15000,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
 });
 
-apiClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken;
+export const apiClient = client;
+
+client.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-apiClient.interceptors.response.use(
+client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
-      useAuthStore.getState().clearSession();
+      useAuthStore.getState().logout();
     }
     return Promise.reject(error);
   },
