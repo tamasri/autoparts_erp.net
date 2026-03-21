@@ -27,6 +27,7 @@ services:
     image: datalust/seq:latest
     environment:
       ACCEPT_EULA: "Y"
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
     ports:
       - "5341:80"
       - "5342:5341"
@@ -38,6 +39,7 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@erp.local
       PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['local']"
     ports:
       - "5050:80"
     depends_on:

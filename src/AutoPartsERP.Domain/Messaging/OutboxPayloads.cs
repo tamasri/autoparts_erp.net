@@ -53,3 +53,7 @@ public sealed record PartyTypeActivatedPayload(
     Guid PartyId,
     string TypeCode,
     Guid ApprovedBy);
+
+public sealed record TransferShippedPayload(
+    Guid TransferOrderId,
+    decimal TotalShippedQty);

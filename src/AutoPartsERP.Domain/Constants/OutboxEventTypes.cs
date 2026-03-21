@@ -11,4 +11,5 @@ public static class OutboxEventTypes
     public const string WarrantyClaimCreated = "WarrantyClaimCreated";
     public const string WarrantyProcessed = "WarrantyProcessed";
     public const string PartyTypeActivated = "PartyTypeActivated";
+    public const string TransferShipped = "TransferShipped";
 }

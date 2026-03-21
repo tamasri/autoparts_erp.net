@@ -64,6 +64,56 @@ public sealed class AppDbContext : IdentityDbContext<AppUser, AppRole, Guid,
 
     public DbSet<KpiThreshold> KpiThresholds => Set<KpiThreshold>();
 
+    public DbSet<Item> Items => Set<Item>();
+
+    public DbSet<ItemAlias> ItemAliases => Set<ItemAlias>();
+
+    public DbSet<ItemInterchange> ItemInterchanges => Set<ItemInterchange>();
+
+    public DbSet<ItemReorderSetting> ItemReorderSettings => Set<ItemReorderSetting>();
+
+    public DbSet<InventoryBalance> InventoryBalances => Set<InventoryBalance>();
+
+    public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
+
+    public DbSet<ReceivingDocument> ReceivingDocuments => Set<ReceivingDocument>();
+
+    public DbSet<ReceivingLine> ReceivingLines => Set<ReceivingLine>();
+
+    public DbSet<PutawayTask> PutawayTasks => Set<PutawayTask>();
+
+    public DbSet<TransferOrder> TransferOrders => Set<TransferOrder>();
+
+    public DbSet<TransferOrderLine> TransferOrderLines => Set<TransferOrderLine>();
+
+    public DbSet<CycleCountPlan> CycleCountPlans => Set<CycleCountPlan>();
+
+    public DbSet<CycleCountLine> CycleCountLines => Set<CycleCountLine>();
+
+    public DbSet<StockAdjustment> StockAdjustments => Set<StockAdjustment>();
+
+    public DbSet<StockAdjustmentLine> StockAdjustmentLines => Set<StockAdjustmentLine>();
+
+    public DbSet<InventoryAlert> InventoryAlerts => Set<InventoryAlert>();
+
+    public DbSet<BarcodeScanLog> BarcodeScanLogs => Set<BarcodeScanLog>();
+
+    public DbSet<AiFeatureFlag> AiFeatureFlags => Set<AiFeatureFlag>();
+
+    public DbSet<AiSession> AiSessions => Set<AiSession>();
+
+    public DbSet<AiPromptLog> AiPromptLogs => Set<AiPromptLog>();
+
+    public DbSet<AiSuggestion> AiSuggestions => Set<AiSuggestion>();
+
+    public DbSet<AiTaskRun> AiTaskRuns => Set<AiTaskRun>();
+
+    public DbSet<AiFeedback> AiFeedback => Set<AiFeedback>();
+
+    public DbSet<AiDocument> AiDocuments => Set<AiDocument>();
+
+    public DbSet<AiScheduledTask> AiScheduledTasks => Set<AiScheduledTask>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

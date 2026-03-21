@@ -19,6 +19,8 @@
     "@mui/x-data-grid": "^7.0.0",
     "@tanstack/react-query": "^5.0.0",
     "@tanstack/react-table": "^8.0.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "axios": "^1.7.0",
     "i18next": "^24.0.0",
     "react": "^19.0.0",

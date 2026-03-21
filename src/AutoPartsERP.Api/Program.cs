@@ -148,6 +148,11 @@ builder.Services.AddScoped<IGovernanceService, GovernanceService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.AddSingleton<IHumanizerService, HumanizerService>();
+builder.Services.AddSingleton<IPartNumberService, PartNumberService>();
+builder.Services.AddScoped<IItemSearchService, ItemSearchService>();
+builder.Services.AddScoped<IAiService, AiService>();
+builder.Services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
+builder.Services.AddSingleton<IBarcodeService, BarcodeService>();
 
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IFxRateRepository, FxRateRepository>();
@@ -159,6 +164,13 @@ builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IWarrantyRepository, WarrantyRepository>();
 builder.Services.AddScoped<IPartyRepository, PartyRepository>();
 builder.Services.AddScoped<IOutboxRepository, OutboxRepository>();
+builder.Services.AddScoped<IItemRepository, ItemRepository>();
+builder.Services.AddScoped<IInventoryBalanceRepository, InventoryBalanceRepository>();
+builder.Services.AddScoped<IReceivingRepository, ReceivingRepository>();
+builder.Services.AddScoped<ITransferOrderRepository, TransferOrderRepository>();
+builder.Services.AddScoped<IStockAdjustmentRepository, StockAdjustmentRepository>();
+builder.Services.AddScoped<IInventoryAlertRepository, InventoryAlertRepository>();
+builder.Services.AddScoped<IAiRepository, AiRepository>();
 
 builder.Services.AddSingleton<InventoryExcelExporter>();
 builder.Services.AddSingleton<AccountStatementExcelExporter>();
@@ -171,6 +183,7 @@ builder.Services.AddScoped<RefreshStockSummaryJob>();
 builder.Services.AddScoped<RefreshMonthlyPlJob>();
 builder.Services.AddScoped<ExpireWarrantyRecordsJob>();
 builder.Services.AddScoped<LowStockAlertJob>();
+builder.Services.AddScoped<AccountingCheckJob>();
 builder.Services.AddSingleton<HangfireAuthorizationFilter>();
 builder.Services.AddHostedService<OutboxDispatcherService>();
 builder.Services.AddScoped<IOutboxEventHandler, InvoicePostedOutboxHandler>();
@@ -258,6 +271,12 @@ if (!app.Environment.IsEnvironment("Testing"))
         "governance",
         job => job.RunAsync(CancellationToken.None),
         Cron.Daily(8, 0));
+
+    RecurringJob.AddOrUpdate<AccountingCheckJob>(
+        "ai-accounting-check",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        Cron.Daily(4));
 }
 
 // auto-migrate
@@ -266,6 +285,7 @@ if (!app.Environment.IsEnvironment("Testing"))
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
+    await DatabaseSeeder.SeedAsync(app.Services);
 }
 
 app.Run();

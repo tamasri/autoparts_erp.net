@@ -93,6 +93,86 @@ public static class PermissionCodes
         public const string AssignType = "party:assign_type";
     }
 
+    public static class Items
+    {
+        public const string Read = "items:read";
+        public const string Create = "items:create";
+        public const string Update = "items:update";
+        public const string StopShip = "items:stop_ship";
+        public const string ManageAliases = "items:aliases";
+        public const string ManageInterchanges = "items:interchanges";
+    }
+
+    public static class Receiving
+    {
+        public const string Read = "receiving:read";
+        public const string Create = "receiving:create";
+        public const string Post = "receiving:post";
+        public const string Putaway = "receiving:putaway";
+    }
+
+    public static class IssueOrders
+    {
+        public const string Read = "issue_orders:read";
+        public const string Create = "issue_orders:create";
+        public const string Pick = "issue_orders:pick";
+        public const string Verify = "issue_orders:verify";
+        public const string Issue = "issue_orders:issue";
+    }
+
+    public static class Transfers
+    {
+        public const string Read = "transfers:read";
+        public const string CreateRequest = "transfers:create_request";
+        public const string ApproveRequest = "transfers:approve_request";
+        public const string CreateOrder = "transfers:create_order";
+        public const string Ship = "transfers:ship";
+        public const string Receive = "transfers:receive";
+    }
+
+    public static class CycleCounts
+    {
+        public const string Read = "cycle_counts:read";
+        public const string Create = "cycle_counts:create";
+        public const string Record = "cycle_counts:record";
+        public const string ApproveVariance = "cycle_counts:approve_variance";
+    }
+
+    public static class StockAdjustments
+    {
+        public const string Read = "stock_adjustments:read";
+        public const string Create = "stock_adjustments:create";
+        public const string Post = "stock_adjustments:post";
+    }
+
+    public static class InventoryAlerts
+    {
+        public const string Read = "inventory_alerts:read";
+        public const string Acknowledge = "inventory_alerts:acknowledge";
+        public const string Resolve = "inventory_alerts:resolve";
+    }
+
+    public static class Barcodes
+    {
+        public const string Scan = "barcodes:scan";
+        public const string Generate = "barcodes:generate";
+    }
+
+    public static class Ai
+    {
+        public const string Chat = "ai:chat";
+        public const string SuggestionsRead = "ai:suggestions:read";
+        public const string SuggestionsReview = "ai:suggestions:review";
+        public const string FeedbackCreate = "ai:feedback:create";
+        public const string PromptLogsRead = "ai:prompt_logs:read";
+        public const string TaskRunsRead = "ai:task_runs:read";
+        public const string KnowledgeIndex = "ai:knowledge:index";
+        public const string FeatureFlagsRead = "ai:feature_flags:read";
+        public const string FeatureFlagsWrite = "ai:feature_flags:write";
+        public const string ScheduledTasksRead = "ai:scheduled_tasks:read";
+        public const string ScheduledTasksWrite = "ai:scheduled_tasks:write";
+    }
+
     public static class System
     {
         public const string ConfigRead = "system:config_read";
@@ -154,6 +234,50 @@ public static class PermissionCodes
         Party.Update,
         Party.Deactivate,
         Party.AssignType,
+        Items.Read,
+        Items.Create,
+        Items.Update,
+        Items.StopShip,
+        Items.ManageAliases,
+        Items.ManageInterchanges,
+        Receiving.Read,
+        Receiving.Create,
+        Receiving.Post,
+        Receiving.Putaway,
+        IssueOrders.Read,
+        IssueOrders.Create,
+        IssueOrders.Pick,
+        IssueOrders.Verify,
+        IssueOrders.Issue,
+        Transfers.Read,
+        Transfers.CreateRequest,
+        Transfers.ApproveRequest,
+        Transfers.CreateOrder,
+        Transfers.Ship,
+        Transfers.Receive,
+        CycleCounts.Read,
+        CycleCounts.Create,
+        CycleCounts.Record,
+        CycleCounts.ApproveVariance,
+        StockAdjustments.Read,
+        StockAdjustments.Create,
+        StockAdjustments.Post,
+        InventoryAlerts.Read,
+        InventoryAlerts.Acknowledge,
+        InventoryAlerts.Resolve,
+        Barcodes.Scan,
+        Barcodes.Generate,
+        Ai.Chat,
+        Ai.SuggestionsRead,
+        Ai.SuggestionsReview,
+        Ai.FeedbackCreate,
+        Ai.PromptLogsRead,
+        Ai.TaskRunsRead,
+        Ai.KnowledgeIndex,
+        Ai.FeatureFlagsRead,
+        Ai.FeatureFlagsWrite,
+        Ai.ScheduledTasksRead,
+        Ai.ScheduledTasksWrite,
         System.ConfigRead,
         System.ConfigWrite
     };
