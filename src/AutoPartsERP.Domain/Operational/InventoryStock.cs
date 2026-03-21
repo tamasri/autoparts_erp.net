@@ -2,6 +2,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class InventoryStock : AuditableEntity
 {
+    private InventoryStock() : base(Guid.Empty) { }
+
     public InventoryStock(Guid id, Guid skuId, Guid locationId)
         : base(id)
     {

@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Batch : AuditableEntity
 {
+    private Batch() : base(Guid.Empty) { }
+
     private Batch(
         Guid id,
         string batchNumber,

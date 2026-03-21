@@ -1,7 +1,10 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace AutoPartsERP.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(AppDbContext))]
+[Migration("20240101000002_AddOperationalCoreTables")]
 public sealed class AddOperationalCoreTables : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
@@ -478,13 +481,13 @@ public sealed class AddOperationalCoreTables : Migration
         {
             var safePermission = permission.Replace("'", "''", StringComparison.Ordinal);
             migrationBuilder.Sql($"""
-                INSERT INTO "AspNetRoleClaims" ("RoleId","ClaimType","ClaimValue")
+                INSERT INTO asp_net_role_claims (role_id,claim_type,claim_value)
                 SELECT '10000000-0000-0000-0000-000000000001','permission','{safePermission}'
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM "AspNetRoleClaims"
-                    WHERE "RoleId" = '10000000-0000-0000-0000-000000000001'
-                    AND "ClaimType" = 'permission'
-                    AND "ClaimValue" = '{safePermission}');
+                    SELECT 1 FROM asp_net_role_claims
+                    WHERE role_id = '10000000-0000-0000-0000-000000000001'
+                    AND claim_type = 'permission'
+                    AND claim_value = '{safePermission}');
                 """);
         }
     }

@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Governance;
 
 public sealed class IdempotencyKey : AuditableEntity
 {
+    private IdempotencyKey() : base(Guid.Empty) { }
+
     public IdempotencyKey(
         Guid id,
         string key,

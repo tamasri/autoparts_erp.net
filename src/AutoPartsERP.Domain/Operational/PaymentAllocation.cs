@@ -2,6 +2,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class PaymentAllocation : AuditableEntity
 {
+    private PaymentAllocation() : base(Guid.Empty) { }
+
     public PaymentAllocation(
         Guid id,
         Guid paymentId,

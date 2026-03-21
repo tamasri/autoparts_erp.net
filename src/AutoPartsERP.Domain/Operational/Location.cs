@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Location : AuditableEntity
 {
+    private Location() : base(Guid.Empty) { }
+
     public Location(
         Guid id,
         string code,

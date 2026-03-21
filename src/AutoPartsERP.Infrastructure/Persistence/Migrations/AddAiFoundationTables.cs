@@ -1,12 +1,22 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace AutoPartsERP.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(AppDbContext))]
+[Migration("20240101000005_AddAiFoundationTables")]
 public sealed class AddAiFoundationTables : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("CREATE EXTENSION IF NOT EXISTS vector;");
+        migrationBuilder.Sql("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') THEN
+                    CREATE EXTENSION IF NOT EXISTS vector;
+                END IF;
+            END $$;
+            """);
 
         migrationBuilder.Sql("""
             CREATE TABLE IF NOT EXISTS ai_feature_flags (
@@ -116,7 +126,7 @@ public sealed class AddAiFoundationTables : Migration
                 source_path text NOT NULL UNIQUE,
                 content_text text NOT NULL,
                 language_code text NOT NULL DEFAULT 'ar',
-                content_embedding vector(768) NULL,
+                content_embedding double precision[] NULL,
                 is_active boolean NOT NULL DEFAULT true,
                 created_at timestamptz NOT NULL DEFAULT now(),
                 created_by uuid NOT NULL
@@ -169,13 +179,13 @@ public sealed class AddAiFoundationTables : Migration
         {
             var safePermission = permission.Replace("'", "''", StringComparison.Ordinal);
             migrationBuilder.Sql($"""
-                INSERT INTO "AspNetRoleClaims" ("RoleId","ClaimType","ClaimValue")
+                INSERT INTO asp_net_role_claims (role_id,claim_type,claim_value)
                 SELECT '10000000-0000-0000-0000-000000000001','permission','{safePermission}'
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM "AspNetRoleClaims"
-                    WHERE "RoleId" = '10000000-0000-0000-0000-000000000001'
-                      AND "ClaimType" = 'permission'
-                      AND "ClaimValue" = '{safePermission}');
+                    SELECT 1 FROM asp_net_role_claims
+                    WHERE role_id = '10000000-0000-0000-0000-000000000001'
+                      AND claim_type = 'permission'
+                      AND claim_value = '{safePermission}');
                 """);
         }
     }
@@ -184,4 +194,3 @@ public sealed class AddAiFoundationTables : Migration
     {
     }
 }
-

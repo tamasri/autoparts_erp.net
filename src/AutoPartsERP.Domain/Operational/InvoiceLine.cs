@@ -2,6 +2,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class InvoiceLine : AuditableEntity
 {
+    private InvoiceLine() : base(Guid.Empty) { }
+
     internal InvoiceLine(
         Guid id,
         Guid invoiceId,

@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Category : AuditableEntity
 {
+    private Category() : base(Guid.Empty) { }
+
     private Category(
         Guid id,
         CategoryPath path,

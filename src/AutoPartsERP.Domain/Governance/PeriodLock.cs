@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Governance;
 
 public sealed class PeriodLock : AuditableEntity
 {
+    private PeriodLock() : base(Guid.Empty) { }
+
     public PeriodLock(
         Guid id,
         string periodKey,

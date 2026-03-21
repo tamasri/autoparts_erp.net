@@ -2,6 +2,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class FxRate : AuditableEntity
 {
+    private FxRate() : base(Guid.Empty) { }
+
     private FxRate(
         Guid id,
         DateOnly rateDate,

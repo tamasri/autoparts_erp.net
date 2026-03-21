@@ -5,6 +5,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Invoice : AuditableEntity
 {
+    private Invoice() : base(Guid.Empty) { }
+
     private readonly List<InvoiceLine> _lines = new();
 
     private Invoice(

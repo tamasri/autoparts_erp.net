@@ -7,6 +7,11 @@ public sealed class ApprovalRequest : AuditableEntity
 {
     private readonly List<ApprovalDecision> _decisions = new();
 
+    private ApprovalRequest()
+        : base(Guid.Empty)
+    {
+    }
+
     public ApprovalRequest(
         Guid id,
         string entityType,
@@ -27,23 +32,23 @@ public sealed class ApprovalRequest : AuditableEntity
         RequestedAtUtc = DateTimeOffset.UtcNow;
     }
 
-    public string EntityType { get; }
+    public string EntityType { get; private set; } = string.Empty;
 
-    public string EntityId { get; }
+    public string EntityId { get; private set; } = string.Empty;
 
-    public string ActionCode { get; }
+    public string ActionCode { get; private set; } = string.Empty;
 
-    public Guid RequestedByUserId { get; }
+    public Guid RequestedByUserId { get; private set; }
 
     public string Reason { get; private set; }
 
     public string Status { get; private set; }
 
-    public int RequiredApprovals { get; }
+    public int RequiredApprovals { get; private set; }
 
     public int CurrentApprovals => _decisions.Count(decision => decision.IsApproval);
 
-    public DateTimeOffset RequestedAtUtc { get; }
+    public DateTimeOffset RequestedAtUtc { get; private set; }
 
     public DateTimeOffset? CompletedAtUtc { get; private set; }
 

@@ -4,9 +4,7 @@ namespace AutoPartsERP.Domain.Messaging;
 
 public sealed class OutboxMessage
 {
-    private OutboxMessage()
-    {
-    }
+    private OutboxMessage() { }
 
     public Guid Id { get; private set; } = Guid.NewGuid();
 

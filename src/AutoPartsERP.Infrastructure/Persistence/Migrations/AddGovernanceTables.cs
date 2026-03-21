@@ -1,7 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace AutoPartsERP.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(AppDbContext))]
+[Migration("20240101000001_AddGovernanceTables")]
 public sealed class AddGovernanceTables : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
@@ -21,12 +24,24 @@ public sealed class AddGovernanceTables : Migration
         migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS ix_approval_requests_expires_at ON approval_requests(expires_at);");
         migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS ix_idempotency_keys_expires_at ON idempotency_keys(expires_at_utc);");
 
-        migrationBuilder.Sql("INSERT INTO \"AspNetRoles\" (\"Id\",\"Name\",\"NormalizedName\",\"ConcurrencyStamp\") VALUES ('10000000-0000-0000-0000-000000000001','SUPER_ADMIN','SUPER_ADMIN','seed-super-admin') ON CONFLICT (\"Id\") DO NOTHING;");
+        migrationBuilder.Sql("""
+            INSERT INTO asp_net_roles (id, name, normalized_name, concurrency_stamp)
+            VALUES
+                ('10000000-0000-0000-0000-000000000001', 'SUPER_ADMIN', 'SUPER_ADMIN', 'seed-super-admin'),
+                ('10000000-0000-0000-0000-000000000002', 'ADMIN', 'ADMIN', 'seed-admin'),
+                ('10000000-0000-0000-0000-000000000003', 'SALES_MANAGER', 'SALES_MANAGER', 'seed-sales-manager'),
+                ('10000000-0000-0000-0000-000000000004', 'SALES_REP', 'SALES_REP', 'seed-sales-rep'),
+                ('10000000-0000-0000-0000-000000000005', 'WAREHOUSE', 'WAREHOUSE', 'seed-warehouse'),
+                ('10000000-0000-0000-0000-000000000006', 'ACCOUNTANT', 'ACCOUNTANT', 'seed-accountant'),
+                ('10000000-0000-0000-0000-000000000007', 'AUDITOR', 'AUDITOR', 'seed-auditor'),
+                ('10000000-0000-0000-0000-000000000008', 'APPROVER', 'APPROVER', 'seed-approver')
+            ON CONFLICT (id) DO NOTHING;
+            """);
 
         foreach (var permission in PermissionCodes.All)
         {
             var safePermission = permission.Replace("'", "''");
-            migrationBuilder.Sql($"INSERT INTO \"AspNetRoleClaims\" (\"RoleId\",\"ClaimType\",\"ClaimValue\") SELECT '10000000-0000-0000-0000-000000000001','permission','{safePermission}' WHERE NOT EXISTS (SELECT 1 FROM \"AspNetRoleClaims\" WHERE \"RoleId\"='10000000-0000-0000-0000-000000000001' AND \"ClaimType\"='permission' AND \"ClaimValue\"='{safePermission}');");
+            migrationBuilder.Sql($"INSERT INTO asp_net_role_claims (role_id,claim_type,claim_value) SELECT '10000000-0000-0000-0000-000000000001','permission','{safePermission}' WHERE NOT EXISTS (SELECT 1 FROM asp_net_role_claims WHERE role_id='10000000-0000-0000-0000-000000000001' AND claim_type='permission' AND claim_value='{safePermission}');");
         }
     }
 

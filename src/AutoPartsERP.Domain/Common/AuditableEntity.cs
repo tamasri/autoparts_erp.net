@@ -8,9 +8,9 @@ public abstract class AuditableEntity
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
-    public Guid Id { get; }
+    public Guid Id { get; private set; }
 
-    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
 
     public DateTimeOffset? UpdatedAtUtc { get; private set; }
 

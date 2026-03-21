@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Payment : AuditableEntity
 {
+    private Payment() : base(Guid.Empty) { }
+
     private Payment(
         Guid id,
         Guid customerId,

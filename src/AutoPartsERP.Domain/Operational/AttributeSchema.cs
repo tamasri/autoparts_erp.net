@@ -2,6 +2,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class AttributeSchema : AuditableEntity
 {
+    private AttributeSchema() : base(Guid.Empty) { }
+
     private static readonly HashSet<string> AllowedDataTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "TEXT",

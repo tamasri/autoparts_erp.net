@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Customer : AuditableEntity
 {
+    private Customer() : base(Guid.Empty) { }
+
     private Customer(
         Guid id,
         Guid partyId,

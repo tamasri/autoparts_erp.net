@@ -2,6 +2,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class Sku : AuditableEntity
 {
+    private Sku() : base(Guid.Empty) { }
+
     private Sku(
         Guid id,
         string code,

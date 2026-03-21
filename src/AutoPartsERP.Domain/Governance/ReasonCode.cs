@@ -4,6 +4,8 @@ namespace AutoPartsERP.Domain.Governance;
 
 public sealed class ReasonCode : AuditableEntity
 {
+    private ReasonCode() : base(Guid.Empty) { }
+
     public ReasonCode(
         Guid id,
         string category,

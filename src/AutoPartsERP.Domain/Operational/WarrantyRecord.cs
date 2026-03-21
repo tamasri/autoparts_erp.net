@@ -5,6 +5,8 @@ namespace AutoPartsERP.Domain.Operational;
 
 public sealed class WarrantyRecord : AuditableEntity
 {
+    private WarrantyRecord() : base(Guid.Empty) { }
+
     private WarrantyRecord(
         Guid id,
         Guid invoiceLineId,
