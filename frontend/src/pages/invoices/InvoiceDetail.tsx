@@ -41,37 +41,98 @@ type InvoiceDetail = {
 };
 
 
+function extractError(e: unknown, fallback: string): string {
+  const r = e as { response?: { data?: { detail?: string; message?: string } } };
+  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+}
+
 export default function InvoiceDetail(): JSX.Element {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load(): Promise<void> {
+    if (!id) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await invoicesApi.getInvoiceById(id);
+      setInvoice(unwrapNode<InvoiceDetail>(res.data));
+    } catch (e: unknown) {
+      setError(extractError(e, 'تعذر تحميل تفاصيل الفاتورة'));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (!id) return;
-    let mounted = true;
-    async function load(): Promise<void> {
-      if (!id) return;
-      setLoading(true);
-      setError('');
-      try {
-        const res = await invoicesApi.getInvoiceById(id);
-        if (mounted) setInvoice(unwrapNode<InvoiceDetail>(res.data));
-      } catch (e: unknown) {
-        if (!mounted) return;
-        const msg = (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.detail
-          ?? (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.message
-          ?? 'تعذر تحميل تفاصيل الفاتورة';
-        setError(msg);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
     void load();
-    return () => {
-      mounted = false;
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function confirmInvoice(): Promise<void> {
+    if (!id) return;
+    setBusy(true);
+    try {
+      await invoicesApi.confirm(id);
+      await load();
+    } catch (e: unknown) {
+      setError(extractError(e, 'تعذر تأكيد الفاتورة'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function postInvoice(): Promise<void> {
+    if (!id) return;
+    setBusy(true);
+    try {
+      await invoicesApi.post(id);
+      await load();
+    } catch (e: unknown) {
+      setError(extractError(e, 'تعذر ترحيل الفاتورة'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function voidInvoice(): Promise<void> {
+    if (!id) return;
+    const reason = window.prompt('سبب الإلغاء:') ?? '';
+    if (!reason.trim()) return;
+    setBusy(true);
+    try {
+      await invoicesApi.void(id, reason.trim());
+      await load();
+    } catch (e: unknown) {
+      setError(extractError(e, 'تعذر إلغاء الفاتورة'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadPdf(): Promise<void> {
+    if (!id) return;
+    setBusy(true);
+    try {
+      const res = await invoicesApi.getPdf(id);
+      const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${invoice?.invoiceNumber ?? id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(extractError(e, 'تعذر تنزيل ملف PDF'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const status = (invoice?.status ?? '').toUpperCase();
 
   const lines = useMemo(() => invoice?.lines ?? [], [invoice?.lines]);
   const payments = useMemo(() => invoice?.payments ?? [], [invoice?.payments]);
@@ -88,6 +149,18 @@ export default function InvoiceDetail(): JSX.Element {
           <span>العميل: {invoice?.customerName ?? '-'}</span>
           <span>التاريخ: {invoice?.invoiceDate ?? '-'}</span>
           <span>الاستحقاق: {invoice?.dueDate ?? '-'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+          {status === 'DRAFT' ? (
+            <button type="button" disabled={busy} onClick={() => void confirmInvoice()} style={actBtn('#1565c0')}>تأكيد</button>
+          ) : null}
+          {status === 'CONFIRMED' ? (
+            <button type="button" disabled={busy} onClick={() => void postInvoice()} style={actBtn('#2e7d32')}>ترحيل</button>
+          ) : null}
+          {status !== 'VOID' && status !== 'POSTED' ? (
+            <button type="button" disabled={busy} onClick={() => void voidInvoice()} style={actBtn('#c62828')}>إلغاء</button>
+          ) : null}
+          <button type="button" disabled={busy} onClick={() => void downloadPdf()} style={actBtn('#00796b')}>تنزيل PDF</button>
         </div>
       </div>
 
@@ -149,4 +222,8 @@ export default function InvoiceDetail(): JSX.Element {
       </div>
     </div>
   );
+}
+
+function actBtn(bg: string): React.CSSProperties {
+  return { border: 'none', borderRadius: '8px', background: bg, color: '#fff', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' };
 }

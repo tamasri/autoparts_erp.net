@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Customers from './pages/customers/Customers';
 import CustomerDetail from './pages/customers/CustomerDetail';
 import Invoices from './pages/invoices/Invoices';
+import InvoiceWorkspace from './pages/invoices/InvoiceWorkspace';
 import InvoiceDetail from './pages/invoices/InvoiceDetail';
 import Inventory from './pages/inventory/Inventory';
 import Receiving from './pages/inventory/Receiving';
@@ -15,6 +16,7 @@ import StockAdjustments from './pages/inventory/StockAdjustments';
 import IssueOrders from './pages/inventory/IssueOrders';
 import InventoryAlerts from './pages/inventory/InventoryAlerts';
 import Parties from './pages/parties/Parties';
+import CombinedStatement from './pages/parties/CombinedStatement';
 import Users from './pages/settings/Users';
 import Roles from './pages/settings/Roles';
 import Approvals from './pages/approvals/Approvals';
@@ -43,6 +45,7 @@ export default function App(): JSX.Element {
         <Route path="customers" element={<Customers />} />
         <Route path="customers/:id" element={<CustomerDetail />} />
         <Route path="invoices" element={<Invoices />} />
+        <Route path="invoices/new" element={<InvoiceWorkspace />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="inventory/receiving" element={<Receiving />} />
@@ -52,6 +55,7 @@ export default function App(): JSX.Element {
         <Route path="inventory/issue-orders" element={<IssueOrders />} />
         <Route path="inventory/alerts" element={<InventoryAlerts />} />
         <Route path="parties" element={<Parties />} />
+        <Route path="parties/:id/statement" element={<CombinedStatement />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="audit" element={<AuditLog />} />
         <Route path="periods" element={<PeriodLocks />} />

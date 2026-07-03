@@ -105,15 +105,15 @@ present, UI partial/thin or gaps found; **Not Started**: little/no implementatio
 | Domain / Module | Backend (Application + Module) | Frontend Screen | Status |
 |---|---|---|---|
 | **Auth (login/refresh/logout/me)** | `Features/Auth/*`, `AuthModule` | `pages/Login.tsx`, `stores/authStore.ts` | **Completed** |
-| **Dashboard / KPIs** | `Features/Kpi/*`, `KpiAdminModule` | `pages/Dashboard.tsx`, `api/kpi.ts` | **In Progress** |
+| **Dashboard / KPIs** | `Features/Kpi/*`, `KpiAdminModule` | `pages/Dashboard.tsx`, `api/kpi.ts` | **Done (FE)** |
 | **Users management** | `Features/Users/*`, `UsersModule` | `pages/settings/Users.tsx` | **In Progress** |
 | **Roles & permissions** | `Features/Roles/*`, `RolesModule` | `pages/settings/Roles.tsx` | **In Progress** |
-| **Approvals (maker-checker)** | `Features/Approvals/*`, `ApprovalsModule`, `MakerCheckerBehavior` | `pages/approvals/Approvals.tsx` | **In Progress** |
-| **Audit log** | `Features/Audit/*`, `AuditModule`, Audit.NET | `pages/audit/AuditLog.tsx` | **In Progress** |
+| **Approvals (maker-checker)** | `Features/Approvals/*`, `ApprovalsModule`, `MakerCheckerBehavior` | `pages/approvals/Approvals.tsx` | **Done (FE)** |
+| **Audit log** | `Features/Audit/*`, `AuditModule`, Audit.NET | `pages/audit/AuditLog.tsx` (filters: module/entity/date) | **Done (FE)** |
 | **Period locks** | `Features/Periods/*`, `PeriodsModule`, `PeriodLockBehavior` | `pages/periods/PeriodLocks.tsx` | **In Progress** |
 | **Reason codes** | `Features/ReasonCodes/*`, `ReasonCodesModule` | (no dedicated screen) | **In Progress** |
-| **Customers** | `Features/Customers/*`, `CustomersModule` | `pages/customers/Customers.tsx`, `CustomerDetail.tsx` | **Completed** |
-| **Parties (customer/supplier duality)** | `Features/Parties/*`, `PartiesModule` | `pages/parties/Parties.tsx` | **In Progress** |
+| **Customers** | `Features/Customers/*`, `CustomersModule` | `pages/customers/Customers.tsx` (full CRUD), `CustomerDetail.tsx` | **Completed** |
+| **Parties (customer/supplier duality)** | `Features/Parties/*`, `PartiesModule` | `pages/parties/Parties.tsx` (create), `CombinedStatement.tsx` | **Done (FE)** |
 | **Catalog / SKU / Categories** | `Features/Catalog/*`, `CatalogModule` | (surfaced via Inventory) | **In Progress** |
 | **Items / Part numbers / aliases / interchange** | `Features/Items/ItemFeatures.cs`, `ItemsModule` | (no dedicated screen) | **In Progress** |
 | **Inventory stock & batches** | `Features/Inventory/*`, `InventoryModule` | `pages/inventory/Inventory.tsx` | **In Progress** |
@@ -123,7 +123,7 @@ present, UI partial/thin or gaps found; **Not Started**: little/no implementatio
 | **Stock adjustments** | `Features/StockAdjustments/*`, `StockAdjustmentsModule` | `pages/inventory/StockAdjustments.tsx` | **Done (FE)** |
 | **Issue orders (picking)** | `Features/IssueOrders/*`, `IssueOrdersModule` | `pages/inventory/IssueOrders.tsx` | **Done (FE)** |
 | **Inventory alerts / low-stock** | `Features/InventoryAlerts/*`, `InventoryAlertsModule`, `LowStockAlertJob` | `pages/inventory/InventoryAlerts.tsx` | **Done (FE)** |
-| **Invoices (create/confirm/post/void/PDF)** | `Features/Invoices/*`, `InvoicesModule` | `pages/invoices/Invoices.tsx`, `InvoiceDetail.tsx` | **In Progress** |
+| **Invoices (create/confirm/post/void/PDF)** | `Features/Invoices/*`, `InvoicesModule` | `pages/invoices/Invoices.tsx`, `InvoiceWorkspace.tsx`, `InvoiceDetail.tsx` | **Done (FE)** |
 | **Payments & allocations** | `Features/Payments/*`, `PaymentsModule` | (surfaced via customer/invoice) | **In Progress** |
 | **Warranty** | `Features/Warranty/*`, `WarrantyModule`, `ExpireWarrantyRecordsJob` | (no screen) | **In Progress** |
 | **FX rates** | `Features/FxRates/*`, `FxRatesModule` | (no screen) | **In Progress** |
@@ -220,9 +220,11 @@ Agents: Backend .NET Agent (finalize endpoints/DTOs) + Frontend React Agent (ver
 - [x] **EPIC 1 — WMS Frontend:** Receiving/Putaway, Transfers, Cycle Counts, Stock Adjustments, Issue Orders
       (picking), Inventory Alerts screens built (RTL/Arabic), routes + nav wired, typecheck green.
       *Remaining:* barcode scanning UI (`@zxing/browser`) to be layered onto Receiving/Issue-Orders.
-- [ ] **EPIC 2 — Sales & Finance Frontend:** full Invoice lifecycle UI (create→confirm→post→void→PDF), Payments &
-      allocation UI, FX Rates management, Reports dashboards (P&L, statements, inventory value, batch trace) with
-      Excel/PDF export.
+- [~] **EPIC 2 — Sales & Finance Frontend:** full Invoice lifecycle UI (create→confirm→post→void→PDF) via
+      `InvoiceWorkspace` + lifecycle actions on `InvoiceDetail`; Customers full CRUD; Parties create + combined
+      statement; Dashboard KPIs from real API; Approvals approve/reject; Audit log with module/entity/date filters.
+      *Remaining:* Payments & allocation UI, FX Rates management, Reports dashboards (P&L, statements, inventory
+      value, batch trace) with Excel/PDF export.
 - [ ] **EPIC 3 — Catalog & Items Frontend:** SKU/Category tree management, Items (part numbers, aliases,
       interchange), stop-ship maker-checker UI.
 

@@ -61,7 +61,8 @@ export default function Invoices(): JSX.Element {
   return (
     <div style={{ direction: 'rtl' }}>
       {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
         {['ALL', 'DRAFT', 'POSTED', 'VOID'].map((s) => (
           <button
             key={s}
@@ -79,6 +80,14 @@ export default function Invoices(): JSX.Element {
             {s === 'ALL' ? 'الكل' : s === 'DRAFT' ? 'مسودة' : s === 'POSTED' ? 'مرحّلة' : 'ملغاة'}
           </button>
         ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/invoices/new')}
+          style={{ border: 'none', borderRadius: '8px', background: '#004d40', color: '#fff', padding: '8px 12px', cursor: 'pointer' }}
+        >
+          + فاتورة جديدة
+        </button>
       </div>
 
       <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto' }}>
