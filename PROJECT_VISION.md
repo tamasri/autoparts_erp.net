@@ -117,12 +117,12 @@ present, UI partial/thin or gaps found; **Not Started**: little/no implementatio
 | **Catalog / SKU / Categories** | `Features/Catalog/*`, `CatalogModule` | (surfaced via Inventory) | **In Progress** |
 | **Items / Part numbers / aliases / interchange** | `Features/Items/ItemFeatures.cs`, `ItemsModule` | (no dedicated screen) | **In Progress** |
 | **Inventory stock & batches** | `Features/Inventory/*`, `InventoryModule` | `pages/inventory/Inventory.tsx` | **In Progress** |
-| **Receiving / Putaway** | `Features/Receiving/*`, `ReceivingModule` | (no screen) | **In Progress** |
-| **Transfers (inter-location)** | `Features/Transfers/*`, `TransfersModule` | (no screen) | **In Progress** |
-| **Cycle counts** | `Features/CycleCounts/*`, `CycleCountsModule` | (no screen) | **In Progress** |
-| **Stock adjustments** | `Features/StockAdjustments/*`, `StockAdjustmentsModule` | (no screen) | **In Progress** |
-| **Issue orders (picking)** | `Features/IssueOrders/*`, `IssueOrdersModule` | (no screen) | **In Progress** |
-| **Inventory alerts / low-stock** | `Features/InventoryAlerts/*`, `InventoryAlertsModule`, `LowStockAlertJob` | (no screen) | **In Progress** |
+| **Receiving / Putaway** | `Features/Receiving/*`, `ReceivingModule` | `pages/inventory/Receiving.tsx` | **Done (FE)** |
+| **Transfers (inter-location)** | `Features/Transfers/*`, `TransfersModule` | `pages/inventory/Transfers.tsx` | **Done (FE)** |
+| **Cycle counts** | `Features/CycleCounts/*`, `CycleCountsModule` | `pages/inventory/CycleCounts.tsx` | **Done (FE)** |
+| **Stock adjustments** | `Features/StockAdjustments/*`, `StockAdjustmentsModule` | `pages/inventory/StockAdjustments.tsx` | **Done (FE)** |
+| **Issue orders (picking)** | `Features/IssueOrders/*`, `IssueOrdersModule` | `pages/inventory/IssueOrders.tsx` | **Done (FE)** |
+| **Inventory alerts / low-stock** | `Features/InventoryAlerts/*`, `InventoryAlertsModule`, `LowStockAlertJob` | `pages/inventory/InventoryAlerts.tsx` | **Done (FE)** |
 | **Invoices (create/confirm/post/void/PDF)** | `Features/Invoices/*`, `InvoicesModule` | `pages/invoices/Invoices.tsx`, `InvoiceDetail.tsx` | **In Progress** |
 | **Payments & allocations** | `Features/Payments/*`, `PaymentsModule` | (surfaced via customer/invoice) | **In Progress** |
 | **Warranty** | `Features/Warranty/*`, `WarrantyModule`, `ExpireWarrantyRecordsJob` | (no screen) | **In Progress** |
@@ -215,10 +215,11 @@ Agents: Governance/RBAC Agent + DB Migration Agent. Gate: seeding correct, build
       `id: string | undefined` narrowing in `CustomerDetail` / `InvoiceDetail`.
 
 #### PHASE B — Core Operational Frontend (EPICs 1–3)
-`Status: Not Started`
+`Status: In Progress (EPIC 1 screens complete; barcode UI + EPICs 2–3 pending)`
 Agents: Backend .NET Agent (finalize endpoints/DTOs) + Frontend React Agent (vertical slices). Gate after each epic: e2e smoke + Arabic/RTL check.
-- [ ] **EPIC 1 — WMS Frontend:** Receiving/Putaway, Transfers, Cycle Counts, Stock Adjustments, Issue Orders
-      (picking), Inventory Alerts screens + barcode scanning UI (`@zxing/browser`).
+- [x] **EPIC 1 — WMS Frontend:** Receiving/Putaway, Transfers, Cycle Counts, Stock Adjustments, Issue Orders
+      (picking), Inventory Alerts screens built (RTL/Arabic), routes + nav wired, typecheck green.
+      *Remaining:* barcode scanning UI (`@zxing/browser`) to be layered onto Receiving/Issue-Orders.
 - [ ] **EPIC 2 — Sales & Finance Frontend:** full Invoice lifecycle UI (create→confirm→post→void→PDF), Payments &
       allocation UI, FX Rates management, Reports dashboards (P&L, statements, inventory value, batch trace) with
       Excel/PDF export.
@@ -252,7 +253,7 @@ Each phase follows the mandated cadence: **Build → Stop → Summary (Features 
 
 - [x] **Phase A:** Governance/RBAC Agent + DB Migration Agent → EPIC 0. *(Gate: seeding correct, build green — passed.)*
 - [ ] **Phase B:** Backend .NET Agent finalizes missing endpoints/DTOs; Frontend React Agent builds EPIC 1 → 2 → 3
-      in vertical slices. *(Gate after each epic: e2e smoke + Arabic/RTL check.)*
+      in vertical slices. *(EPIC 1 WMS screens complete; EPICs 2–3 + barcode UI pending. Gate after each epic: e2e smoke + Arabic/RTL check.)*
 - [ ] **Phase C:** Frontend Agent → EPIC 4 & 5; Jobs & Messaging Agent verifies outbox/alerts feed the UI.
 - [ ] **Phase D:** AI/Knowledge Agent → EPIC 6; Realtime wiring EPIC 7.
 - [ ] **Phase E:** DevOps/Observability Agent → EPIC 8, then release candidate.

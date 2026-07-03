@@ -8,6 +8,12 @@ import CustomerDetail from './pages/customers/CustomerDetail';
 import Invoices from './pages/invoices/Invoices';
 import InvoiceDetail from './pages/invoices/InvoiceDetail';
 import Inventory from './pages/inventory/Inventory';
+import Receiving from './pages/inventory/Receiving';
+import Transfers from './pages/inventory/Transfers';
+import CycleCounts from './pages/inventory/CycleCounts';
+import StockAdjustments from './pages/inventory/StockAdjustments';
+import IssueOrders from './pages/inventory/IssueOrders';
+import InventoryAlerts from './pages/inventory/InventoryAlerts';
 import Parties from './pages/parties/Parties';
 import Users from './pages/settings/Users';
 import Roles from './pages/settings/Roles';
@@ -39,6 +45,12 @@ export default function App(): JSX.Element {
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="inventory" element={<Inventory />} />
+        <Route path="inventory/receiving" element={<Receiving />} />
+        <Route path="inventory/transfers" element={<Transfers />} />
+        <Route path="inventory/cycle-counts" element={<CycleCounts />} />
+        <Route path="inventory/adjustments" element={<StockAdjustments />} />
+        <Route path="inventory/issue-orders" element={<IssueOrders />} />
+        <Route path="inventory/alerts" element={<InventoryAlerts />} />
         <Route path="parties" element={<Parties />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="audit" element={<AuditLog />} />
