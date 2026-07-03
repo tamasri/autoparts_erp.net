@@ -19,6 +19,10 @@ RUN dotnet publish "AutoPartsERP.Api.csproj" -c Release -o /app/publish /p:UseAp
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN addgroup --system --gid 1001 erp && \
     adduser --system --uid 1001 --ingroup erp erp
 

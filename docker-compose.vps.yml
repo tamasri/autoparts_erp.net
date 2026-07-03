@@ -1,0 +1,57 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__ConnectionString: "Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Redis__ConnectionString: "redis:6379,abortConnect=false,password=${REDIS_PASSWORD}"
+      Jwt__PrivateKeyPemBase64: "${JWT_PRIVATE_KEY}"
+      Jwt__PublicKeyPemBase64: "${JWT_PUBLIC_KEY}"
+      Jwt__Issuer: "AutoPartsERP"
+      Jwt__Audience: "AutoPartsERP-Client"
+      AllowedOrigins: "${ALLOWED_ORIGINS}"
+    depends_on:
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - erp-internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redisdata-vps:/data
+    networks:
+      - erp-internal
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+    networks:
+      - erp-internal
+
+networks:
+  erp-internal:
+    driver: bridge
+
+volumes:
+  redisdata-vps:

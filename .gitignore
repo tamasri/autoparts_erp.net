@@ -1,4 +1,4 @@
-﻿# OS
+# OS
 .DS_Store
 Thumbs.db
 
@@ -57,7 +57,18 @@ coverage/
 .env.*
 !.env.example
 !.env.prod.template
+!.env.vps.template
 .env.prod
 
 # Docker overrides / local
 *.local.yml
+
+# Local run artifacts (dev scripts, sandbox noise)
+scripts/logs/
+*_run_*.log
+*_run_out.log
+*_run_err.log
+*_dev_out.log
+*_dev_err.log
+%SystemDrive%/
+

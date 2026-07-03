@@ -286,6 +286,7 @@ if (!app.Environment.IsEnvironment("Testing"))
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
     await DatabaseSeeder.SeedAsync(app.Services);
+    await DemoDataSeeder.SeedAsync(app.Services);
 }
 
 app.Run();

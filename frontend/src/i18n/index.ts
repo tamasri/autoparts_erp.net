@@ -4,15 +4,13 @@ import ar from './ar.json';
 import en from './en.json';
 
 void i18n.use(initReactI18next).init({
-  lng: 'ar',
-  fallbackLng: 'en',
   resources: {
     ar: { translation: ar },
-    en: { translation: en },
+    en: { translation: en }
   },
-  interpolation: {
-    escapeValue: false,
-  },
+  lng: 'ar',
+  fallbackLng: 'en',
+  interpolation: { escapeValue: false }
 });
 
 export { i18n };
