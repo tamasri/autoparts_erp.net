@@ -40,9 +40,9 @@ public sealed class ApprovalRequest : AuditableEntity
 
     public Guid RequestedByUserId { get; private set; }
 
-    public string Reason { get; private set; }
+    public string Reason { get; private set; } = null!;
 
-    public string Status { get; private set; }
+    public string Status { get; private set; } = null!;
 
     public int RequiredApprovals { get; private set; }
 

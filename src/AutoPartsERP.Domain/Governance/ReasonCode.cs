@@ -23,11 +23,11 @@ public sealed class ReasonCode : AuditableEntity
         IsActive = true;
     }
 
-    public string Category { get; private set; }
+    public string Category { get; private set; } = null!;
 
-    public string Code { get; private set; }
+    public string Code { get; private set; } = null!;
 
-    public string Description { get; private set; }
+    public string Description { get; private set; } = null!;
 
     public bool RequiresComment { get; private set; }
 

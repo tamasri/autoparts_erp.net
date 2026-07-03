@@ -91,29 +91,23 @@ $feErr = Join-Path $logsDir "frontend.err.log"
 Remove-Item $apiOut,$apiErr,$feOut,$feErr -Force -ErrorAction SilentlyContinue
 
 Write-Host "Starting API process..."
-$apiProc = Start-Process `
-    -FilePath "C:\Program Files\dotnet\dotnet.exe" `
-    -ArgumentList @("run","--project","src\AutoPartsERP.Api","--launch-profile","Development") `
+$apiCmd = "`"C:\Program Files\dotnet\dotnet.exe`" run --project `"src\AutoPartsERP.Api`" --launch-profile Development"
+$apiProc = Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c $apiCmd > `"$apiOut`" 2> `"$apiErr`"" `
     -WorkingDirectory $repoRoot `
-    -PassThru `
-    -WindowStyle Minimized `
-    -RedirectStandardOutput $apiOut `
-    -RedirectStandardError $apiErr
+    -PassThru -WindowStyle Hidden
 
 Write-Host "Starting Frontend process..."
-$viteEntry = "node_modules\\vite\\bin\\vite.js"
+$viteEntry = "node_modules\vite\bin\vite.js"
 $frontendDir = Join-Path $repoRoot "frontend"
 if (-not (Test-Path (Join-Path $frontendDir $viteEntry))) {
-    throw "Vite is missing at $frontendDir\\$viteEntry. Run npm install in frontend."
+    throw "Vite is missing. Run npm install in frontend."
 }
-$feProc = Start-Process `
-    -FilePath "C:\Program Files\nodejs\node.exe" `
-    -ArgumentList @($viteEntry,"--host","127.0.0.1","--port","5173") `
+$feCmd = "`"C:\Program Files\nodejs\node.exe`" `"$viteEntry`" --host 127.0.0.1 --port 47173"
+$feProc = Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c $feCmd > `"$feOut`" 2> `"$feErr`"" `
     -WorkingDirectory $frontendDir `
-    -PassThru `
-    -WindowStyle Minimized `
-    -RedirectStandardOutput $feOut `
-    -RedirectStandardError $feErr
+    -PassThru -WindowStyle Hidden
 
 @{
     ApiPid = $apiProc.Id
@@ -125,15 +119,15 @@ $feProc = Start-Process `
 } | ConvertTo-Json | Set-Content -Path (Join-Path $logsDir "pids.json")
 
 Write-Host "Waiting for health checks..."
-$apiOk = Wait-Http -Url "http://127.0.0.1:5000/health"
-$feOk = Wait-Http -Url "http://127.0.0.1:5173"
+$apiOk = Wait-Http -Url "http://127.0.0.1:47000/health"
+$feOk = Wait-Http -Url "http://127.0.0.1:47173"
 
 Write-Host ""
 Write-Host "==== Local Stack Status ===="
 Write-Host ("API      : " + ($(if ($apiOk) { "UP" } else { "DOWN" })))
 Write-Host ("Frontend : " + ($(if ($feOk) { "UP" } else { "DOWN" })))
-Write-Host "API URL  : http://127.0.0.1:5000"
-Write-Host "UI URL   : http://127.0.0.1:5173"
+Write-Host "API URL  : http://127.0.0.1:47000"
+Write-Host "UI URL   : http://127.0.0.1:47173"
 Write-Host "Logs     : $logsDir"
 
 if (-not $apiOk) {

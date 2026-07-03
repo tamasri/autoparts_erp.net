@@ -77,29 +77,29 @@ public static class DatabaseSeeder
         const string adminPassword = "Admin@123456";
         const string adminUsername = "admin";
 
-        var user = await userManager.FindByEmailAsync(adminEmail);
-        if (user is null)
+        // Always delete and re-create to ensure a clean password hash
+        var existing = await userManager.FindByEmailAsync(adminEmail);
+        if (existing is not null)
         {
-            user = new AppUser
-            {
-                UserName = adminUsername,
-                Email = adminEmail,
-                FullName = "System Administrator",
-                CreatedAt = DateTimeOffset.UtcNow,
-                EmailConfirmed = true
-            };
-
-            var result = await userManager.CreateAsync(user, adminPassword);
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"Seed failed creating admin user: {string.Join(", ", result.Errors.Select(e => e.Description))}");
-            }
+            await userManager.DeleteAsync(existing);
         }
 
-        if (!await userManager.IsInRoleAsync(user, RoleCodes.SystemAdministrator))
+        var user = new AppUser
         {
-            await userManager.AddToRoleAsync(user, RoleCodes.SystemAdministrator);
+            UserName = adminUsername,
+            Email = adminEmail,
+            FullName = "System Administrator",
+            CreatedAt = DateTimeOffset.UtcNow,
+            EmailConfirmed = true
+        };
+
+        var result = await userManager.CreateAsync(user, adminPassword);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"Seed failed creating admin user: {string.Join(", ", result.Errors.Select(e => e.Description))}");
         }
+
+        await userManager.AddToRoleAsync(user, RoleCodes.SystemAdministrator);
     }
 }

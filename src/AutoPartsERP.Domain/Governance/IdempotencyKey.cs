@@ -20,11 +20,11 @@ public sealed class IdempotencyKey : AuditableEntity
         ExpiresAtUtc = expiresAtUtc;
     }
 
-    public string Key { get; }
+    public string Key { get; } = null!;
 
-    public string Scope { get; }
+    public string Scope { get; } = null!;
 
-    public string RequestHash { get; }
+    public string RequestHash { get; } = null!;
 
     public DateTimeOffset ExpiresAtUtc { get; }
 

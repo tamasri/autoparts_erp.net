@@ -22,11 +22,11 @@ public sealed class PeriodLock : AuditableEntity
         LockedAtUtc = DateTimeOffset.UtcNow;
     }
 
-    public string PeriodKey { get; }
+    public string PeriodKey { get; } = null!;
 
-    public string ModuleCode { get; }
+    public string ModuleCode { get; } = null!;
 
-    public string Reason { get; private set; }
+    public string Reason { get; private set; } = null!;
 
     public bool IsLocked { get; private set; }
 

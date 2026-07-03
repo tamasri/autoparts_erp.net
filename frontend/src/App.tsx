@@ -3,11 +3,13 @@ import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
+import KpiDashboard from './pages/kpi/KpiDashboard';
 import Customers from './pages/customers/Customers';
 import CustomerDetail from './pages/customers/CustomerDetail';
 import Invoices from './pages/invoices/Invoices';
 import InvoiceWorkspace from './pages/invoices/InvoiceWorkspace';
 import InvoiceDetail from './pages/invoices/InvoiceDetail';
+import FxRates from './pages/sales/FxRates';
 import Inventory from './pages/inventory/Inventory';
 import Receiving from './pages/inventory/Receiving';
 import Transfers from './pages/inventory/Transfers';
@@ -42,11 +44,13 @@ export default function App(): JSX.Element {
       >
         <Route index element={<Dashboard />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="kpi" element={<KpiDashboard />} />
         <Route path="customers" element={<Customers />} />
         <Route path="customers/:id" element={<CustomerDetail />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/new" element={<InvoiceWorkspace />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
+        <Route path="fx-rates" element={<FxRates />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="inventory/receiving" element={<Receiving />} />
         <Route path="inventory/transfers" element={<Transfers />} />

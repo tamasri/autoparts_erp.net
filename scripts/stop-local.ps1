@@ -23,7 +23,7 @@ if (Test-Path $pidFile) {
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 }
 
-foreach ($port in @(5000,5173)) {
+foreach ($port in @(47000, 47173)) {
     try {
         $listeners = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop
         foreach ($l in $listeners) {

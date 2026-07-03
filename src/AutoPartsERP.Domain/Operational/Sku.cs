@@ -73,9 +73,9 @@ public sealed class Sku : AuditableEntity
 
     public string? Notes { get; private set; }
 
-    public string AttributesJson { get; private set; }
+    public string AttributesJson { get; private set; } = null!;
 
-    public string[] Tags { get; private set; }
+    public string[] Tags { get; private set; } = null!;
 
     public Guid CreatedBy { get; private set; }
 

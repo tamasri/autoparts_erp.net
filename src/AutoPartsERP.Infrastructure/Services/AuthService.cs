@@ -6,20 +6,17 @@ public sealed class AuthService : IAuthService
 {
     private readonly UserManager<AppUser> _userManager;
     private readonly RoleManager<AppRole> _roleManager;
-    private readonly SignInManager<AppUser> _signInManager;
     private readonly ITokenService _tokenService;
     private readonly IManualAuditService _manualAuditService;
 
     public AuthService(
         UserManager<AppUser> userManager,
         RoleManager<AppRole> roleManager,
-        SignInManager<AppUser> signInManager,
         ITokenService tokenService,
         IManualAuditService manualAuditService)
     {
         _userManager = userManager;
         _roleManager = roleManager;
-        _signInManager = signInManager;
         _tokenService = tokenService;
         _manualAuditService = manualAuditService;
     }
@@ -36,9 +33,15 @@ public sealed class AuthService : IAuthService
             return Result<AuthTokenResponse>.Failure(new Error("Auth.InvalidCredentials", "Invalid username or password."));
         }
 
-        var signIn = await _signInManager.CheckPasswordSignInAsync(user, request.Password, true);
-        if (!signIn.Succeeded)
+        if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTimeOffset.UtcNow)
         {
+            return Result<AuthTokenResponse>.Failure(new Error("Auth.LockedOut", "Account is locked out."));
+        }
+
+        var passwordOk = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordOk)
+        {
+            await _userManager.AccessFailedAsync(user);
             await _manualAuditService.LogAsync(new ManualAuditEntry(
                 Guid.NewGuid(),
                 AuditActions.Login,
@@ -54,6 +57,8 @@ public sealed class AuthService : IAuthService
 
             return Result<AuthTokenResponse>.Failure(new Error("Auth.InvalidCredentials", "Invalid username or password."));
         }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
 
         var roles = await _userManager.GetRolesAsync(user);
         var permissions = await ResolvePermissionsAsync(roles);
