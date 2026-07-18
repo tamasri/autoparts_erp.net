@@ -1,0 +1,11 @@
+{
+  "name": "AutoParts ERP (.NET 9 + React Vite)",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:9.0",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "postCreateCommand": "mkdir -p 'C:/NuGetPackages/questpdf/2024.12.3/LatoFont' && touch 'C:/NuGetPackages/questpdf/2024.12.3/LatoFont/Lato-Regular.ttf' 'C:/NuGetPackages/questpdf/2024.12.3/LatoFont/Lato-Bold.ttf' 'C:/NuGetPackages/questpdf/2024.12.3/LatoFont/Lato-Italic.ttf' 'C:/NuGetPackages/questpdf/2024.12.3/LatoFont/Lato-BoldItalic.ttf' && dotnet restore && npm install --prefix frontend",
+  "forwardPorts": [5000, 5173]
+}

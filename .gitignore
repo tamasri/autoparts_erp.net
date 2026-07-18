@@ -72,3 +72,12 @@ scripts/logs/
 *_dev_err.log
 %SystemDrive%/
 
+# Codespaces / NuGet local cache
+C:/NuGetPackages/
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+*.user
+*.suo
+
