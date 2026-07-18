@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { inventoryAlertsApi } from '../../api/endpoints/inventoryAlerts';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -17,8 +18,7 @@ type Alert = {
 };
 
 function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+  return extractApiError(e, fallback);
 }
 
 const severityColor: Record<string, string> = {
@@ -55,9 +55,11 @@ export default function InventoryAlerts(): JSX.Element {
     setBusy(id);
     try {
       await inventoryAlertsApi.acknowledge(id);
+      toast.success('تم تأكيد التنبيه');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تأكيد التنبيه'));
+      toast.error(extractApiError(e, 'تعذر تأكيد التنبيه'));
+      setError(extractApiError(e, 'تعذر تأكيد التنبيه'));
     } finally {
       setBusy('');
     }
@@ -68,9 +70,11 @@ export default function InventoryAlerts(): JSX.Element {
     setBusy(id);
     try {
       await inventoryAlertsApi.resolve(id, note);
+      toast.success('تم إغلاق التنبيه');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إغلاق التنبيه'));
+      toast.error(extractApiError(e, 'تعذر إغلاق التنبيه'));
+      setError(extractApiError(e, 'تعذر إغلاق التنبيه'));
     } finally {
       setBusy('');
     }

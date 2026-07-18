@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { partiesApi } from '../../api/endpoints/parties';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -17,8 +18,7 @@ type Party = {
 };
 
 function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+  return extractApiError(e, fallback);
 }
 
 const TYPE_OPTIONS = ['CUSTOMER', 'VENDOR', 'SALES_REP', 'CARRIER'];
@@ -78,9 +78,11 @@ export default function Parties(): JSX.Element {
       setNotes('');
       setSelectedTypes(['CUSTOMER']);
       setShowForm(false);
+      toast.success('تم إنشاء الطرف بنجاح');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إنشاء الطرف'));
+      toast.error(extractApiError(e, 'تعذر إنشاء الطرف'));
+      setError(extractApiError(e, 'تعذر إنشاء الطرف'));
     } finally {
       setBusy(false);
     }

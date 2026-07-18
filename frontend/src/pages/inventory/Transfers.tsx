@@ -5,6 +5,7 @@ import {
   type TransferOrderLine,
 } from '../../api/endpoints/transfers';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -19,8 +20,7 @@ type TransferOrder = {
 };
 
 function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+  return extractApiError(e, fallback);
 }
 
 const emptyLine: TransferOrderLine = {
@@ -98,9 +98,11 @@ export default function Transfers(): JSX.Element {
       setDestinationWarehouseId('');
       setLines([{ ...emptyLine }]);
       setShowForm(false);
+      toast.success('تم إنشاء أمر التحويل');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إنشاء أمر التحويل'));
+      toast.error(extractApiError(e, 'تعذر إنشاء أمر التحويل'));
+      setError(extractApiError(e, 'تعذر إنشاء أمر التحويل'));
     } finally {
       setBusy('');
     }
@@ -110,9 +112,11 @@ export default function Transfers(): JSX.Element {
     setBusy(id);
     try {
       await transfersApi.ship(id);
+      toast.success('تم شحن أمر التحويل');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر شحن أمر التحويل'));
+      toast.error(extractApiError(e, 'تعذر شحن أمر التحويل'));
+      setError(extractApiError(e, 'تعذر شحن أمر التحويل'));
     } finally {
       setBusy('');
     }
@@ -122,9 +126,11 @@ export default function Transfers(): JSX.Element {
     setBusy(id);
     try {
       await transfersApi.receive(id);
+      toast.success('تم استلام أمر التحويل');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر استلام أمر التحويل'));
+      toast.error(extractApiError(e, 'تعذر استلام أمر التحويل'));
+      setError(extractApiError(e, 'تعذر استلام أمر التحويل'));
     } finally {
       setBusy('');
     }

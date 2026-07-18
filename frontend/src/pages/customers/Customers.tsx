@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customersApi, type CreateCustomer, type UpdateCustomer } from '../../api/endpoints/customers';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -22,11 +23,6 @@ type Customer = {
   notes?: string;
   isActive?: boolean;
 };
-
-function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
-}
 
 function typeBadgeColor(type: string): string {
   const normalized = type.toUpperCase();
@@ -82,7 +78,7 @@ export default function Customers(): JSX.Element {
       const res = await customersApi.getCustomers({ page: 1, pageSize: 50 });
       setRows(unwrapList<Customer>(res.data));
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تحميل العملاء'));
+      setError(extractApiError(e, 'تعذر تحميل العملاء'));
     } finally {
       setLoading(false);
     }
@@ -160,10 +156,12 @@ export default function Customers(): JSX.Element {
         };
         await customersApi.createCustomer(payload);
       }
+      toast.success(editId ? 'تم تحديث العميل بنجاح' : 'تم إنشاء العميل بنجاح');
       setShowForm(false);
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر حفظ العميل'));
+      toast.error(extractApiError(e, 'تعذر حفظ العميل'));
+      setError(extractApiError(e, 'تعذر حفظ العميل'));
     } finally {
       setBusy(false);
     }
@@ -176,9 +174,11 @@ export default function Customers(): JSX.Element {
     setBusy(true);
     try {
       await customersApi.deactivateCustomer(c.id, reason.trim());
+      toast.success('تم إلغاء تفعيل العميل');
       await load();
     } catch (err: unknown) {
-      setError(extractError(err, 'تعذر إلغاء تفعيل العميل'));
+      toast.error(extractApiError(err, 'تعذر إلغاء تفعيل العميل'));
+      setError(extractApiError(err, 'تعذر إلغاء تفعيل العميل'));
     } finally {
       setBusy(false);
     }

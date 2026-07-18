@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { invoicesApi } from '../../api/endpoints/invoices';
 import { unwrapNode } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -42,8 +43,7 @@ type InvoiceDetail = {
 
 
 function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+  return extractApiError(e, fallback);
 }
 
 export default function InvoiceDetail(): JSX.Element {
@@ -77,9 +77,11 @@ export default function InvoiceDetail(): JSX.Element {
     setBusy(true);
     try {
       await invoicesApi.confirm(id);
+      toast.success('تم تأكيد الفاتورة');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تأكيد الفاتورة'));
+      toast.error(extractApiError(e, 'تعذر تأكيد الفاتورة'));
+      setError(extractApiError(e, 'تعذر تأكيد الفاتورة'));
     } finally {
       setBusy(false);
     }
@@ -90,9 +92,11 @@ export default function InvoiceDetail(): JSX.Element {
     setBusy(true);
     try {
       await invoicesApi.post(id);
+      toast.success('تم ترحيل الفاتورة بنجاح');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر ترحيل الفاتورة'));
+      toast.error(extractApiError(e, 'تعذر ترحيل الفاتورة'));
+      setError(extractApiError(e, 'تعذر ترحيل الفاتورة'));
     } finally {
       setBusy(false);
     }
@@ -105,9 +109,11 @@ export default function InvoiceDetail(): JSX.Element {
     setBusy(true);
     try {
       await invoicesApi.void(id, reason.trim());
+      toast.success('تم إلغاء الفاتورة');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إلغاء الفاتورة'));
+      toast.error(extractApiError(e, 'تعذر إلغاء الفاتورة'));
+      setError(extractApiError(e, 'تعذر إلغاء الفاتورة'));
     } finally {
       setBusy(false);
     }
@@ -126,7 +132,8 @@ export default function InvoiceDetail(): JSX.Element {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تنزيل ملف PDF'));
+      toast.error(extractApiError(e, 'تعذر تنزيل ملف PDF'));
+      setError(extractApiError(e, 'تعذر تنزيل ملف PDF'));
     } finally {
       setBusy(false);
     }

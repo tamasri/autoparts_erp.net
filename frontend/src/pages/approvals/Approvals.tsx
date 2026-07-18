@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { approvalsApi } from '../../api/endpoints/approvals';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -20,6 +21,7 @@ export default function Approvals(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<Approval[]>([]);
+  const [busy, setBusy] = useState('');
 
   async function load(): Promise<void> {
     setLoading(true);
@@ -28,18 +30,41 @@ export default function Approvals(): JSX.Element {
       const res = await approvalsApi.getPending(1, 50);
       setRows(unwrapList<Approval>(res.data));
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.detail
-        ?? (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.message
-        ?? 'تعذر تحميل الطلبات';
-      setError(msg);
+      setError(extractApiError(e, 'تعذر تحميل الطلبات'));
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
+
+  async function approve(id: string): Promise<void> {
+    setBusy(id);
+    try {
+      await approvalsApi.approve(id);
+      toast.success('تمت الموافقة بنجاح');
+      await load();
+    } catch (e: unknown) {
+      toast.error(extractApiError(e, 'تعذر الموافقة على الطلب'));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function reject(id: string): Promise<void> {
+    const reason = window.prompt('سبب الرفض') ?? '';
+    if (!reason.trim()) return;
+    setBusy(id);
+    try {
+      await approvalsApi.reject(id, reason.trim());
+      toast.success('تم رفض الطلب');
+      await load();
+    } catch (e: unknown) {
+      toast.error(extractApiError(e, 'تعذر رفض الطلب'));
+    } finally {
+      setBusy('');
+    }
+  }
 
   if (loading) return <LoadingSpinner />;
 
@@ -53,41 +78,38 @@ export default function Approvals(): JSX.Element {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th>النوع</th>
-                <th>الطالب</th>
-                <th>التاريخ</th>
-                <th>ينتهي في</th>
-                <th>الحالة</th>
-                <th>إجراءات</th>
+                <th style={th()}>النوع</th>
+                <th style={th()}>الطالب</th>
+                <th style={th()}>التاريخ</th>
+                <th style={th()}>ينتهي في</th>
+                <th style={th()}>الحالة</th>
+                <th style={th()}>إجراءات</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.requestType ?? '-'}</td>
-                  <td>{row.requesterName ?? row.requesterUsername ?? '-'}</td>
-                  <td>{row.createdAt ?? '-'}</td>
-                  <td>{row.expiresAt ?? '-'}</td>
-                  <td><StatusBadge status={row.status ?? 'PENDING'} type="approval" /></td>
-                  <td style={{ display: 'flex', gap: '6px' }}>
+                  <td style={td()}>{row.requestType ?? '-'}</td>
+                  <td style={td()}>{row.requesterName ?? row.requesterUsername ?? '-'}</td>
+                  <td style={td()}>{row.createdAt ?? '-'}</td>
+                  <td style={td()}>{row.expiresAt ?? '-'}</td>
+                  <td style={td()}><StatusBadge status={row.status ?? 'PENDING'} type="approval" /></td>
+                  <td style={{ ...td(), whiteSpace: 'nowrap' }}>
                     <button
                       type="button"
-                      onClick={async () => { await approvalsApi.approve(row.id); await load(); }}
-                      style={{ border: 'none', borderRadius: '6px', background: '#2e7d32', color: '#fff', padding: '4px 8px' }}
+                      disabled={busy === row.id}
+                      onClick={() => void approve(row.id)}
+                      style={btn('#2e7d32')}
                     >
-                      ✓
+                      {busy === row.id ? '...' : '✓ موافقة'}
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        const reason = window.prompt('سبب الرفض') ?? '';
-                        if (!reason.trim()) return;
-                        await approvalsApi.reject(row.id, reason.trim());
-                        await load();
-                      }}
-                      style={{ border: 'none', borderRadius: '6px', background: '#c62828', color: '#fff', padding: '4px 8px' }}
+                      disabled={busy === row.id}
+                      onClick={() => void reject(row.id)}
+                      style={btn('#c62828')}
                     >
-                      ✗
+                      {busy === row.id ? '...' : '✗ رفض'}
                     </button>
                   </td>
                 </tr>
@@ -98,4 +120,14 @@ export default function Approvals(): JSX.Element {
       )}
     </div>
   );
+}
+
+function btn(bg: string): React.CSSProperties {
+  return { border: 'none', borderRadius: '6px', background: bg, color: '#fff', padding: '5px 10px', margin: '0 3px', cursor: 'pointer', fontSize: '13px' };
+}
+function th(): React.CSSProperties {
+  return { padding: '10px 12px', textAlign: 'right', background: '#f5f5f5', borderBottom: '1px solid #e0e0e0' };
+}
+function td(): React.CSSProperties {
+  return { padding: '10px 12px', borderBottom: '1px solid #f0f0f0' };
 }

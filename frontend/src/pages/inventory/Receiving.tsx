@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { receivingApi, type CreateReceivingDocument } from '../../api/endpoints/receiving';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -26,8 +27,7 @@ type PutawayTask = {
 };
 
 function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+  return extractApiError(e, fallback);
 }
 
 const emptyForm: CreateReceivingDocument = { warehouseId: '', vendorPartyId: '', purchaseOrderRef: '', notes: '' };
@@ -74,9 +74,11 @@ export default function Receiving(): JSX.Element {
       await receivingApi.create(payload);
       setForm(emptyForm);
       setShowForm(false);
+      toast.success('تم إنشاء مستند الاستلام');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إنشاء المستند'));
+      toast.error(extractApiError(e, 'تعذر إنشاء المستند'));
+      setError(extractApiError(e, 'تعذر إنشاء المستند'));
     } finally {
       setBusy('');
     }
@@ -86,9 +88,11 @@ export default function Receiving(): JSX.Element {
     setBusy(id);
     try {
       await receivingApi.post(id);
+      toast.success('تم ترحيل مستند الاستلام');
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر ترحيل المستند'));
+      toast.error(extractApiError(e, 'تعذر ترحيل المستند'));
+      setError(extractApiError(e, 'تعذر ترحيل المستند'));
     } finally {
       setBusy('');
     }
@@ -100,7 +104,8 @@ export default function Receiving(): JSX.Element {
       const res = await receivingApi.getPutawayTasks(id);
       setTasks((prev) => ({ ...prev, [id]: unwrapList<PutawayTask>(res.data) }));
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تحميل مهام التخزين'));
+      toast.error(extractApiError(e, 'تعذر تحميل مهام التخزين'));
+      setError(extractApiError(e, 'تعذر تحميل مهام التخزين'));
     } finally {
       setBusy('');
     }
@@ -114,7 +119,8 @@ export default function Receiving(): JSX.Element {
       await receivingApi.completePutaway(task.id, { toLocationId: to.trim(), qty: task.qty });
       await loadTasks(docId);
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إتمام مهمة التخزين'));
+      toast.error(extractApiError(e, 'تعذر إتمام مهمة التخزين'));
+      setError(extractApiError(e, 'تعذر إتمام مهمة التخزين'));
     } finally {
       setBusy('');
     }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fxRatesApi, type CreateFxRate } from '../../api/endpoints/fxRates';
 import { unwrapList } from '../../api/apiData';
+import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -14,11 +15,6 @@ type FxRate = {
 
 const today = new Date().toISOString().slice(0, 10);
 const emptyForm: CreateFxRate = { buyRate: 0, sellRate: 0, midRate: 0, rateDate: today };
-
-function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
-}
 
 export default function FxRates(): JSX.Element {
   const [loading, setLoading] = useState(true);
@@ -35,7 +31,7 @@ export default function FxRates(): JSX.Element {
       const res = await fxRatesApi.getList(1, 30);
       setRows(unwrapList<FxRate>(res.data));
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تحميل أسعار الصرف'));
+      setError(extractApiError(e, 'تعذر تحميل أسعار الصرف'));
     } finally {
       setLoading(false);
     }
@@ -45,21 +41,21 @@ export default function FxRates(): JSX.Element {
 
   async function save(): Promise<void> {
     if (!form.rateDate || form.buyRate <= 0 || form.sellRate <= 0) {
-      setError('التاريخ وأسعار الشراء والبيع مطلوبة');
+      toast.error('التاريخ وأسعار الشراء والبيع مطلوبة');
       return;
     }
     setBusy(true);
-    setError('');
     try {
       await fxRatesApi.create({
         ...form,
         midRate: form.midRate > 0 ? form.midRate : (form.buyRate + form.sellRate) / 2,
       });
+      toast.success('تم حفظ سعر الصرف بنجاح');
       setForm(emptyForm);
       setShowForm(false);
       await load();
     } catch (e: unknown) {
-      setError(extractError(e, 'تعذر حفظ سعر الصرف'));
+      toast.error(extractApiError(e, 'تعذر حفظ سعر الصرف'));
     } finally {
       setBusy(false);
     }
@@ -93,7 +89,9 @@ export default function FxRates(): JSX.Element {
               <input type="number" value={form.midRate} onChange={(e) => setForm({ ...form, midRate: Number(e.target.value) })} style={inp()} placeholder="يُحسب تلقائياً" />
             </label>
           </div>
-          <button type="button" disabled={busy} onClick={() => void save()} style={btn('#004d40')}>حفظ</button>
+          <button type="button" disabled={busy} onClick={() => void save()} style={{ ...btn('#004d40'), opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'جارٍ الحفظ...' : 'حفظ'}
+          </button>
         </div>
       ) : null}
 
