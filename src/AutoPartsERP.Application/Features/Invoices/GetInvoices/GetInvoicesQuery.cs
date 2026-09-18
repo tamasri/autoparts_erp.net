@@ -98,7 +98,7 @@ public sealed class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, 
                     i.balance_usd AS BalanceUsd,
                     i.status AS StatusDisplay,
                     i.invoice_type AS TypeDisplay,
-                    i.due_date AS DueDateDisplay
+                    '' AS DueDateDisplay
                 FROM invoices i
                 INNER JOIN customers c ON c.id = i.customer_id
                 {where}
