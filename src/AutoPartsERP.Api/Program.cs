@@ -110,11 +110,27 @@ builder.Services
 builder.Services.AddObservability(builder.Configuration);
 
 // CORS
+var allowedOrigins = (builder.Configuration["AllowedOrigins"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultCors", policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader();
+        }
+        else if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        }
+        else
+        {
+            // Fail closed outside Development when AllowedOrigins is missing/misconfigured,
+            // instead of silently falling back to AllowAnyOrigin().
+            policy.WithOrigins(Array.Empty<string>());
+        }
     });
 });
 
@@ -141,6 +157,7 @@ builder.Services.AddScoped<IManualAuditService, ManualAuditService>();
 builder.Services.AddScoped<IIdempotencyService, DistributedIdempotencyService>();
 builder.Services.AddScoped<IPeriodLockService, PeriodLockService>();
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
+builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();

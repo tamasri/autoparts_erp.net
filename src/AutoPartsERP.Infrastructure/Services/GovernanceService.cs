@@ -1,4 +1,5 @@
-﻿using AutoPartsERP.Infrastructure.Persistence;
+﻿using MediatR;
+using AutoPartsERP.Infrastructure.Persistence;
 
 namespace AutoPartsERP.Infrastructure.Services;
 
@@ -6,11 +7,22 @@ public sealed class GovernanceService : IGovernanceService
 {
     private readonly AppDbContext _dbContext;
     private readonly IDbConnectionFactory _dbConnectionFactory;
+    private readonly IMediator _mediator;
+    private readonly IApprovalReplayContext _replayContext;
+    private readonly ILogger<GovernanceService> _logger;
 
-    public GovernanceService(AppDbContext dbContext, IDbConnectionFactory dbConnectionFactory)
+    public GovernanceService(
+        AppDbContext dbContext,
+        IDbConnectionFactory dbConnectionFactory,
+        IMediator mediator,
+        IApprovalReplayContext replayContext,
+        ILogger<GovernanceService> logger)
     {
         _dbContext = dbContext;
         _dbConnectionFactory = dbConnectionFactory;
+        _mediator = mediator;
+        _replayContext = replayContext;
+        _logger = logger;
     }
 
     public async Task<Result<PagedResponse<ApprovalRequestDto>>> GetApprovalsAsync(ApprovalListFilter filter, CancellationToken cancellationToken = default)
@@ -65,7 +77,64 @@ public sealed class GovernanceService : IGovernanceService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (string.Equals(entity.Status, ApprovalStatuses.Approved, StringComparison.OrdinalIgnoreCase))
+        {
+            await ReplayApprovedRequestAsync(approvalId, cancellationToken);
+        }
+
         return Result<ApprovalRequestDto>.Success(ToDto(entity));
+    }
+
+    /// <summary>
+    /// Re-dispatches the original MediatR command that <c>MakerCheckerBehavior</c> deferred when it
+    /// created this approval request, so approving it actually performs the mutation instead of only
+    /// flipping <see cref="ApprovalRequest.Status"/>. Read via Dapper (not the EF <see cref="ApprovalRequest"/>
+    /// entity) because <c>request_type</c>/<c>payload_json</c> are written by <c>ApprovalService.CreatePendingApprovalAsync</c>'s
+    /// raw SQL insert and are not part of the EF entity model.
+    /// </summary>
+    private async Task ReplayApprovedRequestAsync(Guid approvalId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
+        var payload = await connection.QuerySingleOrDefaultAsync<(string RequestType, string PayloadJson)>(
+            new CommandDefinition(
+                "SELECT request_type AS RequestType, payload_json::text AS PayloadJson FROM approval_requests WHERE id = @Id;",
+                new { Id = approvalId },
+                cancellationToken: cancellationToken));
+
+        if (payload.RequestType is null)
+        {
+            _logger.LogWarning("Approval {ApprovalId} approved but no payload_json/request_type row was found to replay.", approvalId);
+            return;
+        }
+
+        var requestType = ApprovalRequestTypeResolver.Resolve(payload.RequestType);
+        if (requestType is null)
+        {
+            _logger.LogError(
+                "Approval {ApprovalId} approved but request type '{RequestType}' could not be resolved to a CLR type; the original command was NOT re-executed.",
+                approvalId, payload.RequestType);
+            return;
+        }
+
+        var deserialized = JsonSerializer.Deserialize(payload.PayloadJson, requestType);
+        if (deserialized is null)
+        {
+            _logger.LogError(
+                "Approval {ApprovalId} approved but payload_json could not be deserialized into {RequestType}; the original command was NOT re-executed.",
+                approvalId, requestType.Name);
+            return;
+        }
+
+        _replayContext.IsReplaying = true;
+        try
+        {
+            await _mediator.Send(deserialized, cancellationToken);
+        }
+        finally
+        {
+            _replayContext.IsReplaying = false;
+        }
     }
 
     public async Task<Result<ApprovalRequestDto>> RejectApprovalAsync(Guid approvalId, string comment, Guid reviewerUserId, CancellationToken cancellationToken = default)

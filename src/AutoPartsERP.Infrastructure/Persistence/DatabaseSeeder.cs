@@ -7,9 +7,11 @@ public static class DatabaseSeeder
         using var scope = services.CreateScope();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
 
         await SeedRolesAsync(roleManager);
-        await SeedAdminUserAsync(userManager);
+        await SeedAdminUserAsync(userManager, configuration, environment);
     }
 
     private static async Task SeedRolesAsync(RoleManager<AppRole> roleManager)
@@ -71,17 +73,22 @@ public static class DatabaseSeeder
         }
     }
 
-    private static async Task SeedAdminUserAsync(UserManager<AppUser> userManager)
+    private static async Task SeedAdminUserAsync(UserManager<AppUser> userManager, IConfiguration configuration, IHostEnvironment environment)
     {
-        const string adminEmail = "admin@autoparts.local";
-        const string adminPassword = "Admin@123456";
-        const string adminUsername = "admin";
+        var adminEmail = configuration["Seed:AdminEmail"] ?? "admin@autoparts.local";
+        var adminUsername = configuration["Seed:AdminUsername"] ?? "admin";
+        var adminPassword = configuration["Seed:AdminPassword"]
+            ?? (environment.IsDevelopment()
+                ? "Admin@123456"
+                : throw new InvalidOperationException(
+                    "Seed:AdminPassword must be configured (e.g. via environment variable Seed__AdminPassword) outside the Development environment."));
 
-        // Always delete and re-create to ensure a clean password hash
+        // Only create the admin once; do NOT delete/recreate on every restart, or an operator-changed
+        // production password would be silently reset back to the seed value on the next deploy.
         var existing = await userManager.FindByEmailAsync(adminEmail);
         if (existing is not null)
         {
-            await userManager.DeleteAsync(existing);
+            return;
         }
 
         var user = new AppUser

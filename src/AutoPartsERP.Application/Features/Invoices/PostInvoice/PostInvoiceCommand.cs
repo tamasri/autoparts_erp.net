@@ -8,12 +8,15 @@ public sealed record PostInvoiceCommand(
     DateOnly InvoiceDate,
     string IdempotencyKey,
     string? ModuleInput = null)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IPeriodSensitiveRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IPeriodSensitiveRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Invoices.Post;
     public string AuditModule => "INVOICES";
     public DateTimeOffset OperationDate => InvoiceDate.ToDateTime(TimeOnly.MinValue);
     public string Module => "INVOICES";
+
+    // Posting decrements live stock, creates warranty records, and fires an outbox event — requires a second approver.
+    public bool RequiresApproval => true;
 }
 
 public sealed class PostInvoiceCommandValidator : AbstractValidator<PostInvoiceCommand>

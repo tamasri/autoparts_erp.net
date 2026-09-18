@@ -11,15 +11,18 @@ public sealed class MakerCheckerBehavior<TRequest, TResponse> : IPipelineBehavio
     private readonly IApprovalService _approvalService;
     private readonly ICurrentUser _currentUser;
     private readonly IManualAuditService _audit;
+    private readonly IApprovalReplayContext _replayContext;
 
     public MakerCheckerBehavior(
         IApprovalService approvalService,
         ICurrentUser currentUser,
-        IManualAuditService audit)
+        IManualAuditService audit,
+        IApprovalReplayContext replayContext)
     {
         _approvalService = approvalService;
         _currentUser     = currentUser;
         _audit           = audit;
+        _replayContext   = replayContext;
     }
 
     public async Task<TResponse> Handle(
@@ -27,8 +30,11 @@ public sealed class MakerCheckerBehavior<TRequest, TResponse> : IPipelineBehavio
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
+        // An approved request being replayed by GovernanceService must reach the real handler,
+        // not be intercepted again and turned into a second pending approval.
         if (request is not IMakerCheckerRequest makerCheckerRequest
-            || !makerCheckerRequest.RequiresApproval)
+            || !makerCheckerRequest.RequiresApproval
+            || _replayContext.IsReplaying)
         {
             return await next();
         }

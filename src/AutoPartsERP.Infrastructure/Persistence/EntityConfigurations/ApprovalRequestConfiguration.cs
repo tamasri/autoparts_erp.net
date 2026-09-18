@@ -15,6 +15,17 @@ public sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Appr
         builder.Property(x => x.ActionCode).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Reason).HasMaxLength(2000).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired();
-        builder.Property(x => x.RequestedAtUtc).HasColumnType("timestamp with time zone");
+        builder.Property(x => x.RequestedByUserId).IsRequired();
+        builder.Property(x => x.RequiredApprovals).IsRequired();
+        builder.Property(x => x.RequestedAtUtc).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(x => x.CompletedAtUtc).HasColumnType("timestamp with time zone");
+        builder.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(x => x.UpdatedAtUtc).HasColumnType("timestamp with time zone");
+
+        builder.HasMany(x => x.Decisions)
+            .WithOne()
+            .HasForeignKey(x => x.ApprovalRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.Decisions).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
