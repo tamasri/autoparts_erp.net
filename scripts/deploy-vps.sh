@@ -178,17 +178,35 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build \
 step "Wait for services and verify health"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
 
+# Check the api container directly rather than through nginx: nginx.conf
+# intentionally restricts `location /health` to 127.0.0.1 as a hardening
+# measure, but a curl from the VPS host to the published port does not
+# appear as 127.0.0.1 inside the nginx container (Docker rewrites the
+# source address for published-port traffic), so it would always 403 here
+# even when the api is genuinely healthy.
+api_healthy=0
 for i in {1..30}; do
-  if curl -kfsS https://localhost/health >/dev/null 2>&1; then
+  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T api wget -qO- http://localhost:8080/health >/dev/null 2>&1; then
+    api_healthy=1
     break
   fi
   sleep 2
 done
 
-if ! curl -kfsS https://localhost/health >/dev/null 2>&1; then
+if [[ "$api_healthy" != "1" ]]; then
   echo "API health endpoint is not ready yet. Showing API logs:"
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs --tail=120 api
   fail "Health check failed."
+fi
+echo "API is healthy."
+
+# Sanity-check the public HTTPS edge (frontend root) separately - this does
+# NOT depend on the api's own health, just that nginx + TLS + static files
+# are serving.
+if curl -kfsS -o /dev/null https://localhost/ 2>/dev/null; then
+  echo "Nginx HTTPS edge is responding."
+else
+  warn "Nginx HTTPS edge (https://localhost/) did not respond - check 'docker compose logs nginx' and nginx/certs/."
 fi
 
 step "Deployment completed"
