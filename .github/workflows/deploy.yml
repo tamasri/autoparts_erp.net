@@ -16,10 +16,29 @@ jobs:
       - run: dotnet build AutoPartsERP.sln -c Release
       - run: dotnet test AutoPartsERP.sln --no-build -c Release
 
-  deploy:
-    needs: build-and-test
+  # Secrets aren't readable from a job-level `if`, so surface their presence as an output.
+  check-deploy-config:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_SSH_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VPS_HOST / VPS_USER / VPS_SSH_KEY are not set - skipping deployment. Add them in Settings > Secrets to enable automatic deploys."
+          fi
+
+  deploy:
+    needs: [build-and-test, check-deploy-config]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.check-deploy-config.outputs.configured == 'true'
     steps:
       - uses: actions/checkout@v4
 

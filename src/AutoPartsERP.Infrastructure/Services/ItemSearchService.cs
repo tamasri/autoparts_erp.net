@@ -74,8 +74,9 @@ public sealed class ItemSearchService : IItemSearchService
                 WHERE
                     (@IncludeInactive = TRUE OR i.is_active = TRUE)
                     AND (
-                        i.part_number_canonical LIKE @CanonicalPrefix
-                        OR i.part_number_numeric LIKE @NumericPrefix
+                        (@HasCanonical AND i.part_number_canonical LIKE @CanonicalPrefix)
+                        OR (@HasNumeric AND i.part_number_numeric LIKE @NumericPrefix)
+                        OR i.name_en ILIKE @LikeQuery
                         OR i.name_ar ILIKE @LikeQuery
                         OR i.name_ar_colloquial ILIKE @LikeQuery
                         OR EXISTS (
@@ -83,7 +84,7 @@ public sealed class ItemSearchService : IItemSearchService
                             FROM item_aliases ia
                             WHERE ia.item_id = i.id
                               AND (
-                                  ia.alias_canonical LIKE @CanonicalPrefix
+                                  (@HasCanonical AND ia.alias_canonical LIKE @CanonicalPrefix)
                                   OR ia.alias ILIKE @LikeQuery
                               ))
                     )
@@ -122,6 +123,11 @@ public sealed class ItemSearchService : IItemSearchService
                 new
                 {
                     IncludeInactive = request.IncludeInactive,
+                    // A blank canonical/numeric form turns "LIKE ''%'" into "LIKE '%'", which
+                    // matches every row - so a text-only query like "brake" returned the entire
+                    // catalogue via the numeric branch. Gate each prefix on actually having one.
+                    HasCanonical = normalized.Canonical.Length > 0,
+                    HasNumeric = normalized.Numeric.Length > 0,
                     CanonicalPrefix = $"{normalized.Canonical}%",
                     NumericPrefix = $"{normalized.Numeric}%",
                     LikeQuery = $"%{request.Query.Trim()}%",
