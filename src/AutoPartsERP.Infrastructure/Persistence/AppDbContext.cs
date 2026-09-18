@@ -118,6 +118,14 @@ public sealed class AppDbContext : IdentityDbContext<AppUser, AppRole, Guid,
     {
         base.OnModelCreating(builder);
 
+        // Must run BEFORE the snake_case conversion loop below: applying entity
+        // configurations touches property builders (e.g. builder.Property(x => x.Foo)),
+        // and EF re-resolves that property's column name from convention when touched.
+        // If the snake_case pass ran first, any property an IEntityTypeConfiguration
+        // referenced - even just to set HasMaxLength - would have its already-converted
+        // snake_case name silently reset back to the raw (PascalCase) property name.
+        builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
         foreach (var entity in builder.Model.GetEntityTypes())
         {
             var tableName = entity.GetTableName();
@@ -162,7 +170,5 @@ public sealed class AppDbContext : IdentityDbContext<AppUser, AppRole, Guid,
                 }
             }
         }
-
-        builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
     }
 }

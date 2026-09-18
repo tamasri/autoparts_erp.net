@@ -99,17 +99,17 @@ public sealed class ItemSearchService : IItemSearchService
                     i.is_stop_ship
             )
             SELECT
-                id,
-                part_number,
-                part_number_canonical,
-                part_number_numeric,
-                name_en,
-                name_ar,
-                name_ar_colloquial,
-                brand,
-                is_stop_ship,
-                sort_bucket,
-                total_count
+                id AS Id,
+                part_number AS PartNumber,
+                part_number_canonical AS PartNumberCanonical,
+                part_number_numeric AS PartNumberNumeric,
+                name_en AS NameEn,
+                name_ar AS NameAr,
+                name_ar_colloquial AS NameArColloquial,
+                brand AS Brand,
+                is_stop_ship AS IsStopShip,
+                sort_bucket AS SortBucket,
+                total_count AS TotalCount
             FROM filtered_items
             ORDER BY sort_bucket ASC, is_stop_ship ASC, part_number_canonical ASC
             OFFSET @Offset

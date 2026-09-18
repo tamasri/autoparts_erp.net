@@ -1,3 +1,5 @@
+DapperTypeHandlers.Register();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Serilog
