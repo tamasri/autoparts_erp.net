@@ -57,7 +57,7 @@ export default function Inventory(): JSX.Element {
         return;
       }
       try {
-        const res = await inventoryApi.searchItems(query.trim(), 1, 100);
+        const res = await inventoryApi.getStock({ page: 1, pageSize: 100, searchTerm: query.trim() });
         setSearchRows(unwrapList<StockRow>(res.data));
       } catch {
         setSearchRows([]);
