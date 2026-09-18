@@ -13,6 +13,9 @@ services:
       Jwt__Issuer: "AutoPartsERP"
       Jwt__Audience: "AutoPartsERP-Client"
       AllowedOrigins: "${ALLOWED_ORIGINS}"
+      Seed__AdminEmail: "${SEED_ADMIN_EMAIL}"
+      Seed__AdminUsername: "${SEED_ADMIN_USERNAME}"
+      Seed__AdminPassword: "${SEED_ADMIN_PASSWORD}"
     depends_on:
       - redis
     extra_hosts:

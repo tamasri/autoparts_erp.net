@@ -83,6 +83,8 @@ required_vars=(
   POSTGRES_PASSWORD
   REDIS_PASSWORD
   ALLOWED_ORIGINS
+  SEED_ADMIN_EMAIL
+  SEED_ADMIN_USERNAME
 )
 
 for key in "${required_vars[@]}"; do
@@ -112,6 +114,20 @@ if is_placeholder "${JWT_PRIVATE_KEY:-}" || is_placeholder "${JWT_PUBLIC_KEY:-}"
   set +a
 else
   echo "JWT keys already provided."
+fi
+
+step "Ensure seed admin password exists"
+seed_admin_generated=0
+if is_placeholder "${SEED_ADMIN_PASSWORD:-}"; then
+  generated_password="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-20)Aa1!"
+  upsert_env "SEED_ADMIN_PASSWORD" "$generated_password"
+  seed_admin_generated=1
+  echo "Generated a random SEED_ADMIN_PASSWORD and wrote it to $ENV_FILE."
+  set -a
+  source "$ENV_FILE"
+  set +a
+else
+  echo "Seed admin password already provided."
 fi
 
 step "Check external PostgreSQL connectivity"
@@ -174,6 +190,12 @@ echo "VPS deployment is up."
 echo "App URL: https://<your-domain-or-vps-ip>"
 echo "Health:  https://localhost/health (from VPS shell)"
 echo
+if [[ "$seed_admin_generated" == "1" ]]; then
+  echo "!! Save this admin login now - it will not be shown again !!"
+  echo "   Email:    ${SEED_ADMIN_EMAIL}"
+  echo "   Password: ${SEED_ADMIN_PASSWORD}"
+  echo
+fi
 echo "Useful commands:"
 echo "  docker compose --env-file $ENV_FILE -f $COMPOSE_FILE ps"
 echo "  docker compose --env-file $ENV_FILE -f $COMPOSE_FILE logs -f api"
