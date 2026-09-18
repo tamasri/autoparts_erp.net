@@ -86,3 +86,8 @@ C:/NuGetPackages/
 *.user
 *.suo
 
+
+# Local secrets — never commit
+ADMIN PASSWORD.txt
+*PASSWORD*.txt
+*password*.txt

@@ -5,34 +5,37 @@ type Props = {
   type: BadgeType;
 };
 
-function palette(status: string): { bg: string; fg: string } {
+function palette(status: string): { className: string; label: string } {
   const normalized = status.toUpperCase();
-  if (normalized === 'POSTED' || normalized === 'SUCCESS' || normalized === 'ACTIVE' || normalized === 'APPROVED') {
-    return { bg: '#e8f5e9', fg: '#1b5e20' };
+  if (
+    normalized === 'POSTED' ||
+    normalized === 'SUCCESS' ||
+    normalized === 'ACTIVE' ||
+    normalized === 'APPROVED'
+  ) {
+    return { className: 'badge badge--success', label: status };
   }
-  if (normalized === 'DRAFT' || normalized === 'PENDING') {
-    return { bg: '#eceff1', fg: '#37474f' };
+  if (normalized === 'DRAFT') {
+    return { className: 'badge badge--draft', label: status };
   }
-  if (normalized === 'VOID' || normalized === 'FAILED' || normalized === 'REJECTED' || normalized === 'INACTIVE') {
-    return { bg: '#ffebee', fg: '#b71c1c' };
+  if (normalized === 'PENDING') {
+    return { className: 'badge badge--warning', label: status };
   }
-  return { bg: '#fff8e1', fg: '#e65100' };
+  if (
+    normalized === 'VOID' ||
+    normalized === 'FAILED' ||
+    normalized === 'REJECTED' ||
+    normalized === 'INACTIVE'
+  ) {
+    return { className: 'badge badge--danger', label: status };
+  }
+  if (normalized === 'CONFIRMED') {
+    return { className: 'badge badge--primary', label: status };
+  }
+  return { className: 'badge badge--warning', label: status };
 }
 
 export default function StatusBadge({ status }: Props): JSX.Element {
-  const p = palette(status);
-  return (
-    <span
-      style={{
-        padding: '2px 8px',
-        borderRadius: '999px',
-        background: p.bg,
-        color: p.fg,
-        fontSize: '12px',
-        fontWeight: 700,
-      }}
-    >
-      {status}
-    </span>
-  );
+  const { className, label } = palette(status);
+  return <span className={className}>{label}</span>;
 }

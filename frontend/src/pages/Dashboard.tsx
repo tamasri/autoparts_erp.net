@@ -76,63 +76,203 @@ export default function Dashboard(): JSX.Element {
     return acc;
   }, {});
 
+  const maxCount = Math.max(...Object.values(byCustomer), 1);
+
   return (
     <div style={{ direction: 'rtl' }}>
-      {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        <KpiCard title="إجمالي الفواتير" value={kpis.postedCount} icon="🧾" />
-        <KpiCard title="العملاء النشطون" value={kpis.activeCustomers} icon="👥" />
-        <KpiCard title="الذمم المدينة" value={kpis.receivables.toLocaleString('en-US')} unit="ل.س" icon="💰" />
-        <KpiCard title="المخزون المنخفض" value={kpis.outOfStock} icon="⚠️" />
-      </div>
 
-      <div style={{ background: '#fff', marginTop: '14px', borderRadius: '12px', padding: '14px', boxShadow: '0 2px 8px #00000012' }}>
-        <h3 style={{ marginTop: 0 }}>آخر الفواتير</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>رقم الفاتورة</th>
-              <th>العميل</th>
-              <th>التاريخ</th>
-              <th>الإجمالي (ل.س)</th>
-              <th>الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((invoice) => (
-              <tr key={invoice.id}>
-                <td>{invoice.invoiceNumber ?? invoice.id.slice(0, 8)}</td>
-                <td>{invoice.customerName ?? '-'}</td>
-                <td>{invoice.invoiceDate ?? '-'}</td>
-                <td>{Number(invoice.totalSyp ?? 0).toLocaleString('en-US')}</td>
-                <td><StatusBadge status={invoice.status ?? 'UNKNOWN'} type="invoice" /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: '12px', marginTop: '14px' }}>
-        <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', boxShadow: '0 2px 8px #00000012' }}>
-          <h3 style={{ marginTop: 0 }}>أفضل العملاء</h3>
-          {Object.entries(byCustomer).map(([customer, count]) => (
-            <div key={customer} style={{ marginBottom: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>{customer}</span>
-                <span>{count}</span>
-              </div>
-              <div style={{ background: '#e0f2f1', borderRadius: '8px', overflow: 'hidden', height: '8px' }}>
-                <div style={{ width: `${Math.min(100, count * 25)}%`, background: '#00796b', height: '8px' }} />
-              </div>
-            </div>
-          ))}
+      {/* Page Header */}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">لوحة التحكم</h1>
+          <div className="vex-page-header__breadcrumb">نظرة عامة على أداء النظام</div>
         </div>
-        <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', boxShadow: '0 2px 8px #00000012' }}>
-          <h3 style={{ marginTop: 0 }}>إجراءات سريعة</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <Link to="/invoices" style={{ textDecoration: 'none', background: '#00796b', color: '#fff', padding: '10px', borderRadius: '8px' }}>فاتورة جديدة</Link>
-            <Link to="/invoices" style={{ textDecoration: 'none', background: '#2e7d32', color: '#fff', padding: '10px', borderRadius: '8px' }}>استلام دفعة</Link>
-            <Link to="/customers" style={{ textDecoration: 'none', background: '#1565c0', color: '#fff', padding: '10px', borderRadius: '8px' }}>عميل جديد</Link>
+        <Link to="/invoices/new" className="btn-primary">
+          <span>＋</span>
+          فاتورة جديدة
+        </Link>
+      </div>
+
+      {error ? <ErrorBanner message={error} /> : null}
+
+      {/* KPI Grid */}
+      <div style={{
+        display: 'grid',
+        gap: 16,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        marginBottom: 24,
+      }}>
+        <KpiCard title="إجمالي الفواتير" value={kpis.postedCount} icon="🧾" colorVariant="primary" />
+        <KpiCard title="العملاء النشطون" value={kpis.activeCustomers} icon="👥" colorVariant="success" />
+        <KpiCard title="الذمم المدينة" value={kpis.receivables.toLocaleString('en-US')} unit="ل.س" icon="💰" colorVariant="warning" />
+        <KpiCard title="المخزون المنخفض" value={kpis.outOfStock} icon="⚠️" colorVariant="danger" />
+      </div>
+
+      {/* Recent Invoices */}
+      <div className="vex-card vex-card--no-pad" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 14px' }}>
+          <h2 className="vex-section-title" style={{ margin: 0 }}>آخر الفواتير</h2>
+          <Link to="/invoices" style={{ fontSize: 13, color: 'var(--clr-primary)', fontWeight: 600, textDecoration: 'none' }}>
+            عرض الكل ←
+          </Link>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>رقم الفاتورة</th>
+                <th>العميل</th>
+                <th>التاريخ</th>
+                <th>الإجمالي (ل.س)</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>
+                    لا توجد فواتير حالياً
+                  </td>
+                </tr>
+              ) : (
+                invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td>
+                      <Link
+                        to={`/invoices/${invoice.id}`}
+                        style={{ color: 'var(--clr-primary)', fontWeight: 600, textDecoration: 'none' }}
+                      >
+                        {invoice.invoiceNumber ?? invoice.id.slice(0, 8)}
+                      </Link>
+                    </td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{invoice.customerName ?? '-'}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{invoice.invoiceDate ?? '-'}</td>
+                    <td style={{ fontWeight: 600 }}>{Number(invoice.totalSyp ?? 0).toLocaleString('en-US')}</td>
+                    <td><StatusBadge status={invoice.status ?? 'UNKNOWN'} type="invoice" /></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Bottom Row: Top Customers + Quick Actions */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 20 }}>
+
+        {/* Top Customers */}
+        <div className="vex-card">
+          <h2 className="vex-section-title">أفضل العملاء</h2>
+          {Object.keys(byCustomer).length === 0 ? (
+            <p style={{ color: 'var(--txt-muted)', fontSize: 13 }}>لا توجد بيانات</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {Object.entries(byCustomer).map(([customer, count]) => (
+                <div key={customer}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 500, color: 'var(--txt-primary)' }}>{customer}</span>
+                    <span style={{ color: 'var(--clr-primary)', fontWeight: 700 }}>{count}</span>
+                  </div>
+                  <div className="vex-progress-bar">
+                    <div
+                      className="vex-progress-bar__fill"
+                      style={{ width: `${Math.min(100, (count / maxCount) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="vex-card">
+          <h2 className="vex-section-title">إجراءات سريعة</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Link
+              to="/invoices/new"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 16px',
+                background: 'linear-gradient(135deg, var(--clr-primary), var(--clr-primary-mid))',
+                color: '#fff',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+                transition: 'opacity var(--transition-fast), transform var(--transition-fast)',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.9'; (e.currentTarget as HTMLElement).style.transform = 'translateX(-2px)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+            >
+              <span style={{ fontSize: 18 }}>🧾</span>
+              فاتورة جديدة
+            </Link>
+            <Link
+              to="/invoices"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 16px',
+                background: 'linear-gradient(135deg, #22c55e, #4ade80)',
+                color: '#fff',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+                transition: 'opacity var(--transition-fast), transform var(--transition-fast)',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.9'; (e.currentTarget as HTMLElement).style.transform = 'translateX(-2px)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+            >
+              <span style={{ fontSize: 18 }}>💳</span>
+              استلام دفعة
+            </Link>
+            <Link
+              to="/customers"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 16px',
+                background: 'linear-gradient(135deg, #3b82f6, #60a5fa)',
+                color: '#fff',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+                transition: 'opacity var(--transition-fast), transform var(--transition-fast)',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.9'; (e.currentTarget as HTMLElement).style.transform = 'translateX(-2px)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+            >
+              <span style={{ fontSize: 18 }}>👤</span>
+              عميل جديد
+            </Link>
+            <Link
+              to="/inventory/receiving"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 16px',
+                background: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
+                color: '#fff',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+                transition: 'opacity var(--transition-fast), transform var(--transition-fast)',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.9'; (e.currentTarget as HTMLElement).style.transform = 'translateX(-2px)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+            >
+              <span style={{ fontSize: 18 }}>📦</span>
+              استلام بضاعة
+            </Link>
           </div>
         </div>
       </div>

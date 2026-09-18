@@ -8,6 +8,8 @@ export default function Login() {
   const setAuth = useAuthStore((s) => s.login);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -58,94 +60,176 @@ export default function Login() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#f5f5f5',
-        direction: 'rtl',
-      }}
-    >
+    <div className="login-bg">
       <div
+        id="login-card"
         style={{
           background: '#fff',
-          padding: '2rem',
-          borderRadius: '12px',
+          padding: '44px 40px 40px',
+          borderRadius: 'var(--radius-xl)',
           width: '100%',
-          maxWidth: '420px',
-          boxShadow: '0 2px 16px #0001',
+          maxWidth: 440,
+          boxShadow: 'var(--shadow-lg)',
+          direction: 'rtl',
         }}
       >
-        <h2 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          الدخول إلى نظام الحوكمة
-        </h2>
-
-        <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.9rem', color: '#555' }}>
-          اسم المستخدم أو البريد
-        </label>
-        <input
-          value={user}
-          onChange={(e) => setUser(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            marginBottom: '1rem',
-            fontSize: '1rem',
-            boxSizing: 'border-box',
-            textAlign: 'right',
-          }}
-          placeholder='admin'
-          autoFocus
-        />
-
-        <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.9rem', color: '#555' }}>
-          كلمة المرور
-        </label>
-        <input
-          type='password'
-          value={pass}
-          onChange={(e) => setPass(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            fontSize: '1rem',
-            boxSizing: 'border-box',
-            textAlign: 'right',
-          }}
-          placeholder='••••••••'
-        />
-
-        {error && (
-          <p style={{ color: '#d32f2f', marginBottom: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
-            {error}
+        {/* Logo */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            background: 'linear-gradient(135deg, #5c54ff, #7b75ff)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 24,
+            fontWeight: 800,
+            color: '#fff',
+            boxShadow: '0 8px 24px rgba(92,84,255,0.35)',
+            marginBottom: 16,
+          }}>A</div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--txt-primary)', margin: 0 }}>
+            مرحباً بعودتك
+          </h1>
+          <p style={{ fontSize: 13.5, color: 'var(--txt-secondary)', marginTop: 6, margin: '6px 0 0' }}>
+            AutoParts ERP — نظام إدارة قطع الغيار
           </p>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="vex-alert vex-alert--error">
+            <span className="vex-alert__icon">⚠</span>
+            <span>{error}</span>
+          </div>
         )}
 
+        {/* Username */}
+        <div style={{ marginBottom: 18 }}>
+          <label
+            htmlFor="login-username"
+            style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--txt-secondary)', marginBottom: 6 }}
+          >
+            البريد الإلكتروني أو اسم المستخدم
+          </label>
+          <input
+            id="login-username"
+            type="text"
+            className="vex-input"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            placeholder="admin"
+            autoFocus
+            autoComplete="username"
+          />
+        </div>
+
+        {/* Password */}
+        <div style={{ marginBottom: 14 }}>
+          <label
+            htmlFor="login-password"
+            style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--txt-secondary)', marginBottom: 6 }}
+          >
+            كلمة المرور
+          </label>
+          <div style={{ position: 'relative' }}>
+            <input
+              id="login-password"
+              type={showPass ? 'text' : 'password'}
+              className="vex-input"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              style={{ paddingLeft: 40 }}
+            />
+            <button
+              type="button"
+              id="toggle-password-btn"
+              onClick={() => setShowPass((v) => !v)}
+              style={{
+                position: 'absolute',
+                left: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--txt-muted)',
+                fontSize: 16,
+                padding: 4,
+                lineHeight: 1,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              title={showPass ? 'إخفاء' : 'إظهار'}
+            >
+              {showPass ? '🙈' : '👁'}
+            </button>
+          </div>
+        </div>
+
+        {/* Remember me + Forgot */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 24,
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--txt-secondary)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              style={{
+                accentColor: 'var(--clr-primary)',
+                width: 15,
+                height: 15,
+                cursor: 'pointer',
+              }}
+            />
+            تذكرني
+          </label>
+          <button
+            type="button"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--clr-primary)',
+              fontSize: 13,
+              cursor: 'pointer',
+              fontWeight: 500,
+              padding: 0,
+            }}
+          >
+            نسيت كلمة المرور؟
+          </button>
+        </div>
+
+        {/* Sign In Button */}
         <button
+          id="login-submit-btn"
+          type="button"
           onClick={handleLogin}
           disabled={loading}
-          style={{
-            width: '100%',
-            padding: '0.85rem',
-            background: loading ? '#90a4ae' : '#00796b',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '1.1rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
+          className="btn-primary btn-primary--lg"
+          style={{ width: '100%', borderRadius: 'var(--radius-pill)', fontSize: 15, fontWeight: 700 }}
         >
-          {loading ? 'جارٍ الدخول...' : 'دخول'}
+          {loading ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+              <span className="vex-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+              جارٍ الدخول...
+            </span>
+          ) : 'تسجيل الدخول'}
         </button>
+
+        {/* Footer note */}
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--txt-muted)', marginTop: 24, lineHeight: 1.5 }}>
+          بتسجيل الدخول تؤكد موافقتك على سياسة الاستخدام
+        </p>
       </div>
     </div>
   );

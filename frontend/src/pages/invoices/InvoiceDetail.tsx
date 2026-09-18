@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { invoicesApi } from '../../api/endpoints/invoices';
 import { unwrapNode } from '../../api/apiData';
 import { toast, extractApiError } from '../../lib/toast';
@@ -140,7 +140,6 @@ export default function InvoiceDetail(): JSX.Element {
   }
 
   const status = (invoice?.status ?? '').toUpperCase();
-
   const lines = useMemo(() => invoice?.lines ?? [], [invoice?.lines]);
   const payments = useMemo(() => invoice?.payments ?? [], [invoice?.payments]);
 
@@ -148,89 +147,266 @@ export default function InvoiceDetail(): JSX.Element {
 
   return (
     <div style={{ direction: 'rtl' }}>
-      {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '12px', marginBottom: '12px' }}>
-        <h2 style={{ marginTop: 0 }}>{invoice?.invoiceNumber ?? invoice?.id}</h2>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <StatusBadge status={invoice?.status ?? 'UNKNOWN'} type="invoice" />
-          <span>العميل: {invoice?.customerName ?? '-'}</span>
-          <span>التاريخ: {invoice?.invoiceDate ?? '-'}</span>
-          <span>الاستحقاق: {invoice?.dueDate ?? '-'}</span>
+
+      {/* Page Header */}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">تفاصيل الفاتورة</h1>
+          <div className="vex-page-header__breadcrumb">
+            <Link to="/invoices" style={{ color: 'var(--clr-primary)', textDecoration: 'none' }}>الفواتير</Link>
+            {' / '}
+            {invoice?.invoiceNumber ?? id}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void downloadPdf()}
+            className="btn-secondary"
+          >
+            ⬇ تنزيل PDF
+          </button>
           {status === 'DRAFT' ? (
-            <button type="button" disabled={busy} onClick={() => void confirmInvoice()} style={actBtn('#1565c0')}>تأكيد</button>
+            <button type="button" disabled={busy} onClick={() => void confirmInvoice()} className="btn-primary">
+              ✓ تأكيد
+            </button>
           ) : null}
           {status === 'CONFIRMED' ? (
-            <button type="button" disabled={busy} onClick={() => void postInvoice()} style={actBtn('#2e7d32')}>ترحيل</button>
+            <button type="button" disabled={busy} onClick={() => void postInvoice()} className="btn-success">
+              ✓ ترحيل
+            </button>
           ) : null}
           {status !== 'VOID' && status !== 'POSTED' ? (
-            <button type="button" disabled={busy} onClick={() => void voidInvoice()} style={actBtn('#c62828')}>إلغاء</button>
+            <button type="button" disabled={busy} onClick={() => void voidInvoice()} className="btn-danger">
+              ✕ إلغاء
+            </button>
           ) : null}
-          <button type="button" disabled={busy} onClick={() => void downloadPdf()} style={actBtn('#00796b')}>تنزيل PDF</button>
         </div>
       </div>
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto', marginBottom: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>الاسم</th>
-              <th>الكمية</th>
-              <th>سعر الوحدة</th>
-              <th>الخصم%</th>
-              <th>الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => (
-              <tr key={line.id}>
-                <td>{line.skuCode ?? '-'}</td>
-                <td>{line.skuName ?? '-'}</td>
-                <td>{Number(line.quantity ?? 0).toLocaleString('en-US')}</td>
-                <td>{Number(line.unitPriceSyp ?? 0).toLocaleString('en-US')}</td>
-                <td>{Number(line.discountPct ?? 0).toLocaleString('en-US')}</td>
-                <td>{Number(line.lineTotalSyp ?? 0).toLocaleString('en-US')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {error ? <ErrorBanner message={error} /> : null}
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '12px', marginBottom: '12px' }}>
-        <div>الإجمالي الفرعي: {Number(invoice?.subtotalSyp ?? 0).toLocaleString('en-US')}</div>
-        <div>الخصم: {Number(invoice?.discountAmountSyp ?? 0).toLocaleString('en-US')}</div>
-        <div>التوصيل: {Number(invoice?.deliveryFeeSyp ?? 0).toLocaleString('en-US')}</div>
-        <div>الإجمالي ل.س: {Number(invoice?.totalSyp ?? 0).toLocaleString('en-US')}</div>
-        <div>الإجمالي $: {Number(invoice?.totalUsd ?? 0).toLocaleString('en-US')}</div>
-        <div>كتابة: {invoice?.totalSypInWords ?? '-'}</div>
-      </div>
+      {/* ── A4 PAPER ── */}
+      <div className="invoice-paper">
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>رقم الدفعة</th>
-              <th>التاريخ</th>
-              <th>المبلغ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map((payment) => (
-              <tr key={payment.id}>
-                <td>{payment.paymentNumber ?? payment.id.slice(0, 8)}</td>
-                <td>{payment.paymentDate ?? '-'}</td>
-                <td>{Number(payment.amountSyp ?? 0).toLocaleString('en-US')}</td>
+        {/* Header: Title + Logo */}
+        <div className="invoice-paper__header">
+          <div>
+            <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--txt-primary)', margin: 0, letterSpacing: '-0.5px' }}>
+              فاتورة
+            </h2>
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
+                <span style={{ color: 'var(--txt-muted)', marginLeft: 6 }}>رقم الفاتورة:</span>
+                <span style={{ fontWeight: 700, color: 'var(--txt-primary)' }}>{invoice?.invoiceNumber ?? invoice?.id}</span>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
+                <span style={{ color: 'var(--txt-muted)', marginLeft: 6 }}>تاريخ الإصدار:</span>
+                <span style={{ fontWeight: 600 }}>{invoice?.invoiceDate ?? '-'}</span>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
+                <span style={{ color: 'var(--txt-muted)', marginLeft: 6 }}>تاريخ الاستحقاق:</span>
+                <span style={{ fontWeight: 600 }}>{invoice?.dueDate ?? '-'}</span>
+              </div>
+              <div style={{ marginTop: 6 }}>
+                <StatusBadge status={invoice?.status ?? 'UNKNOWN'} type="invoice" />
+              </div>
+            </div>
+          </div>
+
+          {/* Company Logo (right) */}
+          <div style={{ textAlign: 'left' }}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, #5c54ff, #7b75ff)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 28,
+              fontWeight: 800,
+              color: '#fff',
+              boxShadow: '0 8px 24px rgba(92,84,255,0.25)',
+              marginBottom: 8,
+              marginLeft: 'auto',
+            }}>A</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt-primary)', textAlign: 'left' }}>AutoParts ERP</div>
+            <div style={{ fontSize: 12, color: 'var(--txt-muted)', textAlign: 'left' }}>نظام إدارة قطع الغيار</div>
+          </div>
+        </div>
+
+        {/* Parties: Company (right) / Customer (left) */}
+        <div className="invoice-paper__parties">
+          {/* Company (Sender) — right column in RTL */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-primary)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>
+              من
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-primary)', marginBottom: 4 }}>AutoParts ERP</div>
+            <div style={{ fontSize: 13, color: 'var(--txt-secondary)', lineHeight: 1.7 }}>
+              <div>نظام إدارة قطع الغيار</div>
+              <div>admin@autoparts.local</div>
+            </div>
+          </div>
+
+          {/* Customer (Recipient) — left column in RTL */}
+          <div style={{ borderRight: '1px solid var(--clr-border)', paddingRight: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>
+              إلى
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-primary)', marginBottom: 4 }}>
+              {invoice?.customerName ?? 'غير محدد'}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--txt-secondary)', lineHeight: 1.7 }}>
+              <div>العميل</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Items Table */}
+        <div className="invoice-paper__table-wrap">
+          <h3 className="vex-section-title">الأصناف والخدمات</h3>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>رمز SKU</th>
+                <th>الاسم / الوصف</th>
+                <th>الكمية</th>
+                <th>سعر الوحدة (ل.س)</th>
+                <th>الخصم %</th>
+                <th>الإجمالي (ل.س)</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {lines.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '28px 0' }}>
+                    لا توجد أسطر
+                  </td>
+                </tr>
+              ) : (
+                lines.map((line) => (
+                  <tr key={line.id}>
+                    <td>
+                      <span style={{
+                        background: 'var(--clr-primary-light)',
+                        color: 'var(--clr-primary-dark)',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}>
+                        {line.skuCode ?? '-'}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 500, color: 'var(--txt-primary)' }}>{line.skuName ?? '-'}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(line.quantity ?? 0).toLocaleString('en-US')}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(line.unitPriceSyp ?? 0).toLocaleString('en-US')}</td>
+                    <td>
+                      {Number(line.discountPct ?? 0) > 0 ? (
+                        <span className="badge badge--warning">{Number(line.discountPct ?? 0)}%</span>
+                      ) : (
+                        <span style={{ color: 'var(--txt-muted)' }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ fontWeight: 700, color: 'var(--txt-primary)' }}>
+                      {Number(line.lineTotalSyp ?? 0).toLocaleString('en-US')}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Totals Block — bottom right */}
+        <div className="invoice-paper__totals">
+          <div className="invoice-paper__totals-block">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
+                <span>الإجمالي الفرعي</span>
+                <span style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
+                  {Number(invoice?.subtotalSyp ?? 0).toLocaleString('en-US')} ل.س
+                </span>
+              </div>
+              {Number(invoice?.discountAmountSyp ?? 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
+                  <span>الخصم</span>
+                  <span style={{ fontWeight: 600, color: 'var(--clr-danger)' }}>
+                    −{Number(invoice?.discountAmountSyp ?? 0).toLocaleString('en-US')} ل.س
+                  </span>
+                </div>
+              )}
+              {Number(invoice?.deliveryFeeSyp ?? 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
+                  <span>رسوم التوصيل</span>
+                  <span style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
+                    {Number(invoice?.deliveryFeeSyp ?? 0).toLocaleString('en-US')} ل.س
+                  </span>
+                </div>
+              )}
+              <hr className="vex-divider" style={{ margin: '4px 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-primary)' }}>الإجمالي</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--clr-primary)' }}>
+                    {Number(invoice?.totalSyp ?? 0).toLocaleString('en-US')}
+                    <span style={{ fontSize: 13, fontWeight: 500, marginRight: 4, color: 'var(--txt-secondary)' }}>ل.س</span>
+                  </div>
+                  {Number(invoice?.totalUsd ?? 0) > 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--txt-muted)', textAlign: 'left' }}>
+                      ≈ {Number(invoice?.totalUsd ?? 0).toLocaleString('en-US')} $
+                    </div>
+                  )}
+                </div>
+              </div>
+              {invoice?.totalSypInWords && (
+                <div style={{
+                  fontSize: 12,
+                  color: 'var(--txt-muted)',
+                  fontStyle: 'italic',
+                  borderTop: '1px dashed var(--clr-border)',
+                  paddingTop: 8,
+                  marginTop: 4,
+                }}>
+                  {invoice.totalSypInWords}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Payments History */}
+        {payments.length > 0 && (
+          <div className="invoice-paper__payments">
+            <h3 className="vex-section-title">سجل الدفعات</h3>
+            <table className="vex-table">
+              <thead>
+                <tr>
+                  <th>رقم الدفعة</th>
+                  <th>التاريخ</th>
+                  <th>المبلغ (ل.س)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>
+                      {payment.paymentNumber ?? payment.id.slice(0, 8)}
+                    </td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{payment.paymentDate ?? '-'}</td>
+                    <td style={{ fontWeight: 700 }}>{Number(payment.amountSyp ?? 0).toLocaleString('en-US')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
-}
-
-function actBtn(bg: string): React.CSSProperties {
-  return { border: 'none', borderRadius: '8px', background: bg, color: '#fff', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' };
 }
