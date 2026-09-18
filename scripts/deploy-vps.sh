@@ -131,7 +131,13 @@ else
 fi
 
 step "Check external PostgreSQL connectivity"
+# --add-host is required on native Linux Docker Engine: unlike Docker Desktop,
+# host.docker.internal is not resolvable by default in a plain `docker run`
+# container. The api service in docker-compose.vps.yml already gets this via
+# its own `extra_hosts`, so without it here this check gives a false negative
+# even when POSTGRES_HOST=host.docker.internal is correctly configured.
 docker run --rm \
+  --add-host=host.docker.internal:host-gateway \
   -e PGPASSWORD="$POSTGRES_PASSWORD" \
   postgres:16-alpine \
   sh -lc "pg_isready -h '$POSTGRES_HOST' -p '$POSTGRES_PORT' -U '$POSTGRES_USER' -d '$POSTGRES_DB'" \
