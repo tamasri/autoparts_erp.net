@@ -179,6 +179,12 @@ public static class DemoDataSeeder
             """,
             transaction: tx);
 
+        // Migrations run before seeding, so on a fresh database the projection in
+        // UnifyItemsWithSkus found no skus to work with. Run it again now that the demo skus and
+        // stock exist, otherwise the whole WMS half of the model (items, aliases,
+        // inventory_balances) stays empty and every WMS screen renders an empty list.
+        await connection.ExecuteAsync("SELECT sync_items_from_skus();", transaction: tx);
+
         await connection.ExecuteAsync(
             """
             INSERT INTO invoices (
