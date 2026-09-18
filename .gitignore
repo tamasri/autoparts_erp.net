@@ -58,6 +58,11 @@ coverage/
 !.env.example
 !.env.prod.template
 !.env.vps.template
+
+# Local secrets — appsettings.Development.json carries a real JWT RSA key for local dev;
+# it must never be committed. Use `dotnet user-secrets` or an untracked local override instead.
+src/AutoPartsERP.Api/appsettings.Development.json
+appsettings.*.local.json
 .env.prod
 
 # Docker overrides / local

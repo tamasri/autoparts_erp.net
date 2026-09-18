@@ -1,42 +1,19 @@
+using AutoPartsERP.Domain.Constants;
+
 namespace AutoPartsERP.Api.Middleware;
 
 public sealed class HangfireAuthorizationFilter : IDashboardAuthorizationFilter
 {
-    private const string SuperAdminRole = "SUPER_ADMIN";
-
     public bool Authorize(DashboardContext context)
     {
         var httpContext = context.GetHttpContext();
 
-        if (httpContext.User.Identity?.IsAuthenticated == true &&
-            httpContext.User.Claims.Any(claim =>
-                claim.Type == ClaimTypes.Role &&
-                string.Equals(claim.Value, SuperAdminRole, StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        var bearerHeader = httpContext.Request.Headers.Authorization.ToString();
-        if (!bearerHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var token = bearerHeader["Bearer ".Length..].Trim();
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return false;
-        }
-
-        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-        if (!handler.CanReadToken(token))
-        {
-            return false;
-        }
-
-        var jwt = handler.ReadJwtToken(token);
-        return jwt.Claims.Any(claim =>
-            claim.Type is ClaimTypes.Role or "role" &&
-            string.Equals(claim.Value, SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+        // ASP.NET Core's authentication middleware (app.UseAuthentication(), registered before the
+        // Hangfire dashboard route) has already validated the bearer JWT's signature, issuer, audience,
+        // and expiry by the time this filter runs. Trust httpContext.User only — never re-parse the
+        // raw token here (the previous implementation used JwtSecurityTokenHandler.ReadJwtToken, which
+        // decodes claims WITHOUT verifying the signature, letting anyone forge a role claim).
+        return httpContext.User.Identity?.IsAuthenticated == true
+            && httpContext.User.IsInRole(RoleCodes.SystemAdministrator);
     }
 }

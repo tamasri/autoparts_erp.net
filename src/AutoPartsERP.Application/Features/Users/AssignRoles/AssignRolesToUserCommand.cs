@@ -1,10 +1,13 @@
 namespace AutoPartsERP.Application.Features.Users.AssignRoles;
 
 public sealed record AssignRolesToUserCommand(Guid UserId, AssignUserRolesRequest Request, DateTimeOffset? ExpiresAt)
-    : IRequest<Result<UserDetailsDto>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<UserDetailsDto>>, IAuthorizedRequest, IAuditableRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.UsersManageRoles;
     public string AuditModule => "USERS";
+
+    // Role assignment is a direct privilege-escalation path (can grant SYSTEM_ADMIN); requires a second approver.
+    public bool RequiresApproval => true;
 }
 
 public sealed class AssignRolesToUserCommandValidator : AbstractValidator<AssignRolesToUserCommand>
