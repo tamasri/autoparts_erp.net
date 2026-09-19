@@ -65,82 +65,152 @@ export default function FxRates(): JSX.Element {
 
   return (
     <div style={{ direction: 'rtl' }}>
-      {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <h2 style={{ margin: 0 }}>أسعار الصرف</h2>
-        <button type="button" onClick={() => setShowForm((s) => !s)} style={btn('#00796b')}>
-          {showForm ? 'إلغاء' : '+ سعر جديد'}
+      {/* Page Header */}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">أسعار الصرف</h1>
+          <div className="vex-page-header__breadcrumb">سعر الدولار مقابل الليرة السورية</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowForm((s) => !s)}
+          className={showForm ? 'btn-ghost' : 'btn-primary'}
+        >
+          {showForm ? '✕ إلغاء' : '＋ سعر جديد'}
         </button>
       </div>
 
+      {error ? <ErrorBanner message={error} /> : null}
+
+      {/* Create Form */}
       {showForm ? (
-        <div style={card()}>
-          <div style={grid()}>
-            <label style={lbl()}>التاريخ*
-              <input type="date" value={form.rateDate} onChange={(e) => setForm({ ...form, rateDate: e.target.value })} style={inp()} />
+        <div className="vex-card" style={{ marginBottom: 20 }}>
+          <h2 className="vex-section-title">إدخال سعر جديد</h2>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+            gap: 16,
+            marginBottom: 20,
+          }}>
+            <label className="vex-label">
+              التاريخ *
+              <input
+                type="date"
+                value={form.rateDate}
+                onChange={(e) => setForm({ ...form, rateDate: e.target.value })}
+                className="vex-input"
+              />
             </label>
-            <label style={lbl()}>سعر الشراء*
-              <input type="number" value={form.buyRate} onChange={(e) => setForm({ ...form, buyRate: Number(e.target.value) })} style={inp()} />
+            <label className="vex-label">
+              سعر الشراء *
+              <input
+                type="number"
+                value={form.buyRate}
+                onChange={(e) => setForm({ ...form, buyRate: Number(e.target.value) })}
+                className="vex-input"
+              />
             </label>
-            <label style={lbl()}>سعر البيع*
-              <input type="number" value={form.sellRate} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} style={inp()} />
+            <label className="vex-label">
+              سعر البيع *
+              <input
+                type="number"
+                value={form.sellRate}
+                onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })}
+                className="vex-input"
+              />
             </label>
-            <label style={lbl()}>سعر الوسط
-              <input type="number" value={form.midRate} onChange={(e) => setForm({ ...form, midRate: Number(e.target.value) })} style={inp()} placeholder="يُحسب تلقائياً" />
+            <label className="vex-label">
+              سعر الوسط
+              <input
+                type="number"
+                value={form.midRate}
+                onChange={(e) => setForm({ ...form, midRate: Number(e.target.value) })}
+                className="vex-input"
+                placeholder="يُحسب تلقائياً"
+              />
             </label>
           </div>
-          <button type="button" disabled={busy} onClick={() => void save()} style={{ ...btn('#004d40'), opacity: busy ? 0.6 : 1 }}>
-            {busy ? 'جارٍ الحفظ...' : 'حفظ'}
+
+          {/* Mid-rate preview */}
+          {form.buyRate > 0 && form.sellRate > 0 && (
+            <div style={{
+              padding: '12px 16px',
+              background: 'var(--clr-primary-light)',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: 16,
+              fontSize: 13,
+              color: 'var(--clr-primary-dark)',
+            }}>
+              سعر الوسط المحسوب: <strong>{((form.buyRate + form.sellRate) / 2).toLocaleString('en-US')}</strong> ل.س/$
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="btn-primary"
+          >
+            {busy ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="vex-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                جارٍ الحفظ...
+              </span>
+            ) : '💾 حفظ'}
           </button>
         </div>
       ) : null}
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto', marginTop: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th()}>التاريخ</th>
-              <th style={th()}>سعر الشراء</th>
-              <th style={th()}>سعر البيع</th>
-              <th style={th()}>سعر الوسط</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '16px', color: '#777' }}>لا توجد أسعار صرف</td></tr>
-            ) : rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td()}>{r.rateDate ?? '-'}</td>
-                <td style={td()}>{Number(r.buyRate ?? 0).toLocaleString('en-US')}</td>
-                <td style={td()}>{Number(r.sellRate ?? 0).toLocaleString('en-US')}</td>
-                <td style={td()}>{Number(r.midRate ?? 0).toLocaleString('en-US')}</td>
+      {/* Rates Table */}
+      <div className="vex-card vex-card--no-pad">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>سعر الشراء</th>
+                <th>سعر البيع</th>
+                <th>سعر الوسط</th>
+                <th>الفارق</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>
+                    لا توجد أسعار صرف مسجّلة
+                  </td>
+                </tr>
+              ) : rows.map((r, idx) => {
+                const spread = Number(r.sellRate ?? 0) - Number(r.buyRate ?? 0);
+                const isLatest = idx === 0;
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <span style={{ fontWeight: isLatest ? 700 : 400, color: 'var(--txt-primary)' }}>
+                        {r.rateDate ?? '-'}
+                      </span>
+                      {isLatest && <span className="badge badge--primary" style={{ marginRight: 8, fontSize: 10 }}>أحدث</span>}
+                    </td>
+                    <td style={{ color: '#22c55e', fontWeight: 600 }}>
+                      {Number(r.buyRate ?? 0).toLocaleString('en-US')}
+                    </td>
+                    <td style={{ color: 'var(--clr-danger)', fontWeight: 600 }}>
+                      {Number(r.sellRate ?? 0).toLocaleString('en-US')}
+                    </td>
+                    <td style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
+                      {Number(r.midRate ?? 0).toLocaleString('en-US')}
+                    </td>
+                    <td style={{ color: 'var(--txt-muted)', fontSize: 13 }}>
+                      {spread.toLocaleString('en-US')}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
-}
-
-function btn(bg: string): React.CSSProperties {
-  return { border: 'none', borderRadius: '8px', background: bg, color: '#fff', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' };
-}
-function card(): React.CSSProperties {
-  return { background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '16px', marginTop: '12px' };
-}
-function grid(): React.CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginBottom: '12px' };
-}
-function lbl(): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#333' };
-}
-function inp(): React.CSSProperties {
-  return { padding: '8px', border: '1px solid #b0bec5', borderRadius: '8px' };
-}
-function th(): React.CSSProperties {
-  return { padding: '10px 12px', textAlign: 'right', background: '#f5f5f5', borderBottom: '1px solid #e0e0e0' };
-}
-function td(): React.CSSProperties {
-  return { padding: '10px 12px', borderBottom: '1px solid #f0f0f0' };
 }

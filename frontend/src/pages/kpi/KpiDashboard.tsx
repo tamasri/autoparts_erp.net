@@ -5,29 +5,23 @@ import { inventoryApi } from '../../api/endpoints/inventory';
 import { inventoryAlertsApi } from '../../api/endpoints/inventoryAlerts';
 import { unwrapList } from '../../api/apiData';
 import ErrorBanner from '../../components/common/ErrorBanner';
+import KpiCard from '../../components/common/KpiCard';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-
-type KpiValue = { label: string; value: number | string; unit?: string; icon: string; color: string; sub?: string };
-
-function KpiBlock({ label, value, unit, icon, color, sub }: KpiValue): JSX.Element {
-  return (
-    <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '18px', borderRight: `4px solid ${color}` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-        <div>
-          <div style={{ color: '#607d8b', fontSize: '13px', marginBottom: '6px' }}>{label}</div>
-          <div style={{ color, fontSize: '30px', fontWeight: 800 }}>{value}{unit ? ` ${unit}` : ''}</div>
-          {sub ? <div style={{ color: '#90a4ae', fontSize: '12px', marginTop: '4px' }}>{sub}</div> : null}
-        </div>
-        <div style={{ fontSize: '26px' }}>{icon}</div>
-      </div>
-    </div>
-  );
-}
 
 export default function KpiDashboard(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [kpis, setKpis] = useState<KpiValue[]>([]);
+
+  type KpiData = {
+    cusTotal: number;
+    invPostedTotal: number;
+    receivables: number;
+    inStock: number;
+    outOfStock: number;
+    activeAlerts: number;
+  };
+
+  const [kpis, setKpis] = useState<KpiData | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -44,11 +38,10 @@ export default function KpiDashboard(): JSX.Element {
         ]);
         if (!mounted) return;
 
-        // totalCount from paged envelope
         const cusTotal = (cusRes.data as { data?: { totalCount?: number } })?.data?.totalCount ?? unwrapList(cusRes.data).length;
         const invPostedTotal = (invPostedRes.data as { data?: { totalCount?: number } })?.data?.totalCount ?? unwrapList(invPostedRes.data).length;
 
-        type InvRow = { balanceSyp?: number; totalSyp?: number; status?: string };
+        type InvRow = { balanceSyp?: number; status?: string };
         const allInvoices = unwrapList<InvRow>(invAllRes.data);
         const receivables = allInvoices
           .filter((i) => (i.status ?? '').toUpperCase() === 'POSTED')
@@ -63,14 +56,7 @@ export default function KpiDashboard(): JSX.Element {
         const alerts = unwrapList<AlertRow>(alertsRes.data);
         const activeAlerts = alerts.filter((a) => (a.status ?? '').toUpperCase() !== 'RESOLVED').length;
 
-        setKpis([
-          { label: 'العملاء النشطون', value: cusTotal, icon: '👥', color: '#2e7d32', sub: 'إجمالي العملاء المفعّلين' },
-          { label: 'فواتير مرحّلة', value: invPostedTotal, icon: '🧾', color: '#1565c0', sub: 'الفواتير ذات الحالة POSTED' },
-          { label: 'الذمم المدينة', value: receivables.toLocaleString('en-US'), unit: 'ل.س', icon: '💰', color: '#e65100', sub: 'مجموع الأرصدة المستحقة' },
-          { label: 'أصناف متوفرة', value: inStock, icon: '✅', color: '#2e7d32', sub: 'أصناف بمخزون > 0' },
-          { label: 'أصناف نافدة', value: outOfStock, icon: '📦', color: outOfStock > 0 ? '#c62828' : '#2e7d32', sub: 'أصناف بمخزون = 0' },
-          { label: 'تنبيهات المخزون', value: activeAlerts, icon: '🚨', color: activeAlerts > 0 ? '#c62828' : '#2e7d32', sub: 'تنبيهات غير مغلقة' },
-        ]);
+        setKpis({ cusTotal, invPostedTotal, receivables, inStock, outOfStock, activeAlerts });
       } catch (e: unknown) {
         if (!mounted) return;
         const r = e as { response?: { data?: { detail?: string; message?: string } } };
@@ -87,11 +73,62 @@ export default function KpiDashboard(): JSX.Element {
 
   return (
     <div style={{ direction: 'rtl' }}>
-      <h2 style={{ marginTop: 0 }}>مؤشرات الأداء الرئيسية</h2>
-      {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
-        {kpis.map((k) => <KpiBlock key={k.label} {...k} />)}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">مؤشرات الأداء الرئيسية</h1>
+          <div className="vex-page-header__breadcrumb">لمحة شاملة عن أداء المنشأة</div>
+        </div>
       </div>
+
+      {error ? <ErrorBanner message={error} /> : null}
+
+      {kpis ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+          <KpiCard
+            title="العملاء النشطون"
+            value={kpis.cusTotal}
+            icon="👥"
+            colorVariant="success"
+            trend="إجمالي العملاء المفعّلين"
+          />
+          <KpiCard
+            title="فواتير مرحّلة"
+            value={kpis.invPostedTotal}
+            icon="🧾"
+            colorVariant="primary"
+            trend="الفواتير ذات الحالة POSTED"
+          />
+          <KpiCard
+            title="الذمم المدينة"
+            value={kpis.receivables.toLocaleString('en-US')}
+            unit="ل.س"
+            icon="💰"
+            colorVariant="warning"
+            trend="مجموع الأرصدة المستحقة"
+          />
+          <KpiCard
+            title="أصناف متوفرة"
+            value={kpis.inStock}
+            icon="✅"
+            colorVariant="success"
+            trend="أصناف بمخزون > 0"
+          />
+          <KpiCard
+            title="أصناف نافدة"
+            value={kpis.outOfStock}
+            icon="📦"
+            colorVariant={kpis.outOfStock > 0 ? 'danger' : 'success'}
+            trend="أصناف بمخزون = 0"
+          />
+          <KpiCard
+            title="تنبيهات المخزون"
+            value={kpis.activeAlerts}
+            icon="🚨"
+            colorVariant={kpis.activeAlerts > 0 ? 'danger' : 'success'}
+            trend="تنبيهات غير مغلقة"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

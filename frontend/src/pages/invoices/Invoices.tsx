@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { invoicesApi } from '../../api/endpoints/invoices';
 import { unwrapList } from '../../api/apiData';
 import ErrorBanner from '../../components/common/ErrorBanner';
@@ -18,6 +18,13 @@ type Invoice = {
   status?: string;
 };
 
+const STATUS_TABS = [
+  { key: 'ALL', label: 'الكل' },
+  { key: 'DRAFT', label: 'مسودة' },
+  { key: 'CONFIRMED', label: 'مؤكدة' },
+  { key: 'POSTED', label: 'مرحّلة' },
+  { key: 'VOID', label: 'ملغاة' },
+];
 
 export default function Invoices(): JSX.Element {
   const navigate = useNavigate();
@@ -49,9 +56,7 @@ export default function Invoices(): JSX.Element {
       }
     }
     void load();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [status]);
 
   const today = useMemo(() => new Date(), []);
@@ -60,69 +65,109 @@ export default function Invoices(): JSX.Element {
 
   return (
     <div style={{ direction: 'rtl' }}>
-      {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-        {['ALL', 'DRAFT', 'POSTED', 'VOID'].map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setStatus(s)}
-            style={{
-              border: 'none',
-              borderRadius: '8px',
-              background: status === s ? '#00796b' : '#eceff1',
-              color: status === s ? '#fff' : '#37474f',
-              padding: '8px 12px',
-              cursor: 'pointer',
-            }}
-          >
-            {s === 'ALL' ? 'الكل' : s === 'DRAFT' ? 'مسودة' : s === 'POSTED' ? 'مرحّلة' : 'ملغاة'}
-          </button>
-        ))}
+      {/* Page Header */}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">الفواتير</h1>
+          <div className="vex-page-header__breadcrumb">إدارة وتتبع فواتير المبيعات</div>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/invoices/new')}
-          style={{ border: 'none', borderRadius: '8px', background: '#004d40', color: '#fff', padding: '8px 12px', cursor: 'pointer' }}
-        >
-          + فاتورة جديدة
+        <button type="button" onClick={() => navigate('/invoices/new')} className="btn-primary">
+          ＋ فاتورة جديدة
         </button>
       </div>
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>رقم الفاتورة</th>
-              <th>العميل</th>
-              <th>التاريخ</th>
-              <th>تاريخ الاستحقاق</th>
-              <th>الإجمالي ل.س</th>
-              <th>الإجمالي $</th>
-              <th>المتبقي ل.س</th>
-              <th>الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((invoice) => {
-              const due = invoice.dueDate ? new Date(invoice.dueDate) : null;
-              const overdue = Boolean(due && due < today && (invoice.status ?? '').toUpperCase() === 'POSTED');
-              return (
-                <tr key={invoice.id} onClick={() => navigate(`/invoices/${invoice.id}`)} style={{ cursor: 'pointer' }}>
-                  <td>{invoice.invoiceNumber ?? invoice.id.slice(0, 8)}</td>
-                  <td>{invoice.customerName ?? '-'}</td>
-                  <td>{invoice.invoiceDate ?? '-'}</td>
-                  <td style={{ color: overdue ? '#c62828' : undefined, fontWeight: overdue ? 700 : 400 }}>{invoice.dueDate ?? '-'}</td>
-                  <td>{Number(invoice.totalSyp ?? 0).toLocaleString('en-US')}</td>
-                  <td>{Number(invoice.totalUsd ?? 0).toLocaleString('en-US')}</td>
-                  <td>{Number(invoice.balanceSyp ?? 0).toLocaleString('en-US')}</td>
-                  <td><StatusBadge status={invoice.status ?? 'UNKNOWN'} type="invoice" /></td>
+      {error ? <ErrorBanner message={error} /> : null}
+
+      {/* Status Tab Pills */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setStatus(tab.key)}
+            style={{
+              border: 'none',
+              borderRadius: 'var(--radius-pill)',
+              padding: '7px 18px',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: 'inherit',
+              transition: 'all var(--transition-fast)',
+              background: status === tab.key
+                ? 'linear-gradient(135deg, var(--clr-primary), var(--clr-primary-mid))'
+                : 'var(--clr-surface-2)',
+              color: status === tab.key ? '#fff' : 'var(--txt-secondary)',
+              boxShadow: status === tab.key ? '0 2px 8px rgba(92,84,255,0.3)' : 'none',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Table Card */}
+      <div className="vex-card vex-card--no-pad">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>رقم الفاتورة</th>
+                <th>العميل</th>
+                <th>التاريخ</th>
+                <th>تاريخ الاستحقاق</th>
+                <th>الإجمالي ل.س</th>
+                <th>الإجمالي $</th>
+                <th>المتبقي ل.س</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '36px 0' }}>
+                    لا توجد فواتير لهذه الفئة
+                  </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : items.map((invoice) => {
+                const due = invoice.dueDate ? new Date(invoice.dueDate) : null;
+                const overdue = Boolean(due && due < today && (invoice.status ?? '').toUpperCase() === 'POSTED');
+                return (
+                  <tr
+                    key={invoice.id}
+                    onClick={() => navigate(`/invoices/${invoice.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td>
+                      <Link
+                        to={`/invoices/${invoice.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: 'var(--clr-primary)', fontWeight: 600, textDecoration: 'none' }}
+                      >
+                        {invoice.invoiceNumber ?? invoice.id.slice(0, 8)}
+                      </Link>
+                    </td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{invoice.customerName ?? '-'}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{invoice.invoiceDate ?? '-'}</td>
+                    <td>
+                      {overdue ? (
+                        <span className="badge badge--danger">{invoice.dueDate}</span>
+                      ) : (
+                        <span style={{ color: 'var(--txt-secondary)' }}>{invoice.dueDate ?? '-'}</span>
+                      )}
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{Number(invoice.totalSyp ?? 0).toLocaleString('en-US')}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(invoice.totalUsd ?? 0).toLocaleString('en-US')}</td>
+                    <td style={{ fontWeight: 600, color: Number(invoice.balanceSyp ?? 0) > 0 ? 'var(--clr-danger)' : 'var(--txt-primary)' }}>
+                      {Number(invoice.balanceSyp ?? 0).toLocaleString('en-US')}
+                    </td>
+                    <td><StatusBadge status={invoice.status ?? 'UNKNOWN'} type="invoice" /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

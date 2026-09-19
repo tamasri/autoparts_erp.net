@@ -24,14 +24,6 @@ type Customer = {
   isActive?: boolean;
 };
 
-function typeBadgeColor(type: string): string {
-  const normalized = type.toUpperCase();
-  if (normalized === 'WORKSHOP') return '#1976d2';
-  if (normalized === 'RETAIL') return '#ef6c00';
-  if (normalized === 'WHOLESALE') return '#7b1fa2';
-  return '#607d8b';
-}
-
 type FormState = {
   code: string;
   name: string;
@@ -47,17 +39,15 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
-  code: '',
-  name: '',
-  type: 'RETAIL',
-  phone: '',
-  phone2: '',
-  address: '',
-  city: '',
-  creditLimitSyp: 0,
-  creditLimitUsd: 0,
-  paymentTermsDays: 0,
-  notes: '',
+  code: '', name: '', type: 'RETAIL', phone: '', phone2: '',
+  address: '', city: '', creditLimitSyp: 0, creditLimitUsd: 0,
+  paymentTermsDays: 0, notes: '',
+};
+
+const TYPE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
+  WORKSHOP: { bg: '#dbeafe', color: '#1d4ed8', label: 'ورشة' },
+  RETAIL:   { bg: '#fef3c7', color: '#92400e', label: 'تجزئة' },
+  WHOLESALE: { bg: '#f3e8ff', color: '#6b21a8', label: 'جملة' },
 };
 
 export default function Customers(): JSX.Element {
@@ -84,12 +74,10 @@ export default function Customers(): JSX.Element {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(
-    () => rows.filter((r) => r.name?.toLowerCase().includes(search.toLowerCase())),
+    () => rows.filter((r) => r.name?.toLowerCase().includes(search.toLowerCase()) || r.code?.toLowerCase().includes(search.toLowerCase())),
     [rows, search],
   );
 
@@ -97,25 +85,23 @@ export default function Customers(): JSX.Element {
     setEditId(null);
     setForm(emptyForm);
     setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function openEdit(c: Customer, e: React.MouseEvent): void {
     e.stopPropagation();
     setEditId(c.id);
     setForm({
-      code: c.code ?? '',
-      name: c.name ?? '',
-      type: c.type ?? 'RETAIL',
-      phone: c.phone ?? '',
-      phone2: c.phone2 ?? '',
-      address: c.address ?? '',
-      city: c.city ?? '',
+      code: c.code ?? '', name: c.name ?? '', type: c.type ?? 'RETAIL',
+      phone: c.phone ?? '', phone2: c.phone2 ?? '',
+      address: c.address ?? '', city: c.city ?? '',
       creditLimitSyp: Number(c.creditLimitSyp ?? 0),
       creditLimitUsd: Number(c.creditLimitUsd ?? 0),
       paymentTermsDays: Number(c.paymentTermsDays ?? 0),
       notes: c.notes ?? '',
     });
     setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function save(): Promise<void> {
@@ -128,36 +114,26 @@ export default function Customers(): JSX.Element {
     try {
       if (editId) {
         const payload: UpdateCustomer = {
-          name: form.name.trim(),
-          type: form.type,
-          phone: form.phone.trim() || undefined,
-          phone2: form.phone2.trim() || undefined,
-          address: form.address.trim() || undefined,
-          city: form.city.trim() || undefined,
-          creditLimitSyp: Number(form.creditLimitSyp),
-          creditLimitUsd: Number(form.creditLimitUsd),
-          paymentTermsDays: Number(form.paymentTermsDays),
-          notes: form.notes.trim() || undefined,
+          name: form.name.trim(), type: form.type,
+          phone: form.phone.trim() || undefined, phone2: form.phone2.trim() || undefined,
+          address: form.address.trim() || undefined, city: form.city.trim() || undefined,
+          creditLimitSyp: Number(form.creditLimitSyp), creditLimitUsd: Number(form.creditLimitUsd),
+          paymentTermsDays: Number(form.paymentTermsDays), notes: form.notes.trim() || undefined,
         };
         await customersApi.updateCustomer(editId, payload);
       } else {
         const payload: CreateCustomer = {
-          code: form.code.trim(),
-          name: form.name.trim(),
-          type: form.type,
-          phone: form.phone.trim() || undefined,
-          phone2: form.phone2.trim() || undefined,
-          address: form.address.trim() || undefined,
-          city: form.city.trim() || undefined,
-          creditLimitSyp: Number(form.creditLimitSyp),
-          creditLimitUsd: Number(form.creditLimitUsd),
-          paymentTermsDays: Number(form.paymentTermsDays),
-          notes: form.notes.trim() || undefined,
+          code: form.code.trim(), name: form.name.trim(), type: form.type,
+          phone: form.phone.trim() || undefined, phone2: form.phone2.trim() || undefined,
+          address: form.address.trim() || undefined, city: form.city.trim() || undefined,
+          creditLimitSyp: Number(form.creditLimitSyp), creditLimitUsd: Number(form.creditLimitUsd),
+          paymentTermsDays: Number(form.paymentTermsDays), notes: form.notes.trim() || undefined,
         };
         await customersApi.createCustomer(payload);
       }
       toast.success(editId ? 'تم تحديث العميل بنجاح' : 'تم إنشاء العميل بنجاح');
       setShowForm(false);
+      setEditId(null);
       await load();
     } catch (e: unknown) {
       toast.error(extractApiError(e, 'تعذر حفظ العميل'));
@@ -188,121 +164,183 @@ export default function Customers(): JSX.Element {
 
   return (
     <div style={{ direction: 'rtl' }}>
-      {error ? <ErrorBanner message={error} /> : null}
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="بحث بالاسم..."
-          style={{ flex: 1, border: '1px solid #cfd8dc', borderRadius: '8px', padding: '8px' }}
-        />
-        <button type="button" onClick={openCreate} style={btn('#00796b')}>عميل جديد</button>
+      {/* Page Header */}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">العملاء</h1>
+          <div className="vex-page-header__breadcrumb">إدارة قاعدة بيانات العملاء</div>
+        </div>
+        <button type="button" onClick={openCreate} className="btn-primary">
+          ＋ عميل جديد
+        </button>
       </div>
 
+      {error ? <ErrorBanner message={error} /> : null}
+
+      {/* Create / Edit Form */}
       {showForm ? (
-        <div style={card()}>
-          <h3 style={{ marginTop: 0 }}>{editId ? 'تعديل عميل' : 'عميل جديد'}</h3>
-          <div style={grid()}>
-            <label style={lbl()}>الكود*
-              <input value={form.code} disabled={Boolean(editId)} onChange={(e) => setForm({ ...form, code: e.target.value })} style={inp()} />
+        <div className="vex-card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h2 className="vex-section-title" style={{ margin: 0 }}>
+              {editId ? '✏️ تعديل عميل' : '＋ عميل جديد'}
+            </h2>
+            <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="btn-ghost">
+              ✕ إغلاق
+            </button>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 16,
+            marginBottom: 20,
+          }}>
+            <label className="vex-label">
+              الكود *
+              <input
+                value={form.code}
+                disabled={Boolean(editId)}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+                className="vex-input"
+                placeholder="مثال: C001"
+                style={editId ? { opacity: 0.6 } : undefined}
+              />
             </label>
-            <label style={lbl()}>الاسم*
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inp()} />
+            <label className="vex-label">
+              الاسم *
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="vex-input" />
             </label>
-            <label style={lbl()}>النوع
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inp()}>
+            <label className="vex-label">
+              النوع
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="vex-select">
                 <option value="RETAIL">تجزئة</option>
                 <option value="WHOLESALE">جملة</option>
                 <option value="WORKSHOP">ورشة</option>
               </select>
             </label>
-            <label style={lbl()}>الهاتف
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} style={inp()} />
+            <label className="vex-label">
+              الهاتف
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="vex-input" />
             </label>
-            <label style={lbl()}>هاتف 2
-              <input value={form.phone2} onChange={(e) => setForm({ ...form, phone2: e.target.value })} style={inp()} />
+            <label className="vex-label">
+              هاتف 2
+              <input value={form.phone2} onChange={(e) => setForm({ ...form, phone2: e.target.value })} className="vex-input" />
             </label>
-            <label style={lbl()}>المدينة
-              <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} style={inp()} />
+            <label className="vex-label">
+              المدينة
+              <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="vex-input" />
             </label>
-            <label style={lbl()}>العنوان
-              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} style={inp()} />
+            <label className="vex-label">
+              العنوان
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="vex-input" />
             </label>
-            <label style={lbl()}>الحد الائتماني ل.س
-              <input type="number" value={form.creditLimitSyp} onChange={(e) => setForm({ ...form, creditLimitSyp: Number(e.target.value) })} style={inp()} />
+            <label className="vex-label">
+              الحد الائتماني ل.س
+              <input type="number" value={form.creditLimitSyp} onChange={(e) => setForm({ ...form, creditLimitSyp: Number(e.target.value) })} className="vex-input" />
             </label>
-            <label style={lbl()}>الحد الائتماني $
-              <input type="number" value={form.creditLimitUsd} onChange={(e) => setForm({ ...form, creditLimitUsd: Number(e.target.value) })} style={inp()} />
+            <label className="vex-label">
+              الحد الائتماني $
+              <input type="number" value={form.creditLimitUsd} onChange={(e) => setForm({ ...form, creditLimitUsd: Number(e.target.value) })} className="vex-input" />
             </label>
-            <label style={lbl()}>شروط الدفع (أيام)
-              <input type="number" value={form.paymentTermsDays} onChange={(e) => setForm({ ...form, paymentTermsDays: Number(e.target.value) })} style={inp()} />
+            <label className="vex-label">
+              شروط الدفع (أيام)
+              <input type="number" value={form.paymentTermsDays} onChange={(e) => setForm({ ...form, paymentTermsDays: Number(e.target.value) })} className="vex-input" />
             </label>
-            <label style={lbl()}>ملاحظات
-              <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={inp()} />
+            <label className="vex-label">
+              ملاحظات
+              <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="vex-input" />
             </label>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button type="button" disabled={busy} onClick={() => void save()} style={btn('#004d40')}>حفظ</button>
-            <button type="button" onClick={() => setShowForm(false)} style={btn('#607d8b')}>إلغاء</button>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" disabled={busy} onClick={() => void save()} className="btn-primary">
+              {busy ? 'جارٍ الحفظ...' : '💾 حفظ'}
+            </button>
+            <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="btn-ghost">
+              إلغاء
+            </button>
           </div>
         </div>
       ) : null}
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto', marginTop: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>الكود</th>
-              <th>الاسم</th>
-              <th>النوع</th>
-              <th>المدينة</th>
-              <th>الرصيد المتأخر</th>
-              <th>الحد الائتماني</th>
-              <th>الحالة</th>
-              <th>إجراءات</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((row) => (
-              <tr key={row.id} onClick={() => navigate(`/customers/${row.id}`)} style={{ cursor: 'pointer' }}>
-                <td>{row.code}</td>
-                <td>{row.name}</td>
-                <td>
-                  <span style={{ padding: '2px 8px', borderRadius: '999px', background: `${typeBadgeColor(row.type)}22`, color: typeBadgeColor(row.type), fontSize: '12px', fontWeight: 700 }}>
-                    {row.type}
-                  </span>
-                </td>
-                <td>{row.city ?? '-'}</td>
-                <td>{Number(row.balanceSyp ?? 0).toLocaleString('en-US')}</td>
-                <td>{Number(row.creditLimitSyp ?? 0).toLocaleString('en-US')}</td>
-                <td><StatusBadge status={row.isActive ? 'ACTIVE' : 'INACTIVE'} type="customer" /></td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  <button type="button" onClick={(e) => openEdit(row, e)} style={btn('#1565c0')}>تعديل</button>
-                  {row.isActive !== false ? (
-                    <button type="button" disabled={busy} onClick={(e) => void deactivate(row, e)} style={btn('#c62828')}>إلغاء التفعيل</button>
-                  ) : null}
-                </td>
+      {/* Search */}
+      <div style={{ marginBottom: 16, position: 'relative' }}>
+        <span style={{ position: 'absolute', top: '50%', right: 14, transform: 'translateY(-50%)', color: 'var(--txt-muted)', pointerEvents: 'none', fontSize: 16 }}>🔍</span>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="بحث بالاسم أو الكود..."
+          className="vex-input"
+          style={{ paddingRight: 40 }}
+        />
+      </div>
+
+      {/* Customers Table */}
+      <div className="vex-card vex-card--no-pad">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>الكود</th>
+                <th>الاسم</th>
+                <th>النوع</th>
+                <th>المدينة</th>
+                <th>الرصيد المتأخر</th>
+                <th>الحد الائتماني</th>
+                <th>الحالة</th>
+                <th>إجراءات</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '36px 0' }}>
+                    {search ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء'}
+                  </td>
+                </tr>
+              ) : filtered.map((row) => {
+                const typeStyle = TYPE_STYLES[row.type.toUpperCase()] ?? { bg: '#f1f5f9', color: '#475569', label: row.type };
+                return (
+                  <tr key={row.id} onClick={() => navigate(`/customers/${row.id}`)} style={{ cursor: 'pointer' }}>
+                    <td>
+                      <span style={{
+                        background: 'var(--clr-primary-light)', color: 'var(--clr-primary-dark)',
+                        padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 700,
+                      }}>{row.code}</span>
+                    </td>
+                    <td style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>{row.name}</td>
+                    <td>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: 'var(--radius-pill)',
+                        background: typeStyle.bg, color: typeStyle.color, fontSize: 12, fontWeight: 700,
+                      }}>{typeStyle.label}</span>
+                    </td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{row.city ?? '-'}</td>
+                    <td style={{ fontWeight: 600, color: Number(row.balanceSyp ?? 0) > 0 ? 'var(--clr-danger)' : 'var(--txt-primary)' }}>
+                      {Number(row.balanceSyp ?? 0).toLocaleString('en-US')}
+                    </td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(row.creditLimitSyp ?? 0).toLocaleString('en-US')}</td>
+                    <td><StatusBadge status={row.isActive !== false ? 'ACTIVE' : 'INACTIVE'} type="customer" /></td>
+                    <td style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={(e) => openEdit(row, e)} className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12, marginLeft: 6 }}>
+                        تعديل
+                      </button>
+                      {row.isActive !== false ? (
+                        <button type="button" disabled={busy} onClick={(e) => void deactivate(row, e)} className="btn-danger" style={{ padding: '5px 12px', fontSize: 12 }}>
+                          إلغاء التفعيل
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: '10px 18px', borderTop: '1px solid var(--clr-border)', fontSize: 12, color: 'var(--txt-muted)' }}>
+          إجمالي النتائج: {filtered.length} من {rows.length} عميل
+        </div>
       </div>
     </div>
   );
-}
-
-function btn(bg: string): React.CSSProperties {
-  return { border: 'none', borderRadius: '8px', background: bg, color: '#fff', padding: '6px 12px', margin: '0 4px', cursor: 'pointer', fontSize: '13px' };
-}
-function card(): React.CSSProperties {
-  return { background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '16px', marginTop: '12px' };
-}
-function grid(): React.CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' };
-}
-function lbl(): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#333' };
-}
-function inp(): React.CSSProperties {
-  return { padding: '8px', border: '1px solid #b0bec5', borderRadius: '8px' };
 }

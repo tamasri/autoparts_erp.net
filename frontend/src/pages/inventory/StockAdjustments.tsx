@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
-import {
-  stockAdjustmentsApi,
-  type CreateStockAdjustment,
-  type StockAdjustmentLine,
-} from '../../api/endpoints/stockAdjustments';
+import { stockAdjustmentsApi, type CreateStockAdjustment, type StockAdjustmentLine } from '../../api/endpoints/stockAdjustments';
 import { unwrapList } from '../../api/apiData';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import StatusBadge from '../../components/common/StatusBadge';
 
 type StockAdjustment = {
   id: string;
@@ -18,19 +15,12 @@ type StockAdjustment = {
   postedAt?: string;
 };
 
+const emptyLine: StockAdjustmentLine = { itemId: '', locationId: '', status: 'AVAILABLE', qtyDelta: 0, systemQtyBefore: 0, systemQtyAfter: 0 };
+
 function extractError(e: unknown, fallback: string): string {
   const r = e as { response?: { data?: { detail?: string; message?: string } } };
   return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
 }
-
-const emptyLine: StockAdjustmentLine = {
-  itemId: '',
-  locationId: '',
-  status: 'AVAILABLE',
-  qtyDelta: 0,
-  systemQtyBefore: 0,
-  systemQtyAfter: 0,
-};
 
 export default function StockAdjustments(): JSX.Element {
   const [loading, setLoading] = useState(true);
@@ -44,21 +34,13 @@ export default function StockAdjustments(): JSX.Element {
   const [lines, setLines] = useState<StockAdjustmentLine[]>([{ ...emptyLine }]);
 
   async function load(): Promise<void> {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await stockAdjustmentsApi.list(1, 100);
-      setRows(unwrapList<StockAdjustment>(res.data));
-    } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تحميل تسويات المخزون'));
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError('');
+    try { const res = await stockAdjustmentsApi.list(1, 100); setRows(unwrapList<StockAdjustment>(res.data)); }
+    catch (e: unknown) { setError(extractError(e, 'تعذر تحميل تسويات المخزون')); }
+    finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
   function updateLine(idx: number, patch: Partial<StockAdjustmentLine>): void {
     setLines((prev) => prev.map((l, i) => {
@@ -69,168 +51,136 @@ export default function StockAdjustments(): JSX.Element {
     }));
   }
 
-  function addLine(): void {
-    setLines((prev) => [...prev, { ...emptyLine }]);
-  }
-
-  function removeLine(idx: number): void {
-    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
-  }
-
   async function create(): Promise<void> {
-    if (!warehouseId.trim() || !reasonCode.trim()) {
-      setError('المستودع وكود السبب مطلوبان');
-      return;
-    }
-    const cleanLines = lines
-      .filter((l) => l.itemId.trim() && l.locationId.trim() && Number(l.qtyDelta) !== 0)
-      .map((l) => ({
-        itemId: l.itemId.trim(),
-        locationId: l.locationId.trim(),
-        status: l.status,
-        qtyDelta: Number(l.qtyDelta),
-        systemQtyBefore: Number(l.systemQtyBefore),
-        systemQtyAfter: Number(l.systemQtyBefore) + Number(l.qtyDelta),
-        notes: l.notes?.trim() || undefined,
-      }));
-    if (cleanLines.length === 0) {
-      setError('أضف سطراً واحداً على الأقل بكمية تعديل غير صفرية');
-      return;
-    }
+    if (!warehouseId.trim() || !reasonCode.trim()) { setError('المستودع وكود السبب مطلوبان'); return; }
+    const cleanLines = lines.filter((l) => l.itemId.trim() && l.locationId.trim() && Number(l.qtyDelta) !== 0).map((l) => ({
+      itemId: l.itemId.trim(), locationId: l.locationId.trim(), status: l.status,
+      qtyDelta: Number(l.qtyDelta), systemQtyBefore: Number(l.systemQtyBefore),
+      systemQtyAfter: Number(l.systemQtyBefore) + Number(l.qtyDelta),
+      notes: l.notes?.trim() || undefined,
+    }));
+    if (cleanLines.length === 0) { setError('أضف سطراً واحداً على الأقل بكمية تعديل غير صفرية'); return; }
     setBusy('create');
     try {
-      const payload: CreateStockAdjustment = {
-        adjustmentType,
-        warehouseId: warehouseId.trim(),
-        reasonCode: reasonCode.trim(),
-        lines: cleanLines,
-      };
-      await stockAdjustmentsApi.create(payload);
-      setWarehouseId('');
-      setReasonCode('');
-      setLines([{ ...emptyLine }]);
-      setShowForm(false);
-      await load();
-    } catch (e: unknown) {
-      setError(extractError(e, 'تعذر إنشاء التسوية'));
-    } finally {
-      setBusy('');
-    }
+      await stockAdjustmentsApi.create({ adjustmentType, warehouseId: warehouseId.trim(), reasonCode: reasonCode.trim(), lines: cleanLines } as CreateStockAdjustment);
+      setWarehouseId(''); setReasonCode(''); setLines([{ ...emptyLine }]); setShowForm(false); await load();
+    } catch (e: unknown) { setError(extractError(e, 'تعذر إنشاء التسوية')); }
+    finally { setBusy(''); }
   }
 
   async function post(id: string): Promise<void> {
     setBusy(id);
-    try {
-      await stockAdjustmentsApi.post(id);
-      await load();
-    } catch (e: unknown) {
-      setError(extractError(e, 'تعذر ترحيل التسوية'));
-    } finally {
-      setBusy('');
-    }
+    try { await stockAdjustmentsApi.post(id); await load(); }
+    catch (e: unknown) { setError(extractError(e, 'تعذر ترحيل التسوية')); }
+    finally { setBusy(''); }
   }
+
+  const ADJUSTMENT_TYPE_LABELS: Record<string, string> = { INCREASE: 'زيادة', DECREASE: 'نقص', RECOUNT: 'إعادة جرد' };
 
   if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{ direction: 'rtl' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ marginTop: 0 }}>تسويات المخزون</h2>
-        <button type="button" onClick={() => setShowForm((s) => !s)} style={btn('#00796b')}>
-          {showForm ? 'إلغاء' : '+ تسوية'}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">تسويات المخزون</h1>
+          <div className="vex-page-header__breadcrumb">تعديل أرصدة المخزون وتسوية الفروقات</div>
+        </div>
+        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
+          {showForm ? '✕ إلغاء' : '＋ تسوية جديدة'}
         </button>
       </div>
+
       {error ? <ErrorBanner message={error} /> : null}
 
       {showForm ? (
-        <div style={card()}>
-          <div style={grid()}>
-            <label style={lbl()}>نوع التسوية
-              <select value={adjustmentType} onChange={(e) => setAdjustmentType(e.target.value)} style={inp()}>
+        <div className="vex-card" style={{ marginBottom: 20 }}>
+          <h2 className="vex-section-title">تسوية مخزون جديدة</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+            <label className="vex-label">
+              نوع التسوية
+              <select value={adjustmentType} onChange={(e) => setAdjustmentType(e.target.value)} className="vex-select">
                 <option value="INCREASE">زيادة</option>
                 <option value="DECREASE">نقص</option>
                 <option value="RECOUNT">إعادة جرد</option>
               </select>
             </label>
-            <label style={lbl()}>المستودع*
-              <input value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} style={inp()} placeholder="Warehouse ID" />
+            <label className="vex-label">
+              المستودع *
+              <input value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="vex-input" placeholder="Warehouse ID" />
             </label>
-            <label style={lbl()}>كود السبب*
-              <input value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} style={inp()} placeholder="Reason Code" />
+            <label className="vex-label">
+              كود السبب *
+              <input value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} className="vex-input" placeholder="Reason Code" />
             </label>
           </div>
 
-          <div style={{ fontSize: '13px', fontWeight: 700, margin: '8px 0', color: '#00695c' }}>الأصناف</div>
-          {lines.map((l, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr)) 40px', gap: '8px', marginBottom: '8px', alignItems: 'end' }}>
-              <label style={lbl()}>الصنف
-                <input value={l.itemId} onChange={(e) => updateLine(idx, { itemId: e.target.value })} style={inp()} placeholder="Item ID" />
-              </label>
-              <label style={lbl()}>الموقع
-                <input value={l.locationId} onChange={(e) => updateLine(idx, { locationId: e.target.value })} style={inp()} placeholder="Location ID" />
-              </label>
-              <label style={lbl()}>الكمية الحالية
-                <input type="number" value={l.systemQtyBefore} onChange={(e) => updateLine(idx, { systemQtyBefore: Number(e.target.value) })} style={inp()} />
-              </label>
-              <label style={lbl()}>مقدار التغيير
-                <input type="number" value={l.qtyDelta} onChange={(e) => updateLine(idx, { qtyDelta: Number(e.target.value) })} style={inp()} />
-              </label>
-              <label style={lbl()}>الناتج
-                <input type="number" value={l.systemQtyAfter} readOnly style={{ ...inp(), background: '#f0f0f0' }} />
-              </label>
-              <button type="button" onClick={() => removeLine(idx)} style={btn('#c62828')}>×</button>
-            </div>
-          ))}
-          <button type="button" onClick={addLine} style={btn('#455a64')}>+ سطر</button>
-          <div style={{ marginTop: '12px' }}>
-            <button type="button" disabled={busy === 'create'} onClick={() => void create()} style={btn('#004d40')}>حفظ التسوية</button>
+          <h3 className="vex-section-title" style={{ marginBottom: 12 }}>الأصناف</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+            {lines.map((l, idx) => (
+              <div key={idx} style={{ background: 'var(--clr-surface-2)', border: '1px solid var(--clr-border)', borderRadius: 'var(--radius-md)', padding: 14, position: 'relative' }}>
+                <div style={{ position: 'absolute', top: 10, left: 10, width: 22, height: 22, background: 'var(--clr-primary-light)', color: 'var(--clr-primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{idx + 1}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, paddingLeft: 32 }}>
+                  <label className="vex-label">الصنف <input value={l.itemId} onChange={(e) => updateLine(idx, { itemId: e.target.value })} className="vex-input" placeholder="Item ID" /></label>
+                  <label className="vex-label">الموقع <input value={l.locationId} onChange={(e) => updateLine(idx, { locationId: e.target.value })} className="vex-input" placeholder="Location ID" /></label>
+                  <label className="vex-label">الكمية الحالية <input type="number" value={l.systemQtyBefore} onChange={(e) => updateLine(idx, { systemQtyBefore: Number(e.target.value) })} className="vex-input" /></label>
+                  <label className="vex-label">مقدار التغيير <input type="number" value={l.qtyDelta} onChange={(e) => updateLine(idx, { qtyDelta: Number(e.target.value) })} className="vex-input" /></label>
+                  <label className="vex-label">
+                    الناتج
+                    <input type="number" value={l.systemQtyAfter} readOnly className="vex-input" style={{ background: 'var(--clr-surface-2)', color: l.systemQtyAfter >= 0 ? '#22c55e' : 'var(--clr-danger)', fontWeight: 700 }} />
+                  </label>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                  <button type="button" onClick={() => setLines((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)} className="btn-danger" style={{ padding: '4px 12px', fontSize: 12 }}>✕ حذف</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={() => setLines((prev) => [...prev, { ...emptyLine }])} className="btn-secondary">＋ إضافة سطر</button>
+            <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 حفظ التسوية</button>
           </div>
         </div>
       ) : null}
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto', marginTop: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>رقم التسوية</th><th>النوع</th><th>المستودع</th><th>السبب</th><th>الحالة</th><th>إجراءات</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '16px', color: '#777' }}>لا توجد تسويات</td></tr>
-            ) : rows.map((a) => (
-              <tr key={a.id}>
-                <td>{a.adjustmentNo}</td>
-                <td>{a.adjustmentType}</td>
-                <td>{a.warehouseId.slice(0, 8)}</td>
-                <td>{a.reasonCode}</td>
-                <td>{a.status}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  {a.status !== 'POSTED' ? (
-                    <button type="button" disabled={busy === a.id} onClick={() => void post(a.id)} style={btn('#00796b')}>ترحيل</button>
-                  ) : <span style={{ color: '#2e7d32' }}>مرحّل</span>}
-                </td>
+      <div className="vex-card vex-card--no-pad">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>رقم التسوية</th>
+                <th>النوع</th>
+                <th>المستودع</th>
+                <th>السبب</th>
+                <th>الحالة</th>
+                <th>إجراءات</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد تسويات</td></tr>
+              ) : rows.map((a) => (
+                <tr key={a.id}>
+                  <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{a.adjustmentNo}</td>
+                  <td>
+                    <span className={`badge ${a.adjustmentType === 'INCREASE' ? 'badge--success' : a.adjustmentType === 'DECREASE' ? 'badge--danger' : 'badge--warning'}`}>
+                      {ADJUSTMENT_TYPE_LABELS[a.adjustmentType] ?? a.adjustmentType}
+                    </span>
+                  </td>
+                  <td><span className="badge badge--draft">{a.warehouseId.slice(0, 8)}</span></td>
+                  <td style={{ color: 'var(--txt-secondary)' }}>{a.reasonCode}</td>
+                  <td><StatusBadge status={a.status} type="invoice" /></td>
+                  <td>
+                    {a.status !== 'POSTED' ? (
+                      <button type="button" disabled={busy === a.id} onClick={() => void post(a.id)} className="btn-success" style={{ padding: '5px 14px', fontSize: 12 }}>✓ ترحيل</button>
+                    ) : <span className="badge badge--success">مرحّل</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
-}
-
-function btn(bg: string): React.CSSProperties {
-  return { border: 'none', borderRadius: '8px', background: bg, color: '#fff', padding: '6px 12px', margin: '0 4px', cursor: 'pointer', fontSize: '13px' };
-}
-function card(): React.CSSProperties {
-  return { background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '16px', marginTop: '12px' };
-}
-function grid(): React.CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '12px' };
-}
-function lbl(): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#333' };
-}
-function inp(): React.CSSProperties {
-  return { padding: '8px', border: '1px solid #b0bec5', borderRadius: '8px' };
 }

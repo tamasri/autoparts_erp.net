@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
-import {
-  transfersApi,
-  type CreateTransferOrder,
-  type TransferOrderLine,
-} from '../../api/endpoints/transfers';
+import { transfersApi, type CreateTransferOrder, type TransferOrderLine } from '../../api/endpoints/transfers';
 import { unwrapList } from '../../api/apiData';
 import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import StatusBadge from '../../components/common/StatusBadge';
 
 type TransferOrder = {
   id: string;
@@ -19,16 +16,7 @@ type TransferOrder = {
   receivedAt?: string;
 };
 
-function extractError(e: unknown, fallback: string): string {
-  return extractApiError(e, fallback);
-}
-
-const emptyLine: TransferOrderLine = {
-  itemId: '',
-  sourceLocationId: '',
-  destinationLocationId: '',
-  shippedQty: 0,
-};
+const emptyLine: TransferOrderLine = { itemId: '', sourceLocationId: '', destinationLocationId: '', shippedQty: 0 };
 
 export default function Transfers(): JSX.Element {
   const [loading, setLoading] = useState(true);
@@ -41,195 +29,149 @@ export default function Transfers(): JSX.Element {
   const [lines, setLines] = useState<TransferOrderLine[]>([{ ...emptyLine }]);
 
   async function load(): Promise<void> {
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
       const res = await transfersApi.listOrders(1, 100);
       setRows(unwrapList<TransferOrder>(res.data));
-    } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تحميل أوامر التحويل'));
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل أوامر التحويل')); }
+    finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
   function updateLine(idx: number, patch: Partial<TransferOrderLine>): void {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   }
 
-  function addLine(): void {
-    setLines((prev) => [...prev, { ...emptyLine }]);
-  }
-
-  function removeLine(idx: number): void {
-    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
-  }
-
   async function create(): Promise<void> {
-    if (!sourceWarehouseId.trim() || !destinationWarehouseId.trim()) {
-      setError('مستودع المصدر والوجهة مطلوبان');
-      return;
-    }
-    const cleanLines = lines
-      .filter((l) => l.itemId.trim() && l.shippedQty > 0)
-      .map((l) => ({
-        itemId: l.itemId.trim(),
-        sourceLocationId: l.sourceLocationId?.trim() || undefined,
-        destinationLocationId: l.destinationLocationId?.trim() || undefined,
-        shippedQty: Number(l.shippedQty),
-      }));
-    if (cleanLines.length === 0) {
-      setError('أضف سطراً واحداً على الأقل بكمية صحيحة');
-      return;
-    }
+    if (!sourceWarehouseId.trim() || !destinationWarehouseId.trim()) { setError('مستودع المصدر والوجهة مطلوبان'); return; }
+    const cleanLines = lines.filter((l) => l.itemId.trim() && l.shippedQty > 0).map((l) => ({
+      itemId: l.itemId.trim(),
+      sourceLocationId: l.sourceLocationId?.trim() || undefined,
+      destinationLocationId: l.destinationLocationId?.trim() || undefined,
+      shippedQty: Number(l.shippedQty),
+    }));
+    if (cleanLines.length === 0) { setError('أضف سطراً واحداً على الأقل بكمية صحيحة'); return; }
     setBusy('create');
     try {
-      const payload: CreateTransferOrder = {
-        sourceWarehouseId: sourceWarehouseId.trim(),
-        destinationWarehouseId: destinationWarehouseId.trim(),
-        lines: cleanLines,
-      };
-      await transfersApi.createOrder(payload);
-      setSourceWarehouseId('');
-      setDestinationWarehouseId('');
-      setLines([{ ...emptyLine }]);
-      setShowForm(false);
-      toast.success('تم إنشاء أمر التحويل');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر إنشاء أمر التحويل'));
-      setError(extractApiError(e, 'تعذر إنشاء أمر التحويل'));
-    } finally {
-      setBusy('');
-    }
+      await transfersApi.createOrder({ sourceWarehouseId: sourceWarehouseId.trim(), destinationWarehouseId: destinationWarehouseId.trim(), lines: cleanLines } as CreateTransferOrder);
+      setSourceWarehouseId(''); setDestinationWarehouseId(''); setLines([{ ...emptyLine }]); setShowForm(false);
+      toast.success('تم إنشاء أمر التحويل'); await load();
+    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر إنشاء أمر التحويل')); setError(extractApiError(e, 'تعذر إنشاء أمر التحويل')); }
+    finally { setBusy(''); }
   }
 
   async function ship(id: string): Promise<void> {
     setBusy(id);
-    try {
-      await transfersApi.ship(id);
-      toast.success('تم شحن أمر التحويل');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر شحن أمر التحويل'));
-      setError(extractApiError(e, 'تعذر شحن أمر التحويل'));
-    } finally {
-      setBusy('');
-    }
+    try { await transfersApi.ship(id); toast.success('تم شحن أمر التحويل'); await load(); }
+    catch (e: unknown) { toast.error(extractApiError(e, 'تعذر شحن أمر التحويل')); }
+    finally { setBusy(''); }
   }
 
   async function receive(id: string): Promise<void> {
     setBusy(id);
-    try {
-      await transfersApi.receive(id);
-      toast.success('تم استلام أمر التحويل');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر استلام أمر التحويل'));
-      setError(extractApiError(e, 'تعذر استلام أمر التحويل'));
-    } finally {
-      setBusy('');
-    }
+    try { await transfersApi.receive(id); toast.success('تم استلام أمر التحويل'); await load(); }
+    catch (e: unknown) { toast.error(extractApiError(e, 'تعذر استلام أمر التحويل')); }
+    finally { setBusy(''); }
   }
 
   if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{ direction: 'rtl' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ marginTop: 0 }}>التحويلات بين المستودعات</h2>
-        <button type="button" onClick={() => setShowForm((s) => !s)} style={btn('#00796b')}>
-          {showForm ? 'إلغاء' : '+ أمر تحويل'}
+      <div className="vex-page-header">
+        <div>
+          <h1 className="vex-page-header__title">التحويلات بين المستودعات</h1>
+          <div className="vex-page-header__breadcrumb">نقل المخزون بين المستودعات والمواقع</div>
+        </div>
+        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
+          {showForm ? '✕ إلغاء' : '＋ أمر تحويل'}
         </button>
       </div>
+
       {error ? <ErrorBanner message={error} /> : null}
 
       {showForm ? (
-        <div style={card()}>
-          <div style={grid()}>
-            <label style={lbl()}>مستودع المصدر*
-              <input value={sourceWarehouseId} onChange={(e) => setSourceWarehouseId(e.target.value)} style={inp()} placeholder="Source Warehouse ID" />
+        <div className="vex-card" style={{ marginBottom: 20 }}>
+          <h2 className="vex-section-title">أمر تحويل جديد</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+            <label className="vex-label">
+              مستودع المصدر *
+              <input value={sourceWarehouseId} onChange={(e) => setSourceWarehouseId(e.target.value)} className="vex-input" placeholder="Source Warehouse ID" />
             </label>
-            <label style={lbl()}>مستودع الوجهة*
-              <input value={destinationWarehouseId} onChange={(e) => setDestinationWarehouseId(e.target.value)} style={inp()} placeholder="Destination Warehouse ID" />
+            <label className="vex-label">
+              مستودع الوجهة *
+              <input value={destinationWarehouseId} onChange={(e) => setDestinationWarehouseId(e.target.value)} className="vex-input" placeholder="Destination Warehouse ID" />
             </label>
           </div>
 
-          <div style={{ fontSize: '13px', fontWeight: 700, margin: '8px 0', color: '#00695c' }}>الأصناف</div>
-          {lines.map((l, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr)) 40px', gap: '8px', marginBottom: '8px', alignItems: 'end' }}>
-              <label style={lbl()}>الصنف
-                <input value={l.itemId} onChange={(e) => updateLine(idx, { itemId: e.target.value })} style={inp()} placeholder="Item ID" />
-              </label>
-              <label style={lbl()}>موقع المصدر
-                <input value={l.sourceLocationId} onChange={(e) => updateLine(idx, { sourceLocationId: e.target.value })} style={inp()} placeholder="From Location" />
-              </label>
-              <label style={lbl()}>موقع الوجهة
-                <input value={l.destinationLocationId} onChange={(e) => updateLine(idx, { destinationLocationId: e.target.value })} style={inp()} placeholder="To Location" />
-              </label>
-              <label style={lbl()}>الكمية
-                <input type="number" value={l.shippedQty} onChange={(e) => updateLine(idx, { shippedQty: Number(e.target.value) })} style={inp()} />
-              </label>
-              <button type="button" onClick={() => removeLine(idx)} style={btn('#c62828')}>×</button>
-            </div>
-          ))}
-          <button type="button" onClick={addLine} style={btn('#455a64')}>+ سطر</button>
-          <div style={{ marginTop: '12px' }}>
-            <button type="button" disabled={busy === 'create'} onClick={() => void create()} style={btn('#004d40')}>حفظ الأمر</button>
+          <h3 className="vex-section-title" style={{ marginBottom: 12 }}>الأصناف</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+            {lines.map((l, idx) => (
+              <div key={idx} style={{
+                background: 'var(--clr-surface-2)', border: '1px solid var(--clr-border)',
+                borderRadius: 'var(--radius-md)', padding: 14, position: 'relative',
+              }}>
+                <div style={{ position: 'absolute', top: 10, left: 10, width: 22, height: 22, background: 'var(--clr-primary-light)', color: 'var(--clr-primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{idx + 1}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, paddingLeft: 32 }}>
+                  <label className="vex-label">الصنف <input value={l.itemId} onChange={(e) => updateLine(idx, { itemId: e.target.value })} className="vex-input" placeholder="Item ID" /></label>
+                  <label className="vex-label">موقع المصدر <input value={l.sourceLocationId} onChange={(e) => updateLine(idx, { sourceLocationId: e.target.value })} className="vex-input" /></label>
+                  <label className="vex-label">موقع الوجهة <input value={l.destinationLocationId} onChange={(e) => updateLine(idx, { destinationLocationId: e.target.value })} className="vex-input" /></label>
+                  <label className="vex-label">الكمية <input type="number" value={l.shippedQty} onChange={(e) => updateLine(idx, { shippedQty: Number(e.target.value) })} className="vex-input" /></label>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, paddingLeft: 32 }}>
+                  <button type="button" onClick={() => setLines((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)} className="btn-danger" style={{ padding: '4px 12px', fontSize: 12 }}>✕ حذف</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={() => setLines((prev) => [...prev, { ...emptyLine }])} className="btn-secondary">＋ إضافة سطر</button>
+            <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 حفظ الأمر</button>
           </div>
         </div>
       ) : null}
 
-      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', overflow: 'auto', marginTop: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th>رقم الأمر</th><th>المصدر</th><th>الوجهة</th><th>الحالة</th><th>إجراءات</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '16px', color: '#777' }}>لا توجد أوامر تحويل</td></tr>
-            ) : rows.map((o) => (
-              <tr key={o.id}>
-                <td>{o.orderNo}</td>
-                <td>{o.sourceWarehouseId.slice(0, 8)}</td>
-                <td>{o.destinationWarehouseId.slice(0, 8)}</td>
-                <td>{o.status}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  {o.status !== 'SHIPPED' && o.status !== 'RECEIVED' ? (
-                    <button type="button" disabled={busy === o.id} onClick={() => void ship(o.id)} style={btn('#00796b')}>شحن</button>
-                  ) : null}
-                  {o.status === 'SHIPPED' ? (
-                    <button type="button" disabled={busy === o.id} onClick={() => void receive(o.id)} style={btn('#004d40')}>استلام</button>
-                  ) : null}
-                  {o.status === 'RECEIVED' ? <span style={{ color: '#2e7d32' }}>مكتمل</span> : null}
-                </td>
+      <div className="vex-card vex-card--no-pad">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="vex-table">
+            <thead>
+              <tr>
+                <th>رقم الأمر</th>
+                <th>المصدر</th>
+                <th>الوجهة</th>
+                <th>الحالة</th>
+                <th>إجراءات</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد أوامر تحويل</td></tr>
+              ) : rows.map((o) => (
+                <tr key={o.id}>
+                  <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{o.orderNo}</td>
+                  <td><span className="badge badge--draft">{o.sourceWarehouseId.slice(0, 8)}</span></td>
+                  <td><span className="badge badge--primary">{o.destinationWarehouseId.slice(0, 8)}</span></td>
+                  <td><StatusBadge status={o.status} type="invoice" /></td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {o.status !== 'SHIPPED' && o.status !== 'RECEIVED' ? (
+                      <button type="button" disabled={busy === o.id} onClick={() => void ship(o.id)} className="btn-primary" style={{ padding: '5px 14px', fontSize: 12, marginLeft: 6 }}>
+                        ✈ شحن
+                      </button>
+                    ) : null}
+                    {o.status === 'SHIPPED' ? (
+                      <button type="button" disabled={busy === o.id} onClick={() => void receive(o.id)} className="btn-success" style={{ padding: '5px 14px', fontSize: 12 }}>
+                        ✓ استلام
+                      </button>
+                    ) : null}
+                    {o.status === 'RECEIVED' ? <span className="badge badge--success">مكتمل</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
-}
-
-function btn(bg: string): React.CSSProperties {
-  return { border: 'none', borderRadius: '8px', background: bg, color: '#fff', padding: '6px 12px', margin: '0 4px', cursor: 'pointer', fontSize: '13px' };
-}
-function card(): React.CSSProperties {
-  return { background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px #00000012', padding: '16px', marginTop: '12px' };
-}
-function grid(): React.CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '12px' };
-}
-function lbl(): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#333' };
-}
-function inp(): React.CSSProperties {
-  return { padding: '8px', border: '1px solid #b0bec5', borderRadius: '8px' };
 }
