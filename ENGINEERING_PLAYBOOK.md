@@ -109,6 +109,14 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - Frappe rejects group-type links: use leaf records (`Customer Group = Commercial`, `Territory = Rest Of The World`,
   `Supplier Group = Local`). Fix defaults from the real error text in the log, not from guesses.
 - API credentials live only in the server environment (`ERPNEXT_API_KEY/SECRET`).
+- **Syncers make themselves self-sufficient:** before a document is sent, the customer and every item it references are upserted
+  (`SalesInvoiceErpNextSyncer.EnsureMasterDataAsync`), so a brand-new customer no longer fails its first invoice.
+- **Lifecycle mapping:** post → Sales Invoice (submitted); allocate a receipt → Payment Entry referencing the invoices; void an
+  invoice → cancel the Sales Invoice; reverse a receipt → cancel the Payment Entry (cancel the payment before its invoice).
+  `erpnext_sync_log.status` = SYNCED / FAILED / SKIPPED / CANCELLED; a scheduled sweep retries FAILED items.
+- **Verify without a real ERPNext:** run a tiny mock of `/api/resource/*`, `Company` and `frappe.client.cancel` on a local port, start
+  the API with `Erpnext__Enabled=true Erpnext__BaseUrl=http://localhost:<port>`, and drive the flow; check the mock's request log
+  and `erpnext_sync_log`. (Frappe's own validation still only runs on the real server — read its error text in the sync log.)
 
 ### 2.4 AI rules
 - All AI features go through one provider abstraction over an **OpenAI-compatible** endpoint (Groq / DeepSeek);
@@ -128,6 +136,10 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **Lists [convention]:** `usePagedList` + `<Pagination>` — one page in memory, server search debounced, stale
   responses discarded. Never replace the whole page with a spinner while searching (it steals input focus); dim the
   table instead.
+- **No raw-ID inputs, ever.** Every reference to another record is a picker: `LocationSelect` (locations/warehouses),
+  `EntityPicker` (server-searched combobox: customers, suppliers, parties), `ItemPickerModal` (items/SKUs with per-location stock,
+  batches, prices; `mode="sales"` or `"warehouse"`), `FxRateField` (latest rate automatically, editable). A text box that asks a human
+  for a GUID is a defect.
 - **Styling:** the Vex design system (`styles/theme.css`, `vex-*`, `btn-*`, `badge*`, CSS variables). No new design
   system, no ad-hoc colour literals when a variable exists.
 - **Language:** Arabic RTL. i18next exists but is unused; strings are currently hardcoded Arabic (debt D3). New

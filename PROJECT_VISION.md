@@ -46,7 +46,7 @@
 | API host | ASP.NET Core Minimal APIs + **Carter** modules (~28) | `Api/Modules/*` |
 | CQRS | **MediatR 12** behaviors: Validation → Authorization → Idempotency → PeriodLock → MakerChecker | `Program.cs` |
 | Validation / mapping | FluentValidation 11, Mapster | |
-| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (14) | `Persistence/Migrations` |
+| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (16) | `Persistence/Migrations` |
 | Reads | **Dapper 2** on snake_case tables + `DapperTypeHandlers` (`DateOnly`, `DateTimeOffset`) | |
 | Database | **PostgreSQL 16** (`ltree`, `pg_trgm`, `uuid-ossp`; `pgvector` for embeddings) | On the VPS it runs on the host |
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
@@ -104,13 +104,13 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | Stock adjustments | create/post | `StockAdjustments.tsx` | ✅ (unpaged) |
 | Issue orders (picking) | full | `IssueOrders.tsx` | ✅ (unpaged) |
 | Inventory alerts | list/ack/resolve + low-stock job | `InventoryAlerts.tsx` | ✅ |
-| Invoices | create/lines/confirm/post/void/PDF | `Invoices.tsx` (paged), `InvoiceWorkspace.tsx`, `InvoiceDetail.tsx` | ✅ |
-| **Payments & allocations** | create, allocate to many invoices, reverse, list | — | 🟡 **no screen; not synced to ERPNext** |
+| Invoices | create/lines/confirm/post/void/PDF | `Invoices.tsx` (paged), **`InvoiceWorkspace.tsx` (item-picker dialog, customer/FX pickers)**, `InvoiceDetail.tsx` | ✅ (full lifecycle verified on Postgres) |
+| **Payments & allocations** | create, allocate to many invoices, reverse (returns the money to the invoices) — **synced to ERPNext as Payment Entry; reversal cancels it** | — | 🟡 backend + ERPNext link done, **no screen yet** |
 | FX rates | list/latest/create | `FxRates.tsx` | ✅ |
 | Warranty | list/claim/process/reject + expiry job | — | 🟡 |
 | Reports | P&L, inventory value (+Excel), batch trace, account statement | — | 🟡 |
 | Barcodes | scan, generate item/batch codes | — | 🟡 (no scanner UI) |
-| **ERPNext accounting sync** | trigger, paged log, summary | `AccountingSync.tsx` | ✅ (items, customers, suppliers, sales invoices) |
+| **ERPNext accounting sync** | trigger, paged log, summary; Items, Customers, Suppliers, Sales Invoices, Payment Entries; cancel on void/reversal | `AccountingSync.tsx` | ✅ |
 | **AI assistant / suggestions / KB** | see §6 | — | 🔴 not implemented (chat now returns an explicit "not configured" error) |
 | Realtime notifications | `ErpHub` | signalr client in one place | 🟡 |
 | Purchase invoices, bank/cash accounts, POS, public invoice link, e-mail/SMS, CRM extras, backups | — | — | 🔴 |
@@ -167,6 +167,15 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] **D8 — CI does not exercise SQL.** Make the integration tests migrate + seed a Testcontainers database and hit the
       real endpoints (login → dashboard/items/approvals flows) so a green run means something. Until then, local verification
       on real Postgres is mandatory (see ENGINEERING_PLAYBOOK §2.1).
+- [ ] **D10 — Cost of goods is not booked in ERPNext.** Sales Invoices are sent with `update_stock = 0` (we own inventory), so ERPNext
+      records income and receivables but no COGS — its P&L overstates profit. Decide: post a COGS/inventory Journal Entry per
+      invoice from our cost prices, or move stock valuation into ERPNext. Also `invoice_lines.cost_price_*` is 0 at creation.
+- [ ] **D11 — Voiding an invoice does not return stock** (it creates a credit note and flips the status only).
+- [ ] **D12 — RETURN invoices** decrement stock when posted and are not synced to ERPNext (needs `is_return` + `return_against`).
+- [ ] **D13 — Raw-ID inputs remain** on Receiving, Transfers, Issue orders, Stock adjustments and Cycle counts (warehouse/item/vendor
+      ids typed by hand). Use `LocationSelect`, `ItemPickerModal mode="warehouse"` and `EntityPicker`. Their list endpoints for
+      issue orders/transfers also read `dynamic` rows and need the same typed-record fix.
+- [ ] **D14 — Renaming a customer** is not propagated to ERPNext (it identifies customers by name).
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
@@ -186,7 +195,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       (`Governance:AllowSelfApproval`, default off).
 
 #### PHASE 1 — Accounting core  · `Status: Not Started`
-- [ ] Payments screen (create, partial/multiple, allocate, reverse) + sync as ERPNext Payment Entry.
+- [x] Sync payments to ERPNext as Payment Entry (settles the Sales Invoices it was allocated to) and cancel on reversal — backend done and verified against a mock ERPNext.
+- [ ] Payments **screen** (create, partial/multiple, allocate, reverse).
 - [ ] Bank/cash accounts (ERPNext accounts) and per-account statements.
 - [ ] Purchase invoices, purchase returns, discounts (ERPNext Purchase Invoice); quick-add supplier; bulk pay/receive.
 - [ ] Financial reports read from ERPNext: trial balance, P&L, balance sheet, AR/AP aging, general ledger.

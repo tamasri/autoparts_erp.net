@@ -71,14 +71,17 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md).
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~28 Carter modules; 14 raw-SQL migrations (later ones use ids `202401010000NN`); 60+ tables.
+- ~28 Carter modules; 16 raw-SQL migrations (later ones use ids `202401010000NN`); 60+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
   (`sync_items_from_skus`, `sync_inventory_balances_from_stock`). Reverse sync (WMS → stock) is NOT done.
-- **ERPNext hand-off is live:** `ErpNextClient` syncs Items, Customers, Suppliers and posted Sales Invoices
-  (submitted, so GL entries post). Results are recorded in `erpnext_sync_log`. Company currency is **USD**
-  (owner decision). Payments, purchase invoices and reports are not synced yet.
+- **ERPNext hand-off is live:** `ErpNextClient` syncs Items, Customers, Suppliers, posted Sales Invoices (submitted, so GL
+  entries post) and customer receipts as Payment Entries; voids and reversals cancel the ERPNext documents. Every step is
+  recorded in `erpnext_sync_log`. Company currency is **USD**. Purchase invoices, returns, COGS and reports are not synced
+  yet (see PROJECT_VISION debts D10–D14).
+- Reference pickers (no typing of ids): `LocationSelect`, `EntityPicker`, `ItemPickerModal`, `FxRateField` in
+  `frontend/src/components/pickers/`; the invoice screen uses all of them. Five WMS screens still use raw-ID inputs (debt D13).
 - Frontend screens (all RTL Arabic): Login, Dashboard, KPI, Customers (+detail), Parties (+combined statement),
   Invoices (+workspace, detail), FX rates, Items list + **item card** (details/edit, stop-ship, stock, aliases,
   interchanges, prices), Inventory, Receiving, Transfers, Cycle counts, Adjustments, Issue orders, Inventory
