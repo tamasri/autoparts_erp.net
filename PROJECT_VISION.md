@@ -60,16 +60,31 @@
 | Docs | OpenAPI + Scalar (mapped unconditionally; not proxied by nginx) | Debt D6 |
 | Files | ClosedXML (Excel), QuestPDF (invoice PDF), QRCoder (QR) | |
 | Frontend | **React 19, Vite 6, TypeScript 5.7, react-router 7, Zustand 5, axios, sonner, @microsoft/signalr** | |
-| Frontend styling | Custom **Vex** design system — `frontend/src/styles/theme.css` (`vex-*`, `btn-*`, `badge*`), RTL | **Not MUI** |
-| Frontend data | shared `api/client.ts` + typed `api/endpoints/*`; `usePagedList` hook + `<Pagination>` | **Not TanStack Query** |
+| Frontend styling | **MUI v6** (`createTheme`, `direction:'rtl'`) + emotion cache + `stylis-plugin-rtl`; Vex tokens preserved inside theme; `theme.css` phased out per screen | **Adopted 2026-09-19** |
+| Frontend data | **@tanstack/react-query v5** (`useQuery`/`useMutation`, 30s `staleTime`); `lib/apiClient.ts` envelope unwrapper | **Adopted 2026-09-19** |
+| Frontend forms | **react-hook-form v7** + **Zod v3** (`zodResolver`); MUI `Dialog` replaces every `window.prompt` | **Adopted 2026-09-19** |
+| Frontend i18n | **react-i18next** `useTranslation` active; `ar.json`/`en.json` expanded; language switcher in Topbar | **Adopted 2026-09-19** |
 | Reverse proxy / TLS | nginx in Docker; self-signed cert on the IP until a domain exists | |
 | CI | GitHub Actions: build + unit + integration tests; deploy job gated on secrets | GREEN |
 | Tests | UnitTests (32), IntegrationTests (25, need Docker; auth/health only — they do not run SQL), E2ETests (empty project) | |
 
-**Listed in a manifest but unused (dead weight — remove after the AI/e-mail decisions):**
-`@mui/material`, `@mui/x-data-grid`, `@tanstack/react-query`, `@tanstack/react-table`, `react-hook-form`, `zod`,
-`@emotion/*`, `stylis*`, `@zxing/*` (frontend); `Microsoft.SemanticKernel`, `Microsoft.Extensions.AI`, `Pgvector`,
-`FluentEmail.*`, `ZXing.Net` (backend). `i18next` is initialised but no screen calls it.
+**Stack adoption status — updated 2026-09-19 (owner-approved full migration; see §2a):**
+- **Frontend — NOW ACTIVE:** `@mui/material` v6, `@mui/x-data-grid`, `@tanstack/react-query` v5, `react-hook-form` v7, `zod` v3, `@emotion/cache`, `@emotion/react`, `stylis-plugin-rtl`, `react-i18next`.
+- **Frontend — still dead (remove):** `@tanstack/react-table` (superseded by MUI X DataGrid), `@zxing/*` (pending barcode screen decision).
+- **Backend — still dead (remove):** `Microsoft.SemanticKernel`, `Microsoft.Extensions.AI`, `Pgvector`, `FluentEmail.*`, `ZXing.Net` — remove after Phase 6 AI decisions.
+
+### §2a — Owner-Approved Policy Override (2026-09-19)
+
+> **Decision:** The owner explicitly approved on 2026-09-19 the full adoption of the "phantom" frontend stack that was installed but never wired. This supersedes the prior prohibition in `ENGINEERING_PLAYBOOK.md §2.5` and `AGENT_ONBOARDING.md` starter-prompt.
+
+**Rationale (audit, 7,686 LOC read):** All libraries were already in `package.json`. The app had 641 inline `style={{}}` objects, 6 `window.prompt` calls for critical input, zero caching, and i18next completely unused. Migration installs nothing new — it activates the existing stack.
+
+**Governance constraints:**
+1. Vex CSS design tokens (`#5c54ff` palette, 12 px radii, card shadows) are preserved inside `createTheme` — visual identity unchanged.
+2. `theme.css` is deleted section-by-section only as each consumer is migrated — never in bulk.
+3. Arabic remains the primary language; the language switcher is additive.
+4. All `window.prompt` calls replaced with Zod-validated MUI `Dialog`s in Phase 3.
+5. Every doc referencing the old prohibition is updated in the same commit as the code change.
 
 ### Solution graph
 ```

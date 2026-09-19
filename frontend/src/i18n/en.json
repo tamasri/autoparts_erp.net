@@ -11,6 +11,94 @@
     "dashboard": "Dashboard",
     "customers": "Customers",
     "invoices": "Invoices",
-    "inventory": "Inventory"
+    "inventory": "Inventory",
+    "payments": "Payments",
+    "fxRates": "FX Rates",
+    "parties": "Parties",
+    "items": "Items",
+    "approvals": "Approvals",
+    "audit": "Audit Log",
+    "settings": "Settings"
+  },
+  "customers": {
+    "title": "Customers",
+    "subtitle": "Manage customer database",
+    "addNew": "+ New Customer",
+    "searchPlaceholder": "Search by name or code...",
+    "noResults": "No matching results",
+    "empty": "No customers yet",
+    "loadError": "Failed to load customers",
+    "saveSuccess": "Customer saved successfully",
+    "saveError": "Failed to save customer",
+    "deactivateSuccess": "Customer deactivated",
+    "deactivateError": "Failed to deactivate customer",
+    "form": {
+      "titleCreate": "+ New Customer",
+      "titleEdit": "Edit Customer",
+      "code": "Code",
+      "codePlaceholder": "e.g. C001",
+      "name": "Name",
+      "type": "Type",
+      "phone": "Phone",
+      "phone2": "Phone 2",
+      "city": "City",
+      "address": "Address",
+      "creditLimitSyp": "Credit Limit SYP",
+      "creditLimitUsd": "Credit Limit USD",
+      "paymentTermsDays": "Payment Terms (days)",
+      "notes": "Notes",
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "errorSummary": "Please correct the errors above"
+    },
+    "types": {
+      "RETAIL": "Retail",
+      "WHOLESALE": "Wholesale",
+      "WORKSHOP": "Workshop"
+    },
+    "columns": {
+      "code": "Code",
+      "name": "Name",
+      "type": "Type",
+      "city": "City",
+      "balance": "Outstanding Balance",
+      "creditLimit": "Credit Limit",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "deactivate": {
+      "title": "Deactivate Customer",
+      "warning": "You are about to deactivate {{name}} ({{code}}). Please enter a reason for the audit log.",
+      "reasonLabel": "Reason *",
+      "reasonHint": "Saved to the audit log",
+      "confirm": "Confirm Deactivation",
+      "confirming": "Processing..."
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "loading": "Loading...",
+    "error": "An unexpected error occurred",
+    "retry": "Retry",
+    "close": "Close",
+    "search": "Search",
+    "noData": "No data",
+    "rowsPerPage": "Rows per page:",
+    "of": "of",
+    "moreThan": "more than"
+  },
+  "lang": {
+    "ar": "العربية",
+    "en": "English",
+    "toggle": "العربية"
   }
 }
+

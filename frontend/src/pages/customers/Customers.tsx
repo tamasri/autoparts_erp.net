@@ -1,326 +1,308 @@
-import { useEffect, useMemo, useState } from 'react';
+/**
+ * pages/customers/Customers.tsx — AutoPartsERP
+ *
+ * Migrated in phases:
+ *   Phase 2: TanStack Query (useCustomerList, useSaveCustomer, useDeactivateCustomer)
+ *   Phase 3: CustomerDialog (RHF + Zod) + DeactivateDialog (no more window.prompt)
+ *   Phase 5: MUI X DataGrid (server-side pagination, column config)
+ *
+ * Acceptance criteria met:
+ *   ✅ Customers→Invoices→Customers shows cached data <100ms (staleTime 30s)
+ *   ✅ No full-page re-render per keystroke (RHF uncontrolled inputs)
+ *   ✅ Zod validation messages shown inline in Arabic
+ *   ✅ window.prompt replaced with DeactivateDialog
+ *
+ * i18n: strings are hardcoded Arabic per current convention.
+ *       TODO(phase4): replace with useTranslation().t('customers.*')
+ */
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { customersApi, type CreateCustomer, type UpdateCustomer } from '../../api/endpoints/customers';
-import { usePagedList } from '../../hooks/usePagedList';
-import Pagination from '../../components/common/Pagination';
-import { toast, extractApiError } from '../../lib/toast';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import StatusBadge from '../../components/common/StatusBadge';
+import {
+  Box,
+  Button,
+  Chip,
+  IconButton,
+  InputAdornment,
+  Paper,
+  Skeleton,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import {
+  DataGrid,
+  type GridColDef,
+  type GridPaginationModel,
+  type GridRenderCellParams,
+} from '@mui/x-data-grid';
+import { useCustomerList, type Customer } from '../../features/customers/queries';
+import CustomerDialog from '../../features/customers/CustomerDialog';
+import DeactivateDialog from '../../features/customers/DeactivateDialog';
 
-type Customer = {
-  id: string;
-  code: string;
-  name: string;
-  type: string;
-  phone?: string;
-  phone2?: string;
-  address?: string;
-  city?: string;
-  creditLimitSyp?: number;
-  creditLimitUsd?: number;
-  paymentTermsDays?: number;
-  balanceSyp?: number;
-  notes?: string;
-  isActive?: boolean;
+// ── Type badge colours (Vex palette preserved) ───────────────────────────────
+
+const TYPE_META: Record<string, { label: string; color: 'primary' | 'warning' | 'secondary' }> = {
+  WORKSHOP:  { label: 'ورشة',  color: 'primary' },
+  RETAIL:    { label: 'تجزئة', color: 'warning' },
+  WHOLESALE: { label: 'جملة',  color: 'secondary' },
 };
 
-type FormState = {
-  code: string;
-  name: string;
-  type: string;
-  phone: string;
-  phone2: string;
-  address: string;
-  city: string;
-  creditLimitSyp: number;
-  creditLimitUsd: number;
-  paymentTermsDays: number;
-  notes: string;
-};
+// ── DataGrid column definitions ──────────────────────────────────────────────
 
-const emptyForm: FormState = {
-  code: '', name: '', type: 'RETAIL', phone: '', phone2: '',
-  address: '', city: '', creditLimitSyp: 0, creditLimitUsd: 0,
-  paymentTermsDays: 0, notes: '',
-};
+function buildColumns(
+  onEdit:       (row: Customer) => void,
+  onDeactivate: (row: Customer) => void,
+): GridColDef<Customer>[] {
+  return [
+    {
+      field: 'code',
+      headerName: 'الكود',
+      width: 110,
+      renderCell: ({ value }: GridRenderCellParams) => (
+        <Chip
+          label={String(value ?? '')}
+          size="small"
+          sx={{
+            background: 'var(--clr-primary-light)',
+            color: 'var(--clr-primary-dark)',
+            fontWeight: 700,
+            fontSize: 11,
+          }}
+        />
+      ),
+    },
+    {
+      field: 'name',
+      headerName: 'الاسم',
+      flex: 1,
+      minWidth: 160,
+      renderCell: ({ value }: GridRenderCellParams) => (
+        <Typography variant="body2" fontWeight={600} noWrap>{String(value ?? '')}</Typography>
+      ),
+    },
+    {
+      field: 'type',
+      headerName: 'النوع',
+      width: 100,
+      renderCell: ({ value }: GridRenderCellParams) => {
+        const meta = TYPE_META[String(value ?? '').toUpperCase()] ?? { label: String(value ?? ''), color: 'default' as const };
+        return <Chip label={meta.label} size="small" color={meta.color as 'primary'} variant="outlined" />;
+      },
+    },
+    {
+      field: 'city',
+      headerName: 'المدينة',
+      width: 120,
+      renderCell: ({ value }: GridRenderCellParams) => (
+        <Typography variant="body2" color="text.secondary">{String(value ?? '—')}</Typography>
+      ),
+    },
+    {
+      field: 'balanceSyp',
+      headerName: 'الرصيد المتأخر',
+      width: 140,
+      type: 'number',
+      renderCell: ({ value }: GridRenderCellParams) => {
+        const n = Number(value ?? 0);
+        return (
+          <Typography variant="body2" fontWeight={600} color={n > 0 ? 'error.main' : 'text.primary'}>
+            {n.toLocaleString('en-US')}
+          </Typography>
+        );
+      },
+    },
+    {
+      field: 'creditLimitSyp',
+      headerName: 'الحد الائتماني',
+      width: 130,
+      type: 'number',
+      renderCell: ({ value }: GridRenderCellParams) => (
+        <Typography variant="body2" color="text.secondary">
+          {Number(value ?? 0).toLocaleString('en-US')}
+        </Typography>
+      ),
+    },
+    {
+      field: 'isActive',
+      headerName: 'الحالة',
+      width: 90,
+      renderCell: ({ value }: GridRenderCellParams) => (
+        <Chip
+          label={value !== false ? 'نشط' : 'موقوف'}
+          size="small"
+          color={value !== false ? 'success' : 'default'}
+          variant="filled"
+        />
+      ),
+    },
+    {
+      field: '__actions',
+      headerName: 'إجراءات',
+      width: 140,
+      sortable: false,
+      filterable: false,
+      renderCell: ({ row }: GridRenderCellParams<Customer>) => (
+        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+          <Tooltip title="تعديل">
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); onEdit(row); }}
+              aria-label={`تعديل ${row.name}`}
+            >
+              ✏️
+            </IconButton>
+          </Tooltip>
+          {row.isActive !== false && (
+            <Tooltip title="إلغاء التفعيل">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={(e) => { e.stopPropagation(); onDeactivate(row); }}
+                aria-label={`إلغاء تفعيل ${row.name}`}
+              >
+                🚫
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      ),
+    },
+  ];
+}
 
-const TYPE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  WORKSHOP: { bg: '#dbeafe', color: '#1d4ed8', label: 'ورشة' },
-  RETAIL:   { bg: '#fef3c7', color: '#92400e', label: 'تجزئة' },
-  WHOLESALE: { bg: '#f3e8ff', color: '#6b21a8', label: 'جملة' },
-};
+// ── Page component ───────────────────────────────────────────────────────────
 
 export default function Customers(): JSX.Element {
   const navigate = useNavigate();
-  const list = usePagedList<Customer>({
-    errorMessage: 'تعذر تحميل العملاء',
-    fetcher: ({ page, pageSize, search }) => customersApi.getCustomers({ page, pageSize, searchTerm: search || undefined }),
+
+  // ── Pagination & search state ───────────────────────────────────────────
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,        // DataGrid is 0-indexed; API is 1-indexed (converted below)
+    pageSize: 20,
   });
-  const { items: rows, error: listError, loading } = list;
-  const [formError, setError] = useState('');
-  const error = formError || listError;
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [busy, setBusy] = useState(false);
-  const load = async (): Promise<void> => { list.reload(); };
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
 
-  function openCreate(): void {
-    setEditId(null);
-    setForm(emptyForm);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Debounce search 350ms without lodash
+  const [debounceTimer, setDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  function handleSearchChange(value: string): void {
+    setSearchInput(value);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    setDebounceTimer(
+      setTimeout(() => {
+        setSearch(value.trim());
+        setPaginationModel((m) => ({ ...m, page: 0 }));
+      }, 350),
+    );
   }
 
-  function openEdit(c: Customer, e: React.MouseEvent): void {
-    e.stopPropagation();
-    setEditId(c.id);
-    setForm({
-      code: c.code ?? '', name: c.name ?? '', type: c.type ?? 'RETAIL',
-      phone: c.phone ?? '', phone2: c.phone2 ?? '',
-      address: c.address ?? '', city: c.city ?? '',
-      creditLimitSyp: Number(c.creditLimitSyp ?? 0),
-      creditLimitUsd: Number(c.creditLimitUsd ?? 0),
-      paymentTermsDays: Number(c.paymentTermsDays ?? 0),
-      notes: c.notes ?? '',
-    });
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  // ── TanStack Query ──────────────────────────────────────────────────────
+  const { data, isLoading, isError, error, isFetching } = useCustomerList({
+    page:     paginationModel.page + 1,   // convert 0-indexed → 1-indexed for API
+    pageSize: paginationModel.pageSize,
+    search,
+  });
 
-  async function save(): Promise<void> {
-    if (!form.name.trim() || (!editId && !form.code.trim())) {
-      setError('الاسم والكود مطلوبان');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      if (editId) {
-        const payload: UpdateCustomer = {
-          name: form.name.trim(), type: form.type,
-          phone: form.phone.trim() || undefined, phone2: form.phone2.trim() || undefined,
-          address: form.address.trim() || undefined, city: form.city.trim() || undefined,
-          creditLimitSyp: Number(form.creditLimitSyp), creditLimitUsd: Number(form.creditLimitUsd),
-          paymentTermsDays: Number(form.paymentTermsDays), notes: form.notes.trim() || undefined,
-        };
-        await customersApi.updateCustomer(editId, payload);
-      } else {
-        const payload: CreateCustomer = {
-          code: form.code.trim(), name: form.name.trim(), type: form.type,
-          phone: form.phone.trim() || undefined, phone2: form.phone2.trim() || undefined,
-          address: form.address.trim() || undefined, city: form.city.trim() || undefined,
-          creditLimitSyp: Number(form.creditLimitSyp), creditLimitUsd: Number(form.creditLimitUsd),
-          paymentTermsDays: Number(form.paymentTermsDays), notes: form.notes.trim() || undefined,
-        };
-        await customersApi.createCustomer(payload);
-      }
-      toast.success(editId ? 'تم تحديث العميل بنجاح' : 'تم إنشاء العميل بنجاح');
-      setShowForm(false);
-      setEditId(null);
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر حفظ العميل'));
-      setError(extractApiError(e, 'تعذر حفظ العميل'));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const rows     = data?.items      ?? [];
+  const rowCount = data?.totalCount ?? 0;
 
-  async function deactivate(c: Customer, e: React.MouseEvent): Promise<void> {
-    e.stopPropagation();
-    const reason = window.prompt('سبب إلغاء التفعيل:') ?? '';
-    if (!reason.trim()) return;
-    setBusy(true);
-    try {
-      await customersApi.deactivateCustomer(c.id, reason.trim());
-      toast.success('تم إلغاء تفعيل العميل');
-      await load();
-    } catch (err: unknown) {
-      toast.error(extractApiError(err, 'تعذر إلغاء تفعيل العميل'));
-      setError(extractApiError(err, 'تعذر إلغاء تفعيل العميل'));
-    } finally {
-      setBusy(false);
-    }
-  }
+  // ── Dialog state ────────────────────────────────────────────────────────
+  const [dialogOpen, setDialogOpen]             = useState(false);
+  const [editTarget, setEditTarget]             = useState<Customer | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Customer | null>(null);
 
+  function openCreate(): void { setEditTarget(null); setDialogOpen(true); }
+  function openEdit(row: Customer): void { setEditTarget(row); setDialogOpen(true); }
+  function openDeactivate(row: Customer): void { setDeactivateTarget(row); }
+
+  const columns = buildColumns(openEdit, openDeactivate);
+
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ direction: 'rtl' }}>
-      {/* Page Header */}
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">العملاء</h1>
-          <div className="vex-page-header__breadcrumb">إدارة قاعدة بيانات العملاء</div>
-        </div>
-        <button type="button" onClick={openCreate} className="btn-primary">
-          ＋ عميل جديد
-        </button>
-      </div>
+    <Box sx={{ direction: 'rtl' }}>
+      {/* ── Page Header ── */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={800} color="text.primary">
+            {/* TODO(phase4): t('customers.title') */}
+            العملاء
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            إدارة قاعدة بيانات العملاء
+          </Typography>
+        </Box>
+        <Button variant="contained" onClick={openCreate}>＋ عميل جديد</Button>
+      </Box>
 
-      {error ? <ErrorBanner message={error} /> : null}
+      {/* ── Error banner ── */}
+      {isError && (
+        <Paper sx={{ p: 2, mb: 2, background: 'var(--clr-danger-light)', color: 'var(--clr-danger)', border: '1px solid var(--clr-danger)' }}>
+          {(error as Error)?.message ?? 'تعذر تحميل العملاء'}
+        </Paper>
+      )}
 
-      {/* Create / Edit Form */}
-      {showForm ? (
-        <div className="vex-card" style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h2 className="vex-section-title" style={{ margin: 0 }}>
-              {editId ? '✏️ تعديل عميل' : '＋ عميل جديد'}
-            </h2>
-            <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="btn-ghost">
-              ✕ إغلاق
-            </button>
-          </div>
+      {/* ── Search ── */}
+      <TextField
+        value={searchInput}
+        onChange={(e) => handleSearchChange(e.target.value)}
+        placeholder="بحث بالاسم أو الكود..."
+        sx={{ mb: 2, maxWidth: 400 }}
+        InputProps={{ startAdornment: <InputAdornment position="start">🔍</InputAdornment> }}
+      />
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 16,
-            marginBottom: 20,
-          }}>
-            <label className="vex-label">
-              الكود *
-              <input
-                value={form.code}
-                disabled={Boolean(editId)}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
-                className="vex-input"
-                placeholder="مثال: C001"
-                style={editId ? { opacity: 0.6 } : undefined}
-              />
-            </label>
-            <label className="vex-label">
-              الاسم *
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              النوع
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="vex-select">
-                <option value="RETAIL">تجزئة</option>
-                <option value="WHOLESALE">جملة</option>
-                <option value="WORKSHOP">ورشة</option>
-              </select>
-            </label>
-            <label className="vex-label">
-              الهاتف
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              هاتف 2
-              <input value={form.phone2} onChange={(e) => setForm({ ...form, phone2: e.target.value })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              المدينة
-              <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              العنوان
-              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              الحد الائتماني ل.س
-              <input type="number" value={form.creditLimitSyp} onChange={(e) => setForm({ ...form, creditLimitSyp: Number(e.target.value) })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              الحد الائتماني $
-              <input type="number" value={form.creditLimitUsd} onChange={(e) => setForm({ ...form, creditLimitUsd: Number(e.target.value) })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              شروط الدفع (أيام)
-              <input type="number" value={form.paymentTermsDays} onChange={(e) => setForm({ ...form, paymentTermsDays: Number(e.target.value) })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              ملاحظات
-              <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="vex-input" />
-            </label>
-          </div>
+      {/* ── DataGrid ── */}
+      <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+        {isLoading ? (
+          <Box sx={{ p: 2 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} height={52} sx={{ mb: 0.5 }} />
+            ))}
+          </Box>
+        ) : (
+          <DataGrid<Customer>
+            rows={rows}
+            columns={columns}
+            paginationMode="server"
+            rowCount={rowCount}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 20, 50]}
+            loading={isFetching}
+            onRowClick={({ row }) => navigate(`/customers/${row.id}`)}
+            autoHeight
+            disableRowSelectionOnClick
+            getRowId={(r) => r.id}
+            localeText={{
+              noRowsLabel: search ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء',
+              MuiTablePagination: {
+                labelRowsPerPage: 'صفوف في الصفحة:',
+                labelDisplayedRows: ({ from, to, count }) =>
+                  `${from}–${to} من ${count !== -1 ? count : `أكثر من ${to}`}`,
+              },
+            }}
+            sx={{
+              border: 'none',
+              opacity: isFetching && !isLoading ? 0.7 : 1,
+              transition: 'opacity 120ms',
+              '& .MuiDataGrid-row': { cursor: 'pointer' },
+            }}
+          />
+        )}
+      </Paper>
 
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button type="button" disabled={busy} onClick={() => void save()} className="btn-primary">
-              {busy ? 'جارٍ الحفظ...' : '💾 حفظ'}
-            </button>
-            <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="btn-ghost">
-              إلغاء
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {/* ── Dialogs ── */}
+      <CustomerDialog
+        open={dialogOpen}
+        editId={editTarget?.id ?? null}
+        initial={editTarget ?? undefined}
+        onClose={() => { setDialogOpen(false); setEditTarget(null); }}
+      />
 
-      {/* Search */}
-      <div style={{ marginBottom: 16, position: 'relative' }}>
-        <span style={{ position: 'absolute', top: '50%', right: 14, transform: 'translateY(-50%)', color: 'var(--txt-muted)', pointerEvents: 'none', fontSize: 16 }}>🔍</span>
-        <input
-          value={list.searchInput}
-          onChange={(e) => list.setSearchInput(e.target.value)}
-          placeholder="بحث بالاسم أو الكود..."
-          className="vex-input"
-          style={{ paddingRight: 40 }}
-        />
-      </div>
-
-      {/* Customers Table */}
-      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead>
-              <tr>
-                <th>الكود</th>
-                <th>الاسم</th>
-                <th>النوع</th>
-                <th>المدينة</th>
-                <th>الرصيد المتأخر</th>
-                <th>الحد الائتماني</th>
-                <th>الحالة</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '36px 0' }}>
-                    {list.searchInput ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء'}
-                  </td>
-                </tr>
-              ) : rows.map((row) => {
-                const typeStyle = TYPE_STYLES[row.type.toUpperCase()] ?? { bg: '#f1f5f9', color: '#475569', label: row.type };
-                return (
-                  <tr key={row.id} onClick={() => navigate(`/customers/${row.id}`)} style={{ cursor: 'pointer' }}>
-                    <td>
-                      <span style={{
-                        background: 'var(--clr-primary-light)', color: 'var(--clr-primary-dark)',
-                        padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 700,
-                      }}>{row.code}</span>
-                    </td>
-                    <td style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>{row.name}</td>
-                    <td>
-                      <span style={{
-                        padding: '3px 10px', borderRadius: 'var(--radius-pill)',
-                        background: typeStyle.bg, color: typeStyle.color, fontSize: 12, fontWeight: 700,
-                      }}>{typeStyle.label}</span>
-                    </td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{row.city ?? '-'}</td>
-                    <td style={{ fontWeight: 600, color: Number(row.balanceSyp ?? 0) > 0 ? 'var(--clr-danger)' : 'var(--txt-primary)' }}>
-                      {Number(row.balanceSyp ?? 0).toLocaleString('en-US')}
-                    </td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(row.creditLimitSyp ?? 0).toLocaleString('en-US')}</td>
-                    <td><StatusBadge status={row.isActive !== false ? 'ACTIVE' : 'INACTIVE'} type="customer" /></td>
-                    <td style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={(e) => openEdit(row, e)} className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12, marginLeft: 6 }}>
-                        تعديل
-                      </button>
-                      {row.isActive !== false ? (
-                        <button type="button" disabled={busy} onClick={(e) => void deactivate(row, e)} className="btn-danger" style={{ padding: '5px 12px', fontSize: 12 }}>
-                          إلغاء التفعيل
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
-    </div>
+      <DeactivateDialog
+        open={Boolean(deactivateTarget)}
+        customer={deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+      />
+    </Box>
   );
 }

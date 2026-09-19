@@ -179,3 +179,65 @@ In Production the app refuses to start without a real password (the deploy scrip
     it `true` only until a second approver user exists. The approvals list hides your own requests unless it is true.
 22. **EF + client-generated Guid keys:** configure `ValueGeneratedNever()`; otherwise a new child added through a tracked
     navigation is written as UPDATE and `SaveChanges` throws `DbUpdateConcurrencyException`.
+
+---
+
+## 5. Agent Activity Log
+
+### 2026-09-19 — Antigravity (Frontend Migration — Phases 0–6)
+
+**What the agent did:**
+- Read full audit report (7,686 LOC, 60+ files) and confirmed explicit owner approval for full stack migration.
+- Updated `PROJECT_VISION.md` §2 (tech stack), §2a (new — policy override), and D3/D4 debt items.
+- Updated `ENGINEERING_PLAYBOOK.md` §2.5 (new frontend guidelines), added `## Execution Reports` section.
+- **Phase 0:** Created `frontend/src/lib/rtlCache.ts` + `frontend/src/theme/theme.ts`; updated `frontend/src/main.tsx` to wire `QueryClientProvider`, `CacheProvider` (emotion RTL), `ThemeProvider`, `CssBaseline`.
+- **Phase 1:** MUI `createTheme` in `theme.ts` maps all Vex CSS tokens 1:1 — primary `#5c54ff`, 12 px radii, card shadow, font stack. `direction:'rtl'` set once.
+- **Phase 2:** Created `frontend/src/lib/apiClient.ts` (typed envelope unwrapper — `apiGet/apiPost/apiPut/apiDelete`) + `frontend/src/features/customers/queries.ts` (TanStack Query hooks: `useCustomerList`, `useCustomerById`, `useSaveCustomer`, `useDeactivateCustomer`).
+- **Phase 3:** Created `frontend/src/features/customers/schema.ts` (Zod schemas) + `frontend/src/features/customers/CustomerDialog.tsx` (MUI Dialog + RHF + zodResolver) + `frontend/src/features/customers/DeactivateDialog.tsx` (replaces `window.prompt`).
+- **Phase 4:** Expanded `frontend/src/i18n/ar.json` and `en.json` with customers, nav, common, lang keys (95 keys each).
+- **Phase 5:** Rewrote `frontend/src/pages/customers/Customers.tsx` with `<DataGrid paginationMode="server" />`.
+- **Phase 6:** Rewrote `frontend/src/App.tsx` with `React.lazy` + `Suspense` + `ErrorBoundary` on all 28 routes. Created `frontend/src/components/common/ErrorBoundary.tsx`.
+
+**How to run locally:**
+```powershell
+# Start dev stack (Postgres + Redis)
+docker compose -f docker-compose.dev.yml up -d postgres redis
+
+# Start API
+dotnet run --project src/AutoPartsERP.Api --launch-profile Development
+
+# Start frontend
+cd frontend
+npm install      # already installed; skippable if no package changes
+npm run dev      # http://localhost:47173
+```
+
+**TypeScript check + build:**
+```powershell
+cd frontend
+npx tsc --noEmit   # should pass with 0 errors
+npm run build      # vite build to frontend/dist
+```
+
+**ENV vars required:** no new frontend env vars. All API calls go to `/api/v1` via Vite proxy. New backend-side env vars are unchanged (see §3.3 of SETUP_HARDENING.md).
+
+**Files changed in this session:**
+```
+frontend/src/main.tsx                                [MODIFY]
+frontend/src/App.tsx                                 [MODIFY]
+frontend/src/lib/rtlCache.ts                         [NEW]
+frontend/src/lib/apiClient.ts                        [NEW]
+frontend/src/theme/theme.ts                          [NEW]
+frontend/src/features/customers/schema.ts            [NEW]
+frontend/src/features/customers/queries.ts           [NEW]
+frontend/src/features/customers/CustomerDialog.tsx   [NEW]
+frontend/src/features/customers/DeactivateDialog.tsx [NEW]
+frontend/src/pages/customers/Customers.tsx           [REWRITE]
+frontend/src/components/common/ErrorBoundary.tsx     [NEW]
+frontend/src/i18n/ar.json                            [MODIFY]
+frontend/src/i18n/en.json                            [MODIFY]
+PROJECT_VISION.md                                    [MODIFY]
+ENGINEERING_PLAYBOOK.md                              [MODIFY]
+AGENT_ONBOARDING.md                                  [MODIFY]
+```
+

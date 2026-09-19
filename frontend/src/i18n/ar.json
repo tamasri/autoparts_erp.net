@@ -11,6 +11,94 @@
     "dashboard": "لوحة التحكم",
     "customers": "العملاء",
     "invoices": "الفواتير",
-    "inventory": "المخزون"
+    "inventory": "المخزون",
+    "payments": "الدفعات",
+    "fxRates": "أسعار الصرف",
+    "parties": "الأطراف",
+    "items": "الأصناف",
+    "approvals": "الموافقات",
+    "audit": "التدقيق",
+    "settings": "الإعدادات"
+  },
+  "customers": {
+    "title": "العملاء",
+    "subtitle": "إدارة قاعدة بيانات العملاء",
+    "addNew": "＋ عميل جديد",
+    "searchPlaceholder": "بحث بالاسم أو الكود...",
+    "noResults": "لا توجد نتائج مطابقة",
+    "empty": "لا يوجد عملاء",
+    "loadError": "تعذر تحميل العملاء",
+    "saveSuccess": "تم حفظ العميل بنجاح",
+    "saveError": "تعذر حفظ العميل",
+    "deactivateSuccess": "تم إلغاء تفعيل العميل",
+    "deactivateError": "تعذر إلغاء تفعيل العميل",
+    "form": {
+      "titleCreate": "＋ عميل جديد",
+      "titleEdit": "✏️ تعديل عميل",
+      "code": "الكود",
+      "codePlaceholder": "مثال: C001",
+      "name": "الاسم",
+      "type": "النوع",
+      "phone": "الهاتف",
+      "phone2": "هاتف 2",
+      "city": "المدينة",
+      "address": "العنوان",
+      "creditLimitSyp": "الحد الائتماني ل.س",
+      "creditLimitUsd": "الحد الائتماني $",
+      "paymentTermsDays": "شروط الدفع (أيام)",
+      "notes": "ملاحظات",
+      "save": "💾 حفظ",
+      "saving": "جارٍ الحفظ...",
+      "cancel": "إلغاء",
+      "errorSummary": "يرجى تصحيح الأخطاء المذكورة أعلاه"
+    },
+    "types": {
+      "RETAIL": "تجزئة",
+      "WHOLESALE": "جملة",
+      "WORKSHOP": "ورشة"
+    },
+    "columns": {
+      "code": "الكود",
+      "name": "الاسم",
+      "type": "النوع",
+      "city": "المدينة",
+      "balance": "الرصيد المتأخر",
+      "creditLimit": "الحد الائتماني",
+      "status": "الحالة",
+      "actions": "إجراءات"
+    },
+    "status": {
+      "active": "نشط",
+      "inactive": "موقوف"
+    },
+    "deactivate": {
+      "title": "⚠️ إلغاء تفعيل عميل",
+      "warning": "سيتم إلغاء تفعيل العميل {{name}} ({{code}}). يرجى إدخال سبب واضح لأغراض التدقيق.",
+      "reasonLabel": "سبب إلغاء التفعيل *",
+      "reasonHint": "يُحفظ في سجل التدقيق",
+      "confirm": "تأكيد الإلغاء",
+      "confirming": "جارٍ التنفيذ..."
+    }
+  },
+  "common": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "loading": "جارٍ التحميل...",
+    "error": "حدث خطأ غير متوقع",
+    "retry": "إعادة المحاولة",
+    "close": "إغلاق",
+    "search": "بحث",
+    "noData": "لا توجد بيانات",
+    "rowsPerPage": "صفوف في الصفحة:",
+    "of": "من",
+    "moreThan": "أكثر من"
+  },
+  "lang": {
+    "ar": "العربية",
+    "en": "English",
+    "toggle": "English"
   }
 }
+

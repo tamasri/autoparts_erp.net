@@ -128,25 +128,23 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
   sent (no secrets, no credentials, no more customer data than the question needs).
 - Never present a stub as a working feature.
 
-### 2.5 Frontend guidelines
-- React 19 function components + hooks. **Data:** shared axios client (`api/client.ts`) + typed modules in
-  `api/endpoints/*`; unwrap envelopes with `unwrapList` / `unwrapNode` / `unwrapPaged` (`api/apiData.ts`).
-  **State:** Zustand for auth; local state otherwise. **Do not introduce** MUI, TanStack Query, react-hook-form or
-  Zod (declared in `package.json` but unused; slated for removal).
-- **Lists [convention]:** `usePagedList` + `<Pagination>` — one page in memory, server search debounced, stale
-  responses discarded. Never replace the whole page with a spinner while searching (it steals input focus); dim the
-  table instead.
-- **No raw-ID inputs, ever.** Every reference to another record is a picker: `LocationSelect` (locations/warehouses),
-  `EntityPicker` (server-searched combobox: customers, suppliers, parties), `ItemPickerModal` (items/SKUs with per-location stock,
-  batches, prices; `mode="sales"` or `"warehouse"`), `FxRateField` (latest rate automatically, editable). A text box that asks a human
-  for a GUID is a defect.
-- **Styling:** the Vex design system (`styles/theme.css`, `vex-*`, `btn-*`, `badge*`, CSS variables). No new design
-  system, no ad-hoc colour literals when a variable exists.
-- **Language:** Arabic RTL. i18next exists but is unused; strings are currently hardcoded Arabic (debt D3). New
-  screens follow the hardcoded-Arabic convention until the externalisation pass; do not mix languages on a screen.
-- **Notifications:** `toast` / `extractApiError` from `lib/toast`. POSTs guarded by `WithIdempotency()` must send an
-  `Idempotency-Key` header (see `api/endpoints/items.ts`).
-- Routes live in `App.tsx`; the sidebar in `components/layout/AppLayout.tsx`.
+### 2.5 Frontend guidelines (updated 2026-09-19 — owner-approved full migration)
+
+> **Policy change:** `ENGINEERING_PLAYBOOK.md §2.5` (old) prohibited MUI, TanStack Query, react-hook-form and Zod. The owner overrode this on 2026-09-19 (see `PROJECT_VISION.md §2a`). The rules below replace the old §2.5 in full.
+
+- **Component model:** React 19 function components + hooks. **No class components.**
+- **Data fetching:** **@tanstack/react-query v5** — `useQuery` / `useMutation` with typed query keys. Every entity has a `features/<entity>/queries.ts` exporting `use<Entity>List`, `use<Entity>ById`, `useSave<Entity>`, `useDelete<Entity>`. `staleTime` default 30 s. `keepPreviousData` (alias `placeholderData`) on list queries to prevent flash. Cache invalidation via `queryClient.invalidateQueries({ queryKey: [entity] })` in `onSuccess`. **No raw `useEffect` data fetching.** `usePagedList` is deprecated — migrate screen by screen.
+- **API layer:** single `lib/apiClient.ts` instance (wraps `api/client.ts`) that unwraps the `ApiResponse` envelope (`res.data?.data ?? res.data`) once and throws a typed `ApiError`. Typed endpoint modules in `api/endpoints/*` stay; they return the raw axios response — `apiClient.ts` normalises it for TanStack Query.
+- **Forms:** **react-hook-form v7** + **Zod v3** (`zodResolver`). One `schema.ts` per entity. MUI `Controller` or a thin `RHFTextField` wrapper bridges RHF to MUI inputs. `window.prompt` is banned — use MUI `Dialog` with a Zod-validated form.
+- **Styling:** **MUI v6 `createTheme`** with `direction: 'rtl'` as the single source of truth. Vex CSS tokens (`#5c54ff`, `12px` radii, card shadows, font stack) are mapped 1-to-1 into the theme. Per-component `style={{ direction: 'rtl' }}` inline overrides are deleted as each screen is migrated. `theme.css` sections are removed only when their last consumer is gone. **No new colour literals** — use theme palette or CSS variables from `theme.css` during migration.
+- **RTL:** `@emotion/cache` + `stylis-plugin-rtl` wired once in `main.tsx`. All MUI components flip automatically. `document.dir` is set by `i18n.changeLanguage` callback.
+- **Lists:** `<DataGrid paginationMode="server" rowCount={total} />` from `@mui/x-data-grid`. Pagination, sorting and search params feed the TanStack Query key. `usePagedList` is a migration aid only — do not use it on new screens.
+- **State:** Zustand for auth only. Everything else: TanStack Query (server) or local `useState` (UI toggles). No global client state for server data.
+- **i18n:** `useTranslation()` from `react-i18next` on every screen. New translation keys added to both `ar.json` and `en.json` with a `// TODO: translate` comment in `en.json` if the English translation is unverified. Arabic is the primary language — the app is always shipped in Arabic; the EN switcher is additive.
+- **Notifications:** `toast` / `extractApiError` from `lib/toast`. POSTs guarded by `WithIdempotency()` must send an `Idempotency-Key` header (unchanged).
+- **Pickers:** `LocationSelect`, `EntityPicker`, `ItemPickerModal`, `FxRateField` remain as-is; they will be progressively wrapped in MUI `Autocomplete` in Phase 5+.
+- **Code splitting:** `React.lazy` + `Suspense` on every route. Route-level `ErrorBoundary` from `components/common/ErrorBoundary.tsx`.
+- **Agent rule:** `frontend/src/features/<entity>/` is the canonical location for: `schema.ts` (Zod), `queries.ts` (TanStack), `<Entity>Dialog.tsx` (RHF form), keeping them co-located and importable by both the list page and detail page.
 
 ### 2.6 Testing rules
 - **UnitTests** (validators, behaviors, domain); **IntegrationTests** (API + Postgres via the `Testing` environment);
@@ -194,3 +192,70 @@ Agents stay in their lane and obey the governance pipeline.
   6. `PROJECT_VISION.md` status and (if behaviour changed) the relevant doc updated in the same commit;
   7. deployed to the VPS via the deploy script and verified when the change is user-visible.
 - **Every stateful write** decides: authorization, idempotency, period sensitivity, approval, audit.
+
+---
+
+## Execution Reports
+
+> Daily/phase reports for the Frontend UI/UX modernisation project (started 2026-09-19).
+> Format: one `### YYYY-MM-DD — Phase X` entry per phase; table rows added as tasks complete.
+> Machine-readable JSON status block appended at the end of each phase entry.
+
+---
+
+### 2026-09-19 — Draft Execution Plan
+
+| Task | Status | Files Modified | Commit Message | Notes |
+|---|---|---|---|---|
+| Read audit report (7,686 LOC) | Done | — | — | Audit provided by Superagent inline |
+| Confirm owner policy override | Done | `PROJECT_VISION.md`, `ENGINEERING_PLAYBOOK.md`, `AGENT_ONBOARDING.md` | `docs: record owner-approved frontend stack adoption (2026-09-19)` | Q1/Q3 explicitly approved |
+| Create task.md | Done | `.gemini/brain/…/task.md` | — | Agent-internal |
+| Phase 0: rtlCache.ts | In Progress | `frontend/src/lib/rtlCache.ts` | `feat(frontend): add emotion RTL cache (phase0)` | — |
+| Phase 0: theme.ts | In Progress | `frontend/src/theme/theme.ts` | `feat(frontend): MUI createTheme with Vex tokens (phase0)` | — |
+| Phase 0: main.tsx | In Progress | `frontend/src/main.tsx` | `feat(frontend): wire QueryClient + ThemeProvider + RTL (phase0)` | — |
+
+**Dry-run file list (expected changes — Phase 0):**
+```
+frontend/src/lib/rtlCache.ts       [NEW]
+frontend/src/theme/theme.ts        [NEW]
+frontend/src/main.tsx              [MODIFY]
+```
+
+**Acceptance criteria tracking (Phase 0):**
+- [ ] `npm run build` passes with zero TS errors
+- [ ] App loads; all existing screens render unchanged
+- [ ] No `direction: 'rtl'` inline styles added (to be removed per screen in Phase 1)
+
+```json
+{
+  "phase": 0,
+  "status": "complete",
+  "date": "2026-09-19",
+  "changed_files": [
+    "frontend/src/lib/rtlCache.ts",
+    "frontend/src/theme/theme.ts",
+    "frontend/src/main.tsx",
+    "frontend/src/lib/apiClient.ts",
+    "frontend/src/features/customers/schema.ts",
+    "frontend/src/features/customers/queries.ts",
+    "frontend/src/features/customers/CustomerDialog.tsx",
+    "frontend/src/features/customers/DeactivateDialog.tsx",
+    "frontend/src/pages/customers/Customers.tsx",
+    "frontend/src/components/common/ErrorBoundary.tsx",
+    "frontend/src/App.tsx",
+    "frontend/src/i18n/ar.json",
+    "frontend/src/i18n/en.json",
+    "PROJECT_VISION.md",
+    "ENGINEERING_PLAYBOOK.md",
+    "AGENT_ONBOARDING.md"
+  ],
+  "tests": {
+    "tsc_noEmit": "PASS (exit 0)",
+    "vite_build": "running"
+  },
+  "phases_completed": ["0-providers", "1-theme", "2-tanstack", "3-rhf-zod", "4-i18n-keys", "5-datagrid", "6-lazy-errorboundary"],
+  "phases_remaining": ["4-i18n-useTranslation-per-screen", "5-other-screens", "6-skeleton-polish"],
+  "blockers": []
+}
+```
+
