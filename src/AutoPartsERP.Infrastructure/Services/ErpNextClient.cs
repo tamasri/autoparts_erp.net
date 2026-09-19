@@ -53,7 +53,9 @@ public sealed class ErpNextClient : IErpNextClient
                 ["item_name"] = item.NameEn,
                 ["item_group"] = "All Item Groups",
                 ["stock_uom"] = "Nos",
-                ["is_stock_item"] = 1,
+                // This application owns inventory (quantities, locations, batches). Keeping items non-stock in ERPNext avoids a
+                // second, competing stock ledger; cost of goods sold is booked by a Journal Entry instead (SyncCogsEntryAsync).
+                ["is_stock_item"] = 0,
                 ["valuation_rate"] = item.CostPrice,
                 ["standard_rate"] = item.SellingPrice,
                 ["description"] = item.NameAr
@@ -113,7 +115,7 @@ public sealed class ErpNextClient : IErpNextClient
             lines.Add(new JsonObject
             {
                 ["item_code"] = line.ItemCode,
-                ["qty"] = line.Quantity,
+                ["qty"] = invoice.IsReturn ? -line.Quantity : line.Quantity,
                 ["rate"] = line.UnitPrice,
                 ["discount_percentage"] = line.DiscountPercent
             });
@@ -135,8 +137,9 @@ public sealed class ErpNextClient : IErpNextClient
                 ["update_stock"] = 0,
                 ["remarks"] = $"AutoPartsERP invoice {invoice.InvoiceNumber}",
                 ["items"] = lines,
+                ["is_return"] = invoice.IsReturn ? 1 : 0,
                 ["docstatus"] = 1
-            },
+            }.WithReturnAgainst(invoice.ReturnAgainst),
             cancellationToken);
     }
 
@@ -164,7 +167,7 @@ public sealed class ErpNextClient : IErpNextClient
             references.Add(new JsonObject
             {
                 ["reference_doctype"] = "Sales Invoice",
-                ["reference_name"] = r.SalesInvoiceName,
+                ["reference_name"] = r.DocumentName,
                 ["allocated_amount"] = r.AllocatedAmount
             });
         }
@@ -196,6 +199,199 @@ public sealed class ErpNextClient : IErpNextClient
         return await UpsertAsync("Payment Entry", payment.LocalPaymentId.ToString(), doc, cancellationToken);
     }
 
+    public async Task<Result<string>> SyncCogsEntryAsync(ErpNextCogsEntrySync entry, CancellationToken cancellationToken = default)
+    {
+        var company = await GetCompanyAsync(cancellationToken);
+        if (company.IsFailure)
+        {
+            return Result<string>.Failure(company.Error);
+        }
+
+        var c = company.Value!;
+        if (string.IsNullOrWhiteSpace(c.CogsAccount))
+        {
+            return Result<string>.Failure(new Error("ErpNext.AccountsMissing", $"Company '{c.Name}' has no default Cost of Goods Sold account in ERPNext."));
+        }
+
+        var inventory = await EnsureInventoryAccountAsync(c, cancellationToken);
+        if (inventory.IsFailure)
+        {
+            return Result<string>.Failure(inventory.Error);
+        }
+
+        // Sale: Dr COGS / Cr Inventory. Customer return: the reverse (goods come back at their cost).
+        string debit = entry.IsReturn ? inventory.Value! : c.CogsAccount!;
+        string credit = entry.IsReturn ? c.CogsAccount! : inventory.Value!;
+        var doc = new JsonObject
+        {
+            ["voucher_type"] = "Journal Entry",
+            ["company"] = c.Name,
+            ["posting_date"] = entry.Date.ToString("yyyy-MM-dd"),
+            ["user_remark"] = $"Cost of goods sold for AutoPartsERP invoice {entry.InvoiceNumber}",
+            ["accounts"] = new JsonArray
+            {
+                new JsonObject { ["account"] = debit, ["debit_in_account_currency"] = entry.Amount },
+                new JsonObject { ["account"] = credit, ["credit_in_account_currency"] = entry.Amount }
+            },
+            ["docstatus"] = 1
+        };
+
+        return await UpsertAsync("Journal Entry", entry.LocalInvoiceId.ToString(), doc, cancellationToken);
+    }
+
+    public async Task<Result<string>> SyncPurchaseInvoiceAsync(ErpNextPurchaseInvoiceSync bill, CancellationToken cancellationToken = default)
+    {
+        if (bill.Lines.Count == 0)
+        {
+            return Result<string>.Failure(new Error("ErpNext.NoLines", "Cannot sync a purchase invoice with no lines to ERPNext."));
+        }
+
+        var company = await GetCompanyAsync(cancellationToken);
+        if (company.IsFailure)
+        {
+            return Result<string>.Failure(company.Error);
+        }
+
+        var inventory = await EnsureInventoryAccountAsync(company.Value!, cancellationToken);
+        if (inventory.IsFailure)
+        {
+            return Result<string>.Failure(inventory.Error);
+        }
+
+        // Goods are received (and counted) in this application, so the bill debits the externally-managed inventory account
+        // rather than creating stock in ERPNext (update_stock = 0).
+        var items = new JsonArray();
+        foreach (var line in bill.Lines)
+        {
+            items.Add(new JsonObject
+            {
+                ["item_code"] = line.ItemCode,
+                ["qty"] = bill.IsReturn ? -line.Quantity : line.Quantity,
+                ["rate"] = line.UnitPrice,
+                ["discount_percentage"] = line.DiscountPercent,
+                ["expense_account"] = inventory.Value
+            });
+        }
+
+        var date = bill.BillDate.ToString("yyyy-MM-dd");
+        return await UpsertAsync(
+            "Purchase Invoice",
+            bill.BillNumber,
+            new JsonObject
+            {
+                ["supplier"] = bill.SupplierName,
+                ["company"] = company.Value!.Name,
+                ["currency"] = _options.Currency,
+                ["posting_date"] = date,
+                ["set_posting_time"] = 1,
+                ["bill_no"] = bill.BillNumber,
+                ["bill_date"] = date,
+                ["due_date"] = bill.DueDate.ToString("yyyy-MM-dd"),
+                ["update_stock"] = 0,
+                ["is_return"] = bill.IsReturn ? 1 : 0,
+                ["remarks"] = $"AutoPartsERP purchase invoice {bill.BillNumber}",
+                ["items"] = items,
+                ["docstatus"] = 1
+            },
+            cancellationToken);
+    }
+
+    public async Task<Result<string>> SyncSupplierPaymentAsync(ErpNextSupplierPaymentSync payment, CancellationToken cancellationToken = default)
+    {
+        var company = await GetCompanyAsync(cancellationToken);
+        if (company.IsFailure)
+        {
+            return Result<string>.Failure(company.Error);
+        }
+
+        var c = company.Value!;
+        var isCash = string.Equals(payment.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase);
+        var paidFrom = isCash ? c.CashAccount : (c.BankAccount ?? c.CashAccount);
+        if (string.IsNullOrWhiteSpace(c.PayableAccount) || string.IsNullOrWhiteSpace(paidFrom))
+        {
+            return Result<string>.Failure(new Error("ErpNext.AccountsMissing", $"Company '{c.Name}' has no default payable/{(isCash ? "cash" : "bank")} account in ERPNext."));
+        }
+
+        var references = new JsonArray();
+        foreach (var r in payment.References)
+        {
+            references.Add(new JsonObject { ["reference_doctype"] = "Purchase Invoice", ["reference_name"] = r.DocumentName, ["allocated_amount"] = r.AllocatedAmount });
+        }
+
+        var date = payment.PaymentDate.ToString("yyyy-MM-dd");
+        var doc = new JsonObject
+        {
+            ["payment_type"] = "Pay",
+            ["company"] = c.Name,
+            ["posting_date"] = date,
+            ["party_type"] = "Supplier",
+            ["party"] = payment.SupplierName,
+            ["paid_from"] = paidFrom,
+            ["paid_to"] = c.PayableAccount,
+            ["paid_amount"] = payment.Amount,
+            ["received_amount"] = payment.Amount,
+            ["references"] = references,
+            ["remarks"] = $"AutoPartsERP supplier payment {payment.LocalPaymentId}",
+            ["docstatus"] = 1
+        };
+        if (!isCash)
+        {
+            doc["reference_no"] = string.IsNullOrWhiteSpace(payment.ReferenceNumber) ? payment.LocalPaymentId.ToString("N")[..12] : payment.ReferenceNumber;
+            doc["reference_date"] = date;
+        }
+
+        return await UpsertAsync("Payment Entry", payment.LocalPaymentId.ToString(), doc, cancellationToken);
+    }
+
+    public async Task<Result<string>> RenameDocumentAsync(string doctype, string oldName, string newName, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            "api/method/frappe.client.rename_doc",
+            new JsonObject { ["doctype"] = doctype, ["old_name"] = oldName, ["new_name"] = newName, ["merge"] = false },
+            cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return Result<string>.Success(newName);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning("ERPNext rename failed for {Doctype} {Old}->{New}: {Status} {Body}", doctype, oldName, newName, response.StatusCode, body);
+        return Result<string>.Failure(new Error("ErpNext.RenameFailed", $"{response.StatusCode}: {Truncate(body)}"));
+    }
+
+    /// <summary>The account that carries inventory value while this application (not ERPNext) owns the stock; created on first use.</summary>
+    private async Task<Result<string>> EnsureInventoryAccountAsync(CompanyInfo company, CancellationToken cancellationToken)
+    {
+        var name = $"AutoPartsERP Inventory - {company.Abbr}";
+        var probe = await _httpClient.GetAsync($"api/resource/Account/{Uri.EscapeDataString(name)}", cancellationToken);
+        if (probe.IsSuccessStatusCode)
+        {
+            return Result<string>.Success(name);
+        }
+
+        var created = await _httpClient.PostAsJsonAsync(
+            "api/resource/Account",
+            new JsonObject
+            {
+                ["account_name"] = "AutoPartsERP Inventory",
+                ["company"] = company.Name,
+                ["parent_account"] = $"Current Assets - {company.Abbr}",
+                ["is_group"] = 0,
+                ["root_type"] = "Asset",
+                ["report_type"] = "Balance Sheet"
+            },
+            cancellationToken);
+
+        if (created.IsSuccessStatusCode)
+        {
+            return Result<string>.Success(name);
+        }
+
+        var body = await created.Content.ReadAsStringAsync(cancellationToken);
+        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"Could not create the inventory account '{name}': {created.StatusCode}: {Truncate(body)}"));
+    }
+
     public async Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsJsonAsync(
@@ -213,7 +409,7 @@ public sealed class ErpNextClient : IErpNextClient
         return Result<string>.Failure(new Error("ErpNext.CancelFailed", $"{response.StatusCode}: {Truncate(body)}"));
     }
 
-    private sealed record CompanyInfo(string Name, string? ReceivableAccount, string? CashAccount, string? BankAccount);
+    private sealed record CompanyInfo(string Name, string Abbr, string? ReceivableAccount, string? PayableAccount, string? CashAccount, string? BankAccount, string? CogsAccount);
 
     private CompanyInfo? _company;
 
@@ -225,7 +421,7 @@ public sealed class ErpNextClient : IErpNextClient
             return Result<CompanyInfo>.Success(_company);
         }
 
-        var fields = Uri.EscapeDataString("[\"name\",\"default_receivable_account\",\"default_cash_account\",\"default_bank_account\"]");
+        var fields = Uri.EscapeDataString("[\"name\",\"abbr\",\"default_receivable_account\",\"default_payable_account\",\"default_cash_account\",\"default_bank_account\",\"cost_of_goods_sold_account\"]");
         var response = await _httpClient.GetAsync($"api/resource/Company?fields={fields}&limit_page_length=1", cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -239,7 +435,7 @@ public sealed class ErpNextClient : IErpNextClient
             var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
             var first = document!.RootElement.GetProperty("data").EnumerateArray().First();
             string? Read(string key) => first.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-            _company = new CompanyInfo(Read("name")!, Read("default_receivable_account"), Read("default_cash_account"), Read("default_bank_account"));
+            _company = new CompanyInfo(Read("name")!, Read("abbr") ?? string.Empty, Read("default_receivable_account"), Read("default_payable_account"), Read("default_cash_account"), Read("default_bank_account"), Read("cost_of_goods_sold_account"));
             return Result<CompanyInfo>.Success(_company);
         }
         catch (Exception ex)
@@ -297,4 +493,17 @@ public sealed class ErpNextClient : IErpNextClient
     }
 
     private static string Truncate(string value) => value.Length > 500 ? value[..500] : value;
+}
+
+internal static class ErpNextJsonExtensions
+{
+    public static JsonObject WithReturnAgainst(this JsonObject doc, string? returnAgainst)
+    {
+        if (!string.IsNullOrWhiteSpace(returnAgainst))
+        {
+            doc["return_against"] = returnAgainst;
+        }
+
+        return doc;
+    }
 }

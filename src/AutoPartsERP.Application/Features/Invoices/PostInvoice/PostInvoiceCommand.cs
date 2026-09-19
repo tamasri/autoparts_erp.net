@@ -125,93 +125,20 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
             return Result<Guid>.Failure(new Error("Invoice.NoLines", "Cannot post an invoice with no lines."));
         }
 
+        var isReturn = string.Equals(header.Type, "RETURN", StringComparison.OrdinalIgnoreCase);
         foreach (var line in lines)
         {
-            var stock = await connection.QuerySingleOrDefaultAsync<(Guid Id, decimal QuantityOnHand, decimal QuantityReserved)>(
-                new CommandDefinition(
-                    """
-                    SELECT id AS Id, quantity_on_hand AS QuantityOnHand, quantity_reserved AS QuantityReserved
-                    FROM inventory_stock
-                    WHERE sku_id = @SkuId AND location_id = @LocationId
-                    FOR UPDATE;
-                    """,
-                    new { SkuId = line.SkuId, LocationId = line.LocationId },
-                    transaction,
-                    cancellationToken: cancellationToken));
-
-            if (stock.Id == Guid.Empty || stock.QuantityOnHand < line.Quantity)
+            var moved = await InvoiceStockMover.MoveAsync(
+                connection, transaction, request.InvoiceId, line.SkuId, line.LocationId, line.BatchId, line.Quantity,
+                isReturn ? StockDirection.In : StockDirection.Out, _currentUser.UserId,
+                $"Posted invoice {request.InvoiceId}", cancellationToken);
+            if (moved.IsFailure)
             {
                 await transaction.RollbackAsync(cancellationToken);
-                return Result<Guid>.Failure(new Error("Stock.InsufficientQuantity", "Insufficient stock quantity."));
+                return Result<Guid>.Failure(moved.Error);
             }
 
-            await connection.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE inventory_stock
-                SET quantity_on_hand = quantity_on_hand - @Quantity,
-                    updated_at = now()
-                WHERE sku_id = @SkuId AND location_id = @LocationId;
-                """,
-                new { Quantity = line.Quantity, SkuId = line.SkuId, LocationId = line.LocationId },
-                transaction,
-                cancellationToken: cancellationToken));
-
-            if (line.BatchId is not null)
-            {
-                var batch = await connection.QuerySingleOrDefaultAsync<(Guid Id, decimal QuantityCurrent)>(
-                    new CommandDefinition(
-                        """
-                        SELECT id AS Id, quantity_current AS QuantityCurrent
-                        FROM batches
-                        WHERE id = @BatchId
-                        FOR UPDATE;
-                        """,
-                        new { BatchId = line.BatchId!.Value },
-                        transaction,
-                        cancellationToken: cancellationToken));
-
-                if (batch.Id != Guid.Empty)
-                {
-                    if (batch.QuantityCurrent < line.Quantity)
-                    {
-                        await transaction.RollbackAsync(cancellationToken);
-                        return Result<Guid>.Failure(new Error("Stock.InsufficientQuantity", "Insufficient batch quantity."));
-                    }
-
-                    await connection.ExecuteAsync(new CommandDefinition(
-                        "UPDATE batches SET quantity_current = quantity_current - @Quantity, status = CASE WHEN quantity_current - @Quantity = 0 THEN 'DEPLETED' ELSE status END WHERE id = @BatchId;",
-                        new { Quantity = line.Quantity, BatchId = line.BatchId!.Value },
-                        transaction,
-                        cancellationToken: cancellationToken));
-                }
-            }
-
-            // batch_movements.batch_id is NOT NULL: only batch-tracked lines have a batch movement to record.
-            if (line.BatchId is not null)
-            {
-                await connection.ExecuteAsync(new CommandDefinition(
-                    """
-                    INSERT INTO batch_movements (
-                        id, batch_id, movement_type, quantity, direction, reference_type, reference_id,
-                        from_location_id, to_location_id, unit_cost_syp, unit_cost_usd, performed_by, notes, created_at)
-                    VALUES (@Id, @BatchId, 'INVOICE_OUT', @Quantity, 'OUT', 'INVOICE', @ReferenceId,
-                        @LocationId, NULL, 0, 0, @PerformedBy, @Notes, now());
-                    """,
-                    new
-                    {
-                        Id = Guid.NewGuid(),
-                        BatchId = line.BatchId,
-                        Quantity = line.Quantity,
-                        ReferenceId = request.InvoiceId,
-                        LocationId = line.LocationId,
-                        PerformedBy = _currentUser.UserId,
-                        Notes = $"Posted invoice {request.InvoiceId}"
-                    },
-                    transaction,
-                    cancellationToken: cancellationToken));
-            }
-
-            if (line.HasWarranty)
+            if (!isReturn && line.HasWarranty)
             {
                 await connection.ExecuteAsync(new CommandDefinition(
                     """

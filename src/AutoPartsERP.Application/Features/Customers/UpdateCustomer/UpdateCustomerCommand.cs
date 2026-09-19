@@ -76,13 +76,31 @@ public sealed class UpdateCustomerCommandHandler : IRequestHandler<UpdateCustome
         AddParameter(command, "Notes", (object?)request.Request.Notes?.Trim() ?? DBNull.Value);
         AddParameter(command, "UpdatedBy", _currentUser.UserId);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        CustomerDto dto;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            return Result<CustomerDto>.Failure(new Error("Customer.NotFound", "Customer was not found."));
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return Result<CustomerDto>.Failure(new Error("Customer.NotFound", "Customer was not found."));
+            }
+
+            dto = MapCustomer(reader);
         }
 
-        return Result<CustomerDto>.Success(MapCustomer(reader));
+        // The party display name is the customer name ERPNext is given; keep it equal to the customer's name so the next
+        // accounting sync renames the ERPNext customer instead of creating a second one.
+        await using var partyCommand = connection.CreateCommand();
+        partyCommand.CommandText = """
+            UPDATE parties
+            SET display_name = @Name, display_name_ar = @Name, updated_at = now(), updated_by = @UpdatedBy
+            WHERE id = (SELECT party_id FROM customers WHERE id = @Id) AND display_name <> @Name;
+            """;
+        AddParameter(partyCommand, "Id", request.CustomerId);
+        AddParameter(partyCommand, "Name", request.Request.Name.Trim());
+        AddParameter(partyCommand, "UpdatedBy", _currentUser.UserId);
+        await partyCommand.ExecuteNonQueryAsync(cancellationToken);
+
+        return Result<CustomerDto>.Success(dto);
     }
 
     private static async Task EnsureOpenAsync(DbConnection connection, CancellationToken cancellationToken)

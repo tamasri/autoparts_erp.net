@@ -79,6 +79,22 @@ public sealed class SyncCatalogToErpNextJob
                     continue;
                 }
 
+                var doctype = typeCode == PartyTypeCodes.Customer ? "Customer" : "Supplier";
+
+                // ERPNext identifies a customer/supplier by name. If the name changed here since the last sync, rename the
+                // existing ERPNext record (its invoices and payments follow) instead of creating a second one.
+                var syncedName = await ErpNextSyncLogWriter.FindSyncedNameAsync(connection, "Party", party.Id, doctype, cancellationToken);
+                if (syncedName is not null && !string.Equals(syncedName, party.DisplayName, StringComparison.Ordinal))
+                {
+                    var renamed = await _erpNextClient.RenameDocumentAsync(doctype, syncedName, party.DisplayName, cancellationToken);
+                    if (renamed.IsFailure)
+                    {
+                        await ErpNextSyncLogWriter.WriteAsync(connection, "Party", party.Id, doctype, syncedName, ErpNextSyncLogWriter.Failed,
+                            $"Rename to '{party.DisplayName}' failed: {renamed.Error.Message}", cancellationToken);
+                        continue;
+                    }
+                }
+
                 var result = await _erpNextClient.SyncPartyAsync(
                     new ErpNextPartySync(party.Id, party.DisplayName, typeCode, party.TaxNumber),
                     cancellationToken);
@@ -93,8 +109,15 @@ public sealed class SyncCatalogToErpNextJob
             """
             SELECT i.id
             FROM invoices i
-            LEFT JOIN erpnext_sync_log l ON l.local_entity_type = 'Invoice' AND l.local_entity_id = i.id AND l.erpnext_doctype = 'Sales Invoice'
-            WHERE i.status = 'POSTED' AND i.invoice_type = 'SALE' AND (l.id IS NULL OR l.status <> 'SYNCED')
+            WHERE i.status = 'POSTED' AND i.invoice_type IN ('SALE', 'RETURN')
+              AND (
+                    NOT EXISTS (SELECT 1 FROM erpnext_sync_log l
+                                WHERE l.local_entity_type = 'Invoice' AND l.local_entity_id = i.id
+                                  AND l.erpnext_doctype = 'Sales Invoice' AND l.status = 'SYNCED')
+                 OR NOT EXISTS (SELECT 1 FROM erpnext_sync_log l
+                                WHERE l.local_entity_type = 'Invoice' AND l.local_entity_id = i.id
+                                  AND l.erpnext_doctype = 'Journal Entry' AND l.status IN ('SYNCED', 'SKIPPED', 'CANCELLED'))
+                  )
             ORDER BY i.invoice_date, i.created_at;
             """,
             cancellationToken: cancellationToken));

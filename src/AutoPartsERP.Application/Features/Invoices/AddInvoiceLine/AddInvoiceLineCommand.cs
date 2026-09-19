@@ -112,10 +112,10 @@ public sealed class AddInvoiceLineCommandHandler : IRequestHandler<AddInvoiceLin
         await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE invoices
-            SET subtotal_syp = COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
-                subtotal_usd = COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
-                total_syp = COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_syp + delivery_fee_syp + tax_amount_syp,
-                total_usd = COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_usd + delivery_fee_usd + tax_amount_usd,
+            SET subtotal_syp = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
+                subtotal_usd = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
+                total_syp = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * (COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_syp + delivery_fee_syp + tax_amount_syp),
+                total_usd = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * (COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_usd + delivery_fee_usd + tax_amount_usd),
                 updated_at = now(),
                 updated_by = @UpdatedBy
             WHERE id = @InvoiceId;

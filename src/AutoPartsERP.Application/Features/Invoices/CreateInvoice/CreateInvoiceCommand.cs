@@ -124,9 +124,9 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
         var lineNumber = 1;
         foreach (var line in request.Lines)
         {
-            var sku = await connection.QuerySingleOrDefaultAsync<(Guid Id, string Code, string Name, string NameAr, decimal MinSellingPriceSyp, decimal MinSellingPriceUsd)>(
+            var sku = await connection.QuerySingleOrDefaultAsync<(Guid Id, string Code, string Name, string NameAr, decimal MinSellingPriceSyp, decimal MinSellingPriceUsd, decimal CostSyp, decimal CostUsd)>(
                 new CommandDefinition(
-                    "SELECT id AS Id, code AS Code, name AS Name, name_ar AS NameAr, min_selling_price_syp AS MinSellingPriceSyp, min_selling_price_usd AS MinSellingPriceUsd FROM skus WHERE id = @SkuId;",
+                    "SELECT id AS Id, code AS Code, name AS Name, name_ar AS NameAr, min_selling_price_syp AS MinSellingPriceSyp, min_selling_price_usd AS MinSellingPriceUsd, cost_price_syp AS CostSyp, cost_price_usd AS CostUsd FROM skus WHERE id = @SkuId;",
                     new { line.SkuId },
                     transaction,
                     cancellationToken: cancellationToken));
@@ -149,6 +149,19 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                 return Result<InvoiceDto>.Failure(new Error("Invoice.OverrideReasonRequired", "Price override reason is required."));
             }
 
+            // Cost drives cost of goods sold and margin: use the batch's own cost when the line names a batch, else the SKU cost.
+            var cost = (Syp: sku.CostSyp, Usd: sku.CostUsd);
+            if (line.BatchId is not null)
+            {
+                var batchCost = await connection.QuerySingleOrDefaultAsync<(decimal Syp, decimal Usd)?>(new CommandDefinition(
+                    "SELECT cost_price_syp AS Syp, cost_price_usd AS Usd FROM batches WHERE id = @BatchId;",
+                    new { BatchId = line.BatchId }, transaction, cancellationToken: cancellationToken));
+                if (batchCost is { } bc && (bc.Syp > 0 || bc.Usd > 0))
+                {
+                    cost = (bc.Syp, bc.Usd);
+                }
+            }
+
             await connection.ExecuteAsync(new CommandDefinition(
                 """
                 INSERT INTO invoice_lines (
@@ -157,7 +170,7 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                     fx_rate_used, is_price_override, price_override_reason, created_at)
                 VALUES (
                     @Id, @InvoiceId, @LineNumber, @SkuId, @BatchId, @LocationId, @Description, @Quantity,
-                    @UnitPriceSyp, @UnitPriceUsd, @DiscountPct, 0, 0, @FxRateUsed, @IsPriceOverride, @OverrideReason, now());
+                    @UnitPriceSyp, @UnitPriceUsd, @DiscountPct, @CostSyp, @CostUsd, @FxRateUsed, @IsPriceOverride, @OverrideReason, now());
                 """,
                 new
                 {
@@ -172,6 +185,8 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                     line.UnitPriceSyp,
                     line.UnitPriceUsd,
                     line.DiscountPct,
+                    CostSyp = cost.Syp,
+                    CostUsd = cost.Usd,
                     FxRateUsed = fxRate.MidRate,
                     line.IsPriceOverride,
                     OverrideReason = line.OverrideReason
@@ -184,10 +199,10 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
         await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE invoices
-            SET subtotal_syp = COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
-                subtotal_usd = COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
-                total_syp = COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_syp + delivery_fee_syp + tax_amount_syp,
-                total_usd = COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_usd + delivery_fee_usd + tax_amount_usd,
+            SET subtotal_syp = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
+                subtotal_usd = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
+                total_syp = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * (COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_syp + delivery_fee_syp + tax_amount_syp),
+                total_usd = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * (COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_usd + delivery_fee_usd + tax_amount_usd),
                 updated_at = now(),
                 updated_by = @UpdatedBy
             WHERE id = @InvoiceId;

@@ -45,7 +45,7 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
         var invoice = await connection.QuerySingleOrDefaultAsync<VoidRow>(
             new CommandDefinition(
                 """
-                SELECT id AS Id, customer_id AS CustomerId, invoice_date AS InvoiceDate, total_syp AS TotalSyp, total_usd AS TotalUsd, paid_syp AS PaidSyp, paid_usd AS PaidUsd, status AS Status
+                SELECT id AS Id, invoice_type AS Type, customer_id AS CustomerId, invoice_date AS InvoiceDate, total_syp AS TotalSyp, total_usd AS TotalUsd, paid_syp AS PaidSyp, paid_usd AS PaidUsd, status AS Status
                 FROM invoices
                 WHERE id = @InvoiceId
                 FOR UPDATE;
@@ -70,6 +70,26 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.HasAllocations", "Cannot void an invoice that has payment allocations."));
+        }
+
+        // Undo the stock effect of the posting: a voided sale returns its goods, a voided customer return takes them back out.
+        var voidLines = (await connection.QueryAsync<VoidLine>(new CommandDefinition(
+            "SELECT sku_id AS SkuId, location_id AS LocationId, batch_id AS BatchId, quantity AS Quantity FROM invoice_lines WHERE invoice_id = @InvoiceId;",
+            new { request.InvoiceId },
+            transaction,
+            cancellationToken: cancellationToken))).ToList();
+        var wasReturn = string.Equals(invoice.Type, "RETURN", StringComparison.OrdinalIgnoreCase);
+        foreach (var l in voidLines)
+        {
+            var moved = await InvoiceStockMover.MoveAsync(
+                connection, transaction, request.InvoiceId, l.SkuId, l.LocationId, l.BatchId, l.Quantity,
+                wasReturn ? StockDirection.Out : StockDirection.In, _currentUser.UserId,
+                $"Voided invoice {request.InvoiceId}", cancellationToken);
+            if (moved.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(moved.Error);
+            }
         }
 
         var reversalId = Guid.NewGuid();
@@ -155,5 +175,7 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
         return Result<Guid>.Success(reversalId);
     }
 
-    private sealed record VoidRow(Guid Id, Guid CustomerId, DateOnly InvoiceDate, decimal TotalSyp, decimal TotalUsd, decimal PaidSyp, decimal PaidUsd, string Status);
+    private sealed record VoidLine(Guid SkuId, Guid LocationId, Guid? BatchId, decimal Quantity);
+
+    private sealed record VoidRow(Guid Id, string Type, Guid CustomerId, DateOnly InvoiceDate, decimal TotalSyp, decimal TotalUsd, decimal PaidSyp, decimal PaidUsd, string Status);
 }
