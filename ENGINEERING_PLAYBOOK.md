@@ -46,6 +46,12 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
   push. Before pushing: `dotnet build`, `dotnet test tests/AutoPartsERP.UnitTests`, and for frontend work
   `npx tsc --noEmit && npm run build`. After pushing: `gh run list` and fix a red run before anything else.
   Integration tests need Docker (Testcontainers) and only run in CI on machines without it.
+- **CI does not run your SQL [convention — read this].** Integration tests use the `Testing` environment (no migrations,
+  no seeding) and only assert auth/health, so a green run says nothing about a new query, migration or job. Before pushing a
+  data-layer change: start the dev stack (`docker compose -f docker-compose.dev.yml up -d postgres redis`), run the API in
+  Development, log in as the seeded admin and call every endpoint you added or changed — including the write paths, the
+  governed (maker-checker) paths and an empty-parameter call. Extending the integration tests to seed and hit real endpoints is
+  the durable fix (backlog D8).
 - **No flaky tests.** A test may not depend on timing of an internal exporter or on test order. (The metrics
   endpoint test failed intermittently for that reason and now asserts only what is deterministic.)
 - **Never commit secrets [convention + .gitignore]:** `appsettings.Development.json`, `*password*.txt`,
@@ -62,7 +68,13 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
   `IAuditableRequest` (+`AuditModule`). Never reimplement in handlers. An approved maker-checker request is
   replayed through the same pipeline with the approval check bypassed (`IApprovalReplayContext`) — do not add
   side paths.
-- **Result pattern:** business outcomes return `Result`/`Result<T>` with `Error(code, message)`.
+- **Result pattern:** business outcomes return `Result`/`Result<T>` with `Error(code, message)`. Pipeline behaviors
+  short-circuit through `ResultFactory`, which supports exactly those two shapes — never return another type from a command.
+- **Identity:** read the caller through `ICurrentUser` (the `sub` claim; `MapInboundClaims=false`). Never trust a `Guid.Empty`
+  user id: all-zero `created_by`/`requested_by` values mean the identity plumbing is broken.
+- **EF entities with domain-generated Guid ids** need `ValueGeneratedNever()` in their configuration.
+- **Maker-checker requests** must populate every NOT NULL column of `approval_requests` (both column generations), and the
+  requester cannot review their own request unless `Governance:AllowSelfApproval` is true.
 - **Reads (Dapper):** snake_case SQL, **always alias columns** to the DTO property, and make the CLR type match the
   column exactly (`DateOnly` for `date`, `DateTimeOffset` for `timestamptz`; handlers are in
   `DapperTypeHandlers`). A positional-record constructor that cannot be matched fails silently at runtime as a 500.
@@ -72,6 +84,10 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
   use update-then-insert or a partial index.
 - **Migrations:** raw SQL in `Persistence/Migrations`, next sequential id, additive, never edit an applied one;
   test on an empty database (the seeder and demo data run on boot).
+- **Optional query parameters must be nullable** (`int? page`, `bool? includeInactive`) with defaults applied in the handler call;
+  a required non-nullable minimal-API parameter that is missing surfaces as a 500.
+- **Idempotency & response storage:** columns that persist serialized responses are `text`. A `varchar(100)` here made
+  successful writes return 500 after commit.
 - **Endpoints** are thin Carter modules: bind input, `sender.Send(...)`, `result.ToApiResult()`. Lists take
   `page`/`pageSize` (clamp to 100) and return `PagedResponse<T>` (`items`, `pageNumber`, `pageSize`, `totalCount`).
 - **Async everywhere**, thread `CancellationToken`.

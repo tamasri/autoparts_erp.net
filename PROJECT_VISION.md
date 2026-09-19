@@ -46,7 +46,7 @@
 | API host | ASP.NET Core Minimal APIs + **Carter** modules (~28) | `Api/Modules/*` |
 | CQRS | **MediatR 12** behaviors: Validation → Authorization → Idempotency → PeriodLock → MakerChecker | `Program.cs` |
 | Validation / mapping | FluentValidation 11, Mapster | |
-| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (12) | `Persistence/Migrations` |
+| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (14) | `Persistence/Migrations` |
 | Reads | **Dapper 2** on snake_case tables + `DapperTypeHandlers` (`DateOnly`, `DateTimeOffset`) | |
 | Database | **PostgreSQL 16** (`ltree`, `pg_trgm`, `uuid-ossp`; `pgvector` for embeddings) | On the VPS it runs on the host |
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
@@ -64,7 +64,7 @@
 | Frontend data | shared `api/client.ts` + typed `api/endpoints/*`; `usePagedList` hook + `<Pagination>` | **Not TanStack Query** |
 | Reverse proxy / TLS | nginx in Docker; self-signed cert on the IP until a domain exists | |
 | CI | GitHub Actions: build + unit + integration tests; deploy job gated on secrets | GREEN |
-| Tests | UnitTests (31), IntegrationTests (25, need Docker), E2ETests (empty project) | |
+| Tests | UnitTests (32), IntegrationTests (25, need Docker; auth/health only — they do not run SQL), E2ETests (empty project) | |
 
 **Listed in a manifest but unused (dead weight — remove after the AI/e-mail decisions):**
 `@mui/material`, `@mui/x-data-grid`, `@tanstack/react-query`, `@tanstack/react-table`, `react-hook-form`, `zod`,
@@ -86,7 +86,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | Domain | Backend | Frontend | Status |
 |---|---|---|---|
 | Auth | Login/refresh/logout/me | `Login.tsx`, `authStore` | ✅ |
-| Dashboard / KPIs | `/kpi/admin/*` definitions only | `Dashboard.tsx`, `KpiDashboard.tsx` | ⚠️ numbers computed in-browser from a page sample |
+| Dashboard / KPIs | **`GET /dashboard/summary`** (server-aggregated) + `/kpi/admin/*` definitions | `Dashboard.tsx` (cards, 30-day chart, recent invoices, top customers), `KpiDashboard.tsx` | ✅ |
 | Users | CRUD + roles endpoints | list only (paged, searchable) | 🟡 no create/edit forms |
 | Roles & permissions | create, grant/revoke | list/partial | 🟡 |
 | Approvals (maker-checker) | pending/approve/reject **+ replay executes the request** | `Approvals.tsx` (paged) | ✅ |
@@ -111,7 +111,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | Reports | P&L, inventory value (+Excel), batch trace, account statement | — | 🟡 |
 | Barcodes | scan, generate item/batch codes | — | 🟡 (no scanner UI) |
 | **ERPNext accounting sync** | trigger, paged log, summary | `AccountingSync.tsx` | ✅ (items, customers, suppliers, sales invoices) |
-| **AI assistant / suggestions / KB** | see §6 | — | ⚠️ **stub** |
+| **AI assistant / suggestions / KB** | see §6 | — | 🔴 not implemented (chat now returns an explicit "not configured" error) |
 | Realtime notifications | `ErpHub` | signalr client in one place | 🟡 |
 | Purchase invoices, bank/cash accounts, POS, public invoice link, e-mail/SMS, CRM extras, backups | — | — | 🔴 |
 
@@ -164,16 +164,26 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] **D5 — Secrets exposed in past chats** (DB password, JWT keys, ERPNext `Administrator` = `admin`): rotate.
 - [ ] **D6 — Scalar/OpenAPI mapped in every environment**: map only in Development or gate by role.
 - [ ] **D7 — Unpaged list screens** (receiving, transfers, cycle counts, adjustments, issue orders, FX rates).
-- [ ] **D8 — Integration tests need Docker**; add a CI-independent smoke test for the deployed stack.
+- [ ] **D8 — CI does not exercise SQL.** Make the integration tests migrate + seed a Testcontainers database and hit the
+      real endpoints (login → dashboard/items/approvals flows) so a green run means something. Until then, local verification
+      on real Postgres is mandatory (see ENGINEERING_PLAYBOOK §2.1).
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
 
-#### PHASE 0 — Correctness fixes  · `Status: Not Started`
-- [ ] Server-side KPI/dashboard aggregation endpoints (receivables, stock counts, sales by period); rewire
-      `Dashboard.tsx` and `KpiDashboard.tsx`; remove in-browser totals.
-- [ ] `AccountingCheckJob`: implement for real (SQL rules) or disable — no more fake "completed".
-- [ ] Label the current AI chat as unavailable until Phase 6 (do not present an echo as intelligence).
+#### PHASE 0 — Correctness fixes  · `Status: Completed (verified locally on real Postgres; pending deploy)`
+- [x] Server-side dashboard aggregation (`GET /api/v1/dashboard/summary`); `Dashboard.tsx` and `KpiDashboard.tsx` rewired; no
+      in-browser totals remain.
+- [x] `AccountingCheckJob` implemented for real (overdue invoices, customers over credit limit, unallocated receipts, ERPNext
+      sync failures / unsynced invoices); it records the actual findings, or FAILED with the error.
+- [x] AI chat returns an explicit `Ai.ProviderNotConfigured` error instead of echoing the user's text.
+- [x] **Found by local verification and fixed** (all were shipped, CI-green and broken): the idempotency layer returned 500
+      after a successful write (`response_code varchar(100)`, migration 11); the `ItemInterchange` insert was invalid SQL; every
+      maker-checker submission failed (NOT NULL columns not populated); the approvals list threw on NULL `entity_id`
+      (migration 12); approving threw `DbUpdateConcurrencyException` (`ValueGeneratedNever`); `Result`-returning commands turned
+      validation/permission/approval outcomes into 500 (`ResultFactory`); the JWT `sub` claim was remapped so **every request ran
+      as `Guid.Empty`** (`MapInboundClaims=false`); the requester could approve their own request
+      (`Governance:AllowSelfApproval`, default off).
 
 #### PHASE 1 — Accounting core  · `Status: Not Started`
 - [ ] Payments screen (create, partial/multiple, allocate, reverse) + sync as ERPNext Payment Entry.

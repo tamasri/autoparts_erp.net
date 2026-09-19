@@ -71,7 +71,7 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md).
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~28 Carter modules; 12 raw-SQL migrations (ids `202401010000xx`); 60+ tables.
+- ~28 Carter modules; 14 raw-SQL migrations (later ones use ids `202401010000NN`); 60+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
@@ -89,12 +89,11 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md).
   runs when the VPS secrets are configured (they are not yet, so CI is build/test only) and it is GREEN.
 
 **What is stubbed or missing (do not assume it works):**
-- **AI is a stub.** `AiService.ChatAsync` echoes the user's message; nothing generates suggestions;
-  `AccountingCheckJob` writes a fake "completed" row; no screen calls `/ai/*`. See PROJECT_VISION §6.
+- **AI is not implemented.** `AiService.ChatAsync` now returns an explicit `Ai.ProviderNotConfigured` error (it used to
+  echo the user's text); nothing generates suggestions; no screen calls `/ai/*`. See PROJECT_VISION §6.
 - Backend with no screen: AI, Payments, Warranty, Reports, Barcodes, Catalog categories, batches, user/role
   editors, reason codes. Tables with no API: `party_contacts`, `party_addresses`, `party_notes`,
   `attribute_schemas`, `item_reorder_settings`, `barcode_scan_logs`.
-- Dashboard/KPI numbers are computed in the browser from a sample page — wrong at scale (Phase 0 fix).
 - No purchase invoices, bank/cash accounts, POS, public invoice links, e-mail/SMS, CRM extras, backups UI.
 
 **Bootstrap admin:** created once by `DatabaseSeeder` from `Seed:AdminEmail/AdminUsername/AdminPassword`.
@@ -120,10 +119,11 @@ In Production the app refuses to start without a real password (the deploy scrip
 
 ## 4. Environment Quirks (all found the hard way)
 
-1. **Dev ports:** API `http://localhost:5000`; Vite `5173` (its proxy targets `localhost:5000` for `/api`, `/hubs`);
-   dev Docker infra: Postgres 5432, Redis 6379, Seq 5341, pgAdmin 5050 (`docker-compose.dev.yml`).
-2. **Dev DB:** `Host=localhost;Port=5432;Database=autoparts_erp;Username=erp_user;Password=erp_secret_dev`
-   (dev compose only). Production credentials come from `.env.vps`.
+1. **Dev ports (deliberately unusual, to coexist with other projects on the same machine):** API
+   `http://localhost:47000`; Vite `47173` (its proxy targets `localhost:47000` for `/api`, `/hubs`); dev Docker infra
+   (`docker-compose.dev.yml`): Postgres **47432**, Redis **47379**, Seq UI 47341 (ingest 47342), pgAdmin 47050.
+2. **Dev DB:** `Host=localhost;Port=47432;Database=autoparts_erp;Username=erp_user` (password in the dev compose and
+   the git-ignored `appsettings.Development.json`). Production credentials come from `.env.vps`.
 3. **Postgres extensions:** `uuid-ossp`, `pg_trgm`, `ltree` are required; `vector` (pgvector) is needed for
    embeddings — see `EnsureRequiredExtensions`. On the VPS, Postgres is on the host, so extensions must be
    installed there.
@@ -161,3 +161,18 @@ In Production the app refuses to start without a real password (the deploy scrip
 17. **Local secrets/noise:** `ADMIN PASSWORD.txt`, `*password*.txt`, `appsettings.Development.json`,
     `scripts/logs/`, `*_run_*.log` are git-ignored. One of them was committed once and had to be purged — check
     `git status` before every commit.
+18. **Verify data-layer changes against a real Postgres, locally.** CI does not execute your SQL: integration tests run in
+    `Testing` (no migrations, no seeding) and only check auth/health. Start the dev stack
+    (`docker compose -f docker-compose.dev.yml up -d postgres redis`, needs Docker Desktop), run the API in
+    Development, log in as the seeded admin and call the endpoints you touched. This caught seven shipped-but-broken
+    features in one session (see PROJECT_VISION §5.2, Phase 0).
+19. **Identity claims:** JwtBearer runs with `MapInboundClaims = false`, so the user id is the `sub` claim
+    (`CurrentUserService` also falls back to `NameIdentifier`). With the default mapping `UserId` was `Guid.Empty`
+    and every `created_by`, audit and approval row belonged to nobody.
+20. **Pipeline failures need a matching return type.** `ResultFactory.Failure<TResponse>` supports `Result` and
+    `Result<T>`; anything else throws and becomes a 500 instead of a 400/403/202.
+21. **Maker-checker:** `Governance:AllowSelfApproval` (env `GOVERNANCE_ALLOW_SELF_APPROVAL`, default `false`) decides
+    whether the requester may review their own request. With a single operator nobody could approve anything, so set
+    it `true` only until a second approver user exists. The approvals list hides your own requests unless it is true.
+22. **EF + client-generated Guid keys:** configure `ValueGeneratedNever()`; otherwise a new child added through a tracked
+    navigation is written as UPDATE and `SaveChanges` throws `DbUpdateConcurrencyException`.

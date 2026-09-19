@@ -30,24 +30,29 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1     # switche
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # Postgres 16, Redis 7, Seq, pgAdmin
 dotnet restore AutoPartsERP.sln --configfile NuGet.Config
-dotnet run --project src/AutoPartsERP.Api --launch-profile Development     # http://localhost:5000
-cd frontend && npm install && npm run dev                                   # http://localhost:5173
+dotnet run --project src/AutoPartsERP.Api --launch-profile Development     # http://localhost:47000
+cd frontend && npm install && npm run dev                                   # http://localhost:47173
 ```
 
 | Surface | URL |
 |---|---|
-| API / Scalar / OpenAPI | `http://localhost:5000` · `/scalar/v1` · `/openapi/v1.json` |
+| API / Scalar / OpenAPI | `http://localhost:47000` · `/scalar/v1` · `/openapi/v1.json` |
 | Health / Metrics | `/health`, `/health/live`, `/health/ready` · `/metrics` |
 | Hangfire | `/hangfire` (needs a `SYSTEM_ADMIN` **Bearer** token — a plain browser gets 401) |
-| SignalR | `ws://localhost:5000/hubs/erp` |
-| Seq / pgAdmin | `:5341` / `:5050` |
+| SignalR | `ws://localhost:47000/hubs/erp` |
+| Frontend | `http://localhost:47173` |
+| Postgres / Redis | `localhost:47432` / `localhost:47379` |
+| Seq UI / pgAdmin | `:47341` / `:47050` |
 
 **Bootstrap admin.** Created once by `DatabaseSeeder` from `Seed:AdminEmail`, `Seed:AdminUsername`,
-`Seed:AdminPassword` (env: `Seed__AdminPassword`, …). In **Development** a fallback exists so a fresh checkout works; in
+`Seed:AdminPassword` (env: `Seed__AdminPassword`, …). In **Development** a fallback (in `DatabaseSeeder`) exists so a fresh checkout works; in
 **Production** the API refuses to start without a real password. There is no shared default password.
 
 **Migrations** auto-apply on startup outside `Testing`. They are raw SQL (`Persistence/Migrations`, ids
 `202401010000NN`); to add one, create the next numbered class — see ENGINEERING_PLAYBOOK §2.2.
+
+**Local verification stack.** `docker compose -f docker-compose.dev.yml up -d postgres redis` (only what the API needs; other
+containers on the machine are not touched), then run the API in Development and exercise your endpoints with the seeded admin.
 
 **Tests.** `dotnet test tests/AutoPartsERP.UnitTests` runs anywhere. `IntegrationTests` need Docker (Testcontainers);
 CI runs them. Frontend: `cd frontend && npx tsc --noEmit && npm run build`.
@@ -95,7 +100,7 @@ If `git pull` complains about local changes on the server, look at them (`git di
 
 ### 3.3 `.env.vps` keys (values are secrets — never share)
 `POSTGRES_HOST/PORT/DB/USER/PASSWORD`, `REDIS_PASSWORD`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `ALLOWED_ORIGINS`,
-`SEED_ADMIN_EMAIL/USERNAME/PASSWORD`, `ERPNEXT_ENABLED`, `ERPNEXT_BASE_URL` (`http://host.docker.internal:8080`),
+`SEED_ADMIN_EMAIL/USERNAME/PASSWORD`, `GOVERNANCE_ALLOW_SELF_APPROVAL` (default `false`; see AGENT_ONBOARDING §4.21), `ERPNEXT_ENABLED`, `ERPNEXT_BASE_URL` (`http://host.docker.internal:8080`),
 `ERPNEXT_API_KEY`, `ERPNEXT_API_SECRET`. Enter API keys **directly on the server**; verify without printing them
 (`grep -c PASTE_ .env.vps` should be `0`). Planned additions: `AI_*` (provider, base URL, model, key), `SMTP_*`,
 `BACKUP_*`.
@@ -130,6 +135,9 @@ If `git pull` complains about local changes on the server, look at them (`git di
 | Locked out over SSH | SSH hardening applied without a working key | use the provider's VNC console to revert `PermitRootLogin`/`PasswordAuthentication`; multi-line paste into noVNC corrupts text |
 | ERPNext rejects a customer | group-type link (`All Customer Groups`) | use leaf groups (`Commercial`, `Rest Of The World`, `Local`) |
 | CI red on a test that passed before | timing-dependent test | make it deterministic (see the metrics test) |
+| A write returns 500 but the row was created | the idempotency layer failed after commit (`response_code` was `varchar(100)`) | fixed by migration 11; keep response columns `text` |
+| Approvals list empty / posting an invoice or stop-ship never completes | maker-checker: requester cannot review own request | log in as a second approver, or set `GOVERNANCE_ALLOW_SELF_APPROVAL=true` temporarily |
+| `/auth/me` says user not found; audit rows show an all-zero user id | JWT `sub` remapped, `UserId` = `Guid.Empty` | `MapInboundClaims = false` (fixed) |
 
 ---
 
