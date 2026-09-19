@@ -22,6 +22,7 @@ export type CreateReceivingDocument = {
 export const receivingApi = {
   list: (page = 1, pageSize = 20) =>
     apiClient.get('/receiving', { params: { page, pageSize } }),
+  get: (id: string) => apiClient.get(`/receiving/${id}`),
   create: (body: CreateReceivingDocument) =>
     apiClient.post('/receiving', body),
   addLine: (id: string, body: ReceivingLine) =>

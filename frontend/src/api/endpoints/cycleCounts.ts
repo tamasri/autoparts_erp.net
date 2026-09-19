@@ -15,6 +15,7 @@ export type RecordCycleCountLine = {
 export const cycleCountsApi = {
   list: (page = 1, pageSize = 20) =>
     apiClient.get('/cycle-counts', { params: { page, pageSize } }),
+  get: (id: string) => apiClient.get(`/cycle-counts/${id}`),
   create: (body: CreateCycleCountPlan) =>
     apiClient.post('/cycle-counts', body),
   record: (id: string, lines: RecordCycleCountLine[]) =>

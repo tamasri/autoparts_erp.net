@@ -1,12 +1,12 @@
 namespace AutoPartsERP.Application.Features.Transfers;
 
 public sealed record GetTransferRequestsQuery(int PageNumber = 1, int PageSize = 20)
-    : IRequest<Result<PagedResponse<object>>>, IAuthorizedRequest
+    : IRequest<Result<PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>>>, IAuthorizedRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.Read;
 }
 
-public sealed class GetTransferRequestsQueryHandler : IRequestHandler<GetTransferRequestsQuery, Result<PagedResponse<object>>>
+public sealed class GetTransferRequestsQueryHandler : IRequestHandler<GetTransferRequestsQuery, Result<PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
@@ -15,35 +15,34 @@ public sealed class GetTransferRequestsQueryHandler : IRequestHandler<GetTransfe
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<Result<PagedResponse<object>>> Handle(GetTransferRequestsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>>> Handle(GetTransferRequestsQuery request, CancellationToken cancellationToken)
     {
         var pageNumber = request.PageNumber <= 0 ? 1 : request.PageNumber;
         var pageSize = request.PageSize <= 0 ? 20 : Math.Min(request.PageSize, 100);
 
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync(
+        var rows = (await connection.QueryAsync<Row>(
             new CommandDefinition(
                 """
-                SELECT
-                    id,
-                    source_warehouse_id AS sourceWarehouseId,
-                    destination_warehouse_id AS destinationWarehouseId,
-                    status,
-                    requested_by AS requestedBy,
-                    approved_by AS approvedBy,
-                    approval_id AS approvalId,
-                    notes,
-                    created_at AS createdAt
+                SELECT id AS Id, source_warehouse_id AS SourceWarehouseId, destination_warehouse_id AS DestinationWarehouseId,
+                       status AS Status, requested_by AS RequestedBy, approved_by AS ApprovedBy, notes AS Notes,
+                       created_at AS CreatedAt, COUNT(*) OVER() AS TotalCount
                 FROM transfer_requests
                 ORDER BY created_at DESC
                 OFFSET @Offset LIMIT @PageSize;
                 """,
                 new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
-                cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken))).ToArray();
 
-        var items = rows.Cast<object>().ToArray();
-        return Result<PagedResponse<object>>.Success(new PagedResponse<object>(items, pageNumber, pageSize, items.LongLength));
+        var items = rows.Select(x => new AutoPartsERP.Contracts.Wms.TransferRequestListDto(
+            x.Id, x.SourceWarehouseId, x.DestinationWarehouseId, x.Status, x.RequestedBy, x.ApprovedBy, x.Notes, x.CreatedAt)).ToArray();
+        return Result<PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>>.Success(
+            new PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>(items, pageNumber, pageSize, rows.Length == 0 ? 0 : rows[0].TotalCount));
     }
+
+    private sealed record Row(
+        Guid Id, Guid SourceWarehouseId, Guid DestinationWarehouseId, string Status, Guid RequestedBy, Guid? ApprovedBy,
+        string? Notes, DateTimeOffset CreatedAt, long TotalCount);
 }
 
 public sealed record CreateTransferRequestCommand(

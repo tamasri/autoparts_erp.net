@@ -18,6 +18,7 @@ export type CreateIssueOrder = {
 export const issueOrdersApi = {
   list: (page = 1, pageSize = 20) =>
     apiClient.get('/issue-orders', { params: { page, pageSize } }),
+  get: (id: string) => apiClient.get(`/issue-orders/${id}`),
   create: (body: CreateIssueOrder) =>
     apiClient.post('/issue-orders', body),
   generatePickTasks: (id: string) =>

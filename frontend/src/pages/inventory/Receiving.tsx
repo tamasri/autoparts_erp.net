@@ -1,117 +1,159 @@
-import { useEffect, useState } from 'react';
-import { receivingApi, type CreateReceivingDocument } from '../../api/endpoints/receiving';
-import { unwrapList } from '../../api/apiData';
+import { Fragment, useCallback, useState } from 'react';
+import { receivingApi, type ReceivingLine } from '../../api/endpoints/receiving';
+import { partiesApi } from '../../api/endpoints/parties';
+import { unwrapList, unwrapNode, unwrapPaged } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import { useLocationNames } from '../../hooks/useLocationNames';
 import { toast, extractApiError } from '../../lib/toast';
+import { notifyResult } from '../../lib/notify';
+import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
+import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
+import LocationSelect from '../../components/pickers/LocationSelect';
+import WmsLinesEditor, { type WmsLine } from '../../components/wms/WmsLinesEditor';
 
-type ReceivingDoc = {
-  id: string;
-  documentNo: string;
-  vendorPartyId?: string;
-  purchaseOrderRef?: string;
-  warehouseId: string;
-  status: string;
-  receivedAt?: string;
-  postedAt?: string;
-  notes?: string;
-};
+type ReceivingDoc = { id: string; documentNo: string; vendorPartyId?: string; purchaseOrderRef?: string; warehouseId: string; status: string; postedAt?: string };
+type DocLine = { id: string; itemCode: string; itemName: string; expectedQty?: number; receivedQty: number; rejectedQty: number; assignedLocationId?: string; conditionStatus: string };
+type DocDetail = ReceivingDoc & { notes?: string; lines: DocLine[] };
+type PutawayTask = { id: string; qty: number; status: string; toLocationId: string };
+type PartyRow = { id: string; displayNameAr?: string; displayName?: string };
 
-type PutawayTask = {
-  id: string;
-  receivingLineId: string;
-  fromLocationId: string;
-  toLocationId: string;
-  qty: number;
-  status: string;
-};
+const CONDITIONS = [
+  { value: 'GOOD', label: 'سليم' },
+  { value: 'DAMAGED', label: 'تالف' },
+  { value: 'PARTIAL', label: 'جزئي' },
+];
 
-const emptyForm: CreateReceivingDocument = { warehouseId: '', vendorPartyId: '', purchaseOrderRef: '', notes: '' };
+const conditionLabel = (c: string): string => CONDITIONS.find((x) => x.value === c)?.label ?? c;
+
+function toApiLines(lines: WmsLine[]): ReceivingLine[] {
+  return lines.filter((l) => Number(l.qty) > 0).map((l) => ({
+    itemId: l.itemId,
+    receivedQty: Number(l.qty),
+    rejectedQty: Number(l.extra.rejected ?? 0),
+    expectedQty: l.extra.expected === '' || l.extra.expected === undefined ? undefined : Number(l.extra.expected),
+    assignedLocationId: l.locationId || undefined,
+    conditionStatus: String(l.extra.condition ?? 'GOOD'),
+  }));
+}
+
+function ReceivingLinesEditor({ lines, onChange, warehouseId }: { lines: WmsLine[]; onChange: (l: WmsLine[]) => void; warehouseId: string }): JSX.Element {
+  return (
+    <WmsLinesEditor
+      lines={lines}
+      onChange={onChange}
+      warehouseId={warehouseId}
+      locationLabel="موقع التخزين"
+      qtyLabel="الكمية المستلمة"
+      showAvailable={false}
+      defaultExtra={() => ({ expected: '', rejected: 0, condition: 'GOOD' })}
+      pickerTitle="اختيار الأصناف المستلمة"
+      extraColumns={[
+        { key: 'expected', label: 'المتوقعة', width: 100, render: (l, patch) => <input type="number" min={0} className="vex-input" value={l.extra.expected ?? ''} onChange={(e) => patch({ expected: e.target.value })} /> },
+        { key: 'rejected', label: 'المرفوضة', width: 100, render: (l, patch) => <input type="number" min={0} className="vex-input" value={Number(l.extra.rejected ?? 0)} onChange={(e) => patch({ rejected: Number(e.target.value) })} /> },
+        {
+          key: 'condition', label: 'الحالة', width: 120,
+          render: (l, patch) => (
+            <select className="vex-select" value={String(l.extra.condition ?? 'GOOD')} onChange={(e) => patch({ condition: e.target.value })}>
+              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          ),
+        },
+      ]}
+    />
+  );
+}
 
 export default function Receiving(): JSX.Element {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [rows, setRows] = useState<ReceivingDoc[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CreateReceivingDocument>(emptyForm);
-  const [busy, setBusy] = useState('');
-  const [tasks, setTasks] = useState<Record<string, PutawayTask[]>>({});
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const names = useLocationNames();
+  const list = usePagedList<ReceivingDoc>({
+    errorMessage: 'تعذر تحميل مستندات الاستلام',
+    fetcher: ({ page, pageSize }) => receivingApi.list(page, pageSize),
+  });
 
-  async function load(): Promise<void> {
-    setLoading(true);
-    setError('');
+  const [showForm, setShowForm] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [formError, setFormError] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
+  const [vendor, setVendor] = useState<PickerOption | null>(null);
+  const [poRef, setPoRef] = useState('');
+  const [notes, setNotes] = useState('');
+  const [lines, setLines] = useState<WmsLine[]>([]);
+
+  const [openId, setOpenId] = useState('');
+  const [detail, setDetail] = useState<DocDetail | null>(null);
+  const [tasks, setTasks] = useState<PutawayTask[]>([]);
+  const [taskTargets, setTaskTargets] = useState<Record<string, string>>({});
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [extraLines, setExtraLines] = useState<WmsLine[]>([]);
+
+  const searchVendors = useCallback(async (text: string): Promise<PickerOption[]> => {
+    const res = await partiesApi.getParties({ page: 1, pageSize: 10, typeCode: 'VENDOR', isActive: true, searchTerm: text || undefined });
+    return unwrapPaged<PartyRow>(res.data).items.map((p) => ({ id: p.id, label: p.displayNameAr || p.displayName || p.id.slice(0, 8), sublabel: p.displayName }));
+  }, []);
+
+  const loadDetail = useCallback(async (id: string): Promise<void> => {
+    setDetailLoading(true); setActionError('');
     try {
-      const res = await receivingApi.list(1, 100);
-      setRows(unwrapList<ReceivingDoc>(res.data));
-    } catch (e: unknown) {
-      setError(extractApiError(e, 'تعذر تحميل مستندات الاستلام'));
-    } finally {
-      setLoading(false);
-    }
+      const [d, t] = await Promise.all([receivingApi.get(id), receivingApi.getPutawayTasks(id)]);
+      const doc = unwrapNode<DocDetail>(d.data);
+      const rows = unwrapList<PutawayTask>(t.data);
+      setDetail(doc); setTasks(rows);
+      setTaskTargets(Object.fromEntries(rows.map((x) => [x.id, x.toLocationId])));
+    } catch (e: unknown) { setActionError(extractApiError(e, 'تعذر تحميل تفاصيل المستند')); }
+    finally { setDetailLoading(false); }
+  }, []);
+
+  function toggle(id: string): void {
+    if (openId === id) { setOpenId(''); return; }
+    setOpenId(id); setExtraLines([]);
+    void loadDetail(id);
   }
 
-  useEffect(() => { void load(); }, []);
-
   async function create(): Promise<void> {
-    if (!form.warehouseId.trim()) { setError('معرّف المستودع مطلوب'); return; }
-    setBusy('create');
+    if (!warehouseId) { setFormError('اختر المستودع'); return; }
+    setBusy('create'); setFormError('');
     try {
-      await receivingApi.create({
-        warehouseId: form.warehouseId.trim(),
-        vendorPartyId: form.vendorPartyId?.trim() || undefined,
-        purchaseOrderRef: form.purchaseOrderRef?.trim() || undefined,
-        notes: form.notes?.trim() || undefined,
-      });
-      setForm(emptyForm);
-      setShowForm(false);
+      const res = await receivingApi.create({ warehouseId, vendorPartyId: vendor?.id, purchaseOrderRef: poRef.trim() || undefined, notes: notes.trim() || undefined });
+      const created = unwrapNode<{ id: string }>(res.data);
+      const apiLines = toApiLines(lines);
+      if (created?.id) for (const l of apiLines) await receivingApi.addLine(created.id, l);
       toast.success('تم إنشاء مستند الاستلام');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر إنشاء المستند'));
-      setError(extractApiError(e, 'تعذر إنشاء المستند'));
-    } finally { setBusy(''); }
+      setWarehouseId(''); setVendor(null); setPoRef(''); setNotes(''); setLines([]); setShowForm(false); list.reload();
+    } catch (e: unknown) { setFormError(extractApiError(e, 'تعذر إنشاء المستند')); }
+    finally { setBusy(''); }
+  }
+
+  async function addLines(id: string): Promise<void> {
+    const apiLines = toApiLines(extraLines);
+    if (apiLines.length === 0) { setActionError('أضف صنفاً واحداً على الأقل بكمية مستلمة'); return; }
+    setBusy(id); setActionError('');
+    try {
+      for (const l of apiLines) await receivingApi.addLine(id, l);
+      toast.success('تمت إضافة الأسطر');
+      setExtraLines([]); await loadDetail(id);
+    } catch (e: unknown) { setActionError(extractApiError(e, 'تعذر إضافة الأسطر')); }
+    finally { setBusy(''); }
   }
 
   async function post(id: string): Promise<void> {
-    setBusy(id);
-    try {
-      await receivingApi.post(id);
-      toast.success('تم ترحيل مستند الاستلام');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر ترحيل المستند'));
-      setError(extractApiError(e, 'تعذر ترحيل المستند'));
-    } finally { setBusy(''); }
+    setBusy(id); setActionError('');
+    try { const res = await receivingApi.post(id); notifyResult(res, 'تم ترحيل مستند الاستلام'); list.reload(); await loadDetail(id); }
+    catch (e: unknown) { setActionError(extractApiError(e, 'تعذر ترحيل المستند')); }
+    finally { setBusy(''); }
   }
 
-  async function loadTasks(id: string): Promise<void> {
-    setBusy(id);
-    try {
-      const res = await receivingApi.getPutawayTasks(id);
-      setTasks((prev) => ({ ...prev, [id]: unwrapList<PutawayTask>(res.data) }));
-      setExpandedId((prev) => (prev === id ? null : id));
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر تحميل مهام التخزين'));
-      setError(extractApiError(e, 'تعذر تحميل مهام التخزين'));
-    } finally { setBusy(''); }
+  async function completeTask(docId: string, t: PutawayTask): Promise<void> {
+    const to = taskTargets[t.id];
+    if (!to) { setActionError('اختر موقع التخزين'); return; }
+    setBusy(t.id); setActionError('');
+    try { await receivingApi.completePutaway(t.id, { toLocationId: to, qty: t.qty }); toast.success('تم التخزين'); await loadDetail(docId); }
+    catch (e: unknown) { setActionError(extractApiError(e, 'تعذر إتمام مهمة التخزين')); }
+    finally { setBusy(''); }
   }
-
-  async function completeTask(docId: string, task: PutawayTask): Promise<void> {
-    const to = window.prompt('معرّف موقع التخزين (Location ID):', task.toLocationId) ?? '';
-    if (!to.trim()) return;
-    setBusy(task.id);
-    try {
-      await receivingApi.completePutaway(task.id, { toLocationId: to.trim(), qty: task.qty });
-      await loadTasks(docId);
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر إتمام مهمة التخزين'));
-      setError(extractApiError(e, 'تعذر إتمام مهمة التخزين'));
-    } finally { setBusy(''); }
-  }
-
-  if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{ direction: 'rtl' }}>
@@ -125,102 +167,105 @@ export default function Receiving(): JSX.Element {
         </button>
       </div>
 
-      {error ? <ErrorBanner message={error} /> : null}
+      {list.error ? <ErrorBanner message={list.error} /> : null}
 
       {showForm ? (
         <div className="vex-card" style={{ marginBottom: 20 }}>
           <h2 className="vex-section-title">مستند استلام جديد</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
-            <label className="vex-label">
-              المستودع *
-              <input value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })} className="vex-input" placeholder="Warehouse ID" />
-            </label>
-            <label className="vex-label">
-              المورّد
-              <input value={form.vendorPartyId} onChange={(e) => setForm({ ...form, vendorPartyId: e.target.value })} className="vex-input" placeholder="Vendor Party ID" />
-            </label>
-            <label className="vex-label">
-              مرجع أمر الشراء
-              <input value={form.purchaseOrderRef} onChange={(e) => setForm({ ...form, purchaseOrderRef: e.target.value })} className="vex-input" />
-            </label>
-            <label className="vex-label">
-              ملاحظات
-              <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="vex-input" />
-            </label>
+          {formError ? <ErrorBanner message={formError} /> : null}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, marginBottom: 20 }}>
+            <label className="vex-label">المستودع *<LocationSelect type="WAREHOUSE" value={warehouseId} onChange={(id) => setWarehouseId(id)} /></label>
+            <label className="vex-label">المورّد<EntityPicker value={vendor} onChange={setVendor} search={searchVendors} placeholder="ابحث باسم المورّد..." /></label>
+            <label className="vex-label">مرجع أمر الشراء<input value={poRef} onChange={(e) => setPoRef(e.target.value)} className="vex-input" /></label>
+            <label className="vex-label">ملاحظات<input value={notes} onChange={(e) => setNotes(e.target.value)} className="vex-input" /></label>
           </div>
-          <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">
-            💾 حفظ المستند
-          </button>
+          <ReceivingLinesEditor lines={lines} onChange={setLines} warehouseId={warehouseId} />
+          <div style={{ marginTop: 14 }}>
+            <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 حفظ المستند</button>
+          </div>
         </div>
       ) : null}
 
-      <div className="vex-card vex-card--no-pad">
+      <div className="vex-card vex-card--no-pad" style={{ opacity: list.loading ? 0.6 : 1 }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
-            <thead>
-              <tr>
-                <th>رقم المستند</th>
-                <th>المستودع</th>
-                <th>الحالة</th>
-                <th>تاريخ الترحيل</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
+            <thead><tr><th>رقم المستند</th><th>المستودع</th><th>مرجع الشراء</th><th>الحالة</th><th>تاريخ الترحيل</th><th>إجراءات</th></tr></thead>
             <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد مستندات</td></tr>
-              ) : rows.map((d) => (
-                <>
-                  <tr key={d.id}>
+              {list.items.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد مستندات</td></tr>
+              ) : list.items.map((d) => (
+                <Fragment key={d.id}>
+                  <tr>
                     <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{d.documentNo}</td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{d.warehouseId.slice(0, 8)}</td>
+                    <td>{names.label(d.warehouseId)}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{d.purchaseOrderRef || '-'}</td>
                     <td><StatusBadge status={d.status} type="invoice" /></td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>
-                      {d.postedAt ? new Date(d.postedAt).toLocaleDateString('ar') : '-'}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {d.status !== 'POSTED' ? (
-                        <button type="button" disabled={busy === d.id} onClick={() => void post(d.id)} className="btn-success" style={{ padding: '5px 14px', fontSize: 12, marginLeft: 6 }}>
-                          ✓ ترحيل
-                        </button>
-                      ) : null}
-                      <button type="button" disabled={busy === d.id} onClick={() => void loadTasks(d.id)} className="btn-secondary" style={{ padding: '5px 14px', fontSize: 12 }}>
-                        {expandedId === d.id ? '▲ إخفاء' : '▼ مهام التخزين'}
-                      </button>
-                    </td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{d.postedAt ? new Date(d.postedAt).toLocaleDateString('ar') : '-'}</td>
+                    <td><button type="button" onClick={() => toggle(d.id)} className="btn-secondary" style={{ padding: '5px 14px', fontSize: 12 }}>{openId === d.id ? '▲ إخفاء' : '▼ الأسطر والتخزين'}</button></td>
                   </tr>
-                  {expandedId === d.id && tasks[d.id] ? (
-                    <tr key={`${d.id}-tasks`}>
-                      <td colSpan={5} style={{ background: 'var(--clr-surface-2)', padding: '12px 20px' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-muted)', marginBottom: 8, textTransform: 'uppercase' }}>
-                          مهام التخزين
-                        </div>
-                        {tasks[d.id].length === 0 ? (
-                          <div style={{ color: 'var(--txt-muted)', fontSize: 13 }}>لا توجد مهام</div>
-                        ) : tasks[d.id].map((t) => (
-                          <div key={t.id} style={{
-                            display: 'flex', gap: 14, alignItems: 'center',
-                            padding: '8px 12px', marginBottom: 6,
-                            background: '#fff', borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--clr-border)',
-                          }}>
-                            <span style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>الكمية: <strong>{t.qty}</strong></span>
-                            <StatusBadge status={t.status} type="invoice" />
-                            {t.status !== 'COMPLETED' ? (
-                              <button type="button" disabled={busy === t.id} onClick={() => void completeTask(d.id, t)} className="btn-primary" style={{ padding: '4px 12px', fontSize: 12 }}>
-                                إتمام
-                              </button>
+                  {openId === d.id ? (
+                    <tr>
+                      <td colSpan={6} style={{ background: 'var(--clr-surface-2)', padding: '14px 20px' }}>
+                        {actionError ? <ErrorBanner message={actionError} /> : null}
+                        {detailLoading || !detail ? <LoadingSpinner /> : (
+                          <>
+                            <table className="vex-table" style={{ background: '#fff', marginBottom: 12 }}>
+                              <thead><tr><th>الصنف</th><th>المتوقعة</th><th>المستلمة</th><th>المرفوضة</th><th>الحالة</th><th>موقع التخزين</th></tr></thead>
+                              <tbody>
+                                {detail.lines.length === 0 ? (
+                                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: 16 }}>لا توجد أسطر بعد</td></tr>
+                                ) : detail.lines.map((l) => (
+                                  <tr key={l.id}>
+                                    <td><span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{l.itemCode}</span> {l.itemName}</td>
+                                    <td>{l.expectedQty ?? '-'}</td><td>{l.receivedQty}</td><td>{l.rejectedQty}</td>
+                                    <td>{conditionLabel(l.conditionStatus)}</td>
+                                    <td>{l.assignedLocationId ? names.label(l.assignedLocationId) : '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+
+                            {detail.status !== 'POSTED' ? (
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 6 }}>إضافة أسطر</div>
+                                <ReceivingLinesEditor lines={extraLines} onChange={setExtraLines} warehouseId={detail.warehouseId} />
+                                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                                  <button type="button" disabled={busy === d.id} className="btn-secondary" onClick={() => void addLines(d.id)}>＋ إضافة للمستند</button>
+                                  <button type="button" disabled={busy === d.id || detail.lines.length === 0} className="btn-success" onClick={() => void post(d.id)}>✓ ترحيل المستند</button>
+                                </div>
+                              </div>
                             ) : null}
-                          </div>
-                        ))}
+
+                            {tasks.length > 0 ? (
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 6 }}>مهام التخزين</div>
+                                {tasks.map((t) => (
+                                  <div key={t.id} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '8px 12px', marginBottom: 6, background: '#fff', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)', flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 13 }}>الكمية: <strong>{t.qty}</strong></span>
+                                    <StatusBadge status={t.status} type="invoice" />
+                                    {t.status !== 'COMPLETED' ? (
+                                      <>
+                                        <div style={{ minWidth: 220 }}>
+                                          <LocationSelect value={taskTargets[t.id] ?? ''} allowEmpty={false} onChange={(id) => setTaskTargets({ ...taskTargets, [t.id]: id })} />
+                                        </div>
+                                        <button type="button" disabled={busy === t.id} onClick={() => void completeTask(d.id, t)} className="btn-primary" style={{ padding: '4px 12px', fontSize: 12 }}>إتمام التخزين</button>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
                       </td>
                     </tr>
                   ) : null}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
+        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
       </div>
     </div>
   );

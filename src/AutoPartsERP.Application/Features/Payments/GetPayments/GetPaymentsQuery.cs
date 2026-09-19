@@ -85,7 +85,7 @@ public sealed class GetPaymentsQueryHandler : IRequestHandler<GetPaymentsQuery, 
                     p.unallocated_usd AS UnallocatedUsd,
                     p.is_reversed AS IsReversed,
                     p.payment_method AS PaymentMethodDisplay,
-                    p.created_at AS ReceivedDisplay
+                    '' AS ReceivedDisplay
                 FROM payments p
                 INNER JOIN customers c ON c.id = p.customer_id
                 {where}

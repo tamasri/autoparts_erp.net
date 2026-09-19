@@ -12,6 +12,12 @@ public sealed class ReceivingModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new AutoPartsERP.Application.Features.Wms.GetReceivingDocumentDetailQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapPost("/", async Task<IResult> (CreateReceivingDocumentRequest request, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(new CreateReceivingDocumentCommand(request, EndpointRequestHelpers.GetIdempotencyKey(httpContext)), cancellationToken);

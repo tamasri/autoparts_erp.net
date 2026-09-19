@@ -12,6 +12,12 @@ public sealed class IssueOrdersModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new AutoPartsERP.Application.Features.Wms.GetIssueOrderByIdQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapPost("/", async Task<IResult> (CreateIssueOrderCommand command, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(command, cancellationToken);

@@ -110,7 +110,7 @@ public sealed class CreateReceivingDocumentCommandHandler : IRequestHandler<Crea
                 "SELECT 'RCV-' || to_char(CURRENT_DATE, 'YYYY') || '-' || lpad(nextval('receiving_document_seq')::text, 5, '0');",
                 cancellationToken: cancellationToken));
 
-        var dto = await connection.QuerySingleAsync<ReceivingDocumentDto>(
+        var created = await connection.QuerySingleAsync<CreatedRow>(
             new CommandDefinition(
                 """
                 INSERT INTO receiving_documents (
@@ -144,8 +144,15 @@ public sealed class CreateReceivingDocumentCommandHandler : IRequestHandler<Crea
                 },
                 cancellationToken: cancellationToken));
 
-        return Result<ReceivingDocumentDto>.Success(dto with { Lines = Array.Empty<ReceivingLineDto>() });
+        var dto = new ReceivingDocumentDto(
+            created.Id, created.DocumentNo, created.VendorPartyId, created.PurchaseOrderRef, created.WarehouseId, created.Status,
+            created.ReceivedBy, created.ReceivedAt, created.PostedAt, created.Notes, Array.Empty<ReceivingLineDto>());
+        return Result<ReceivingDocumentDto>.Success(dto);
     }
+
+    private sealed record CreatedRow(
+        Guid Id, string DocumentNo, Guid? VendorPartyId, string? PurchaseOrderRef, Guid WarehouseId, string Status,
+        Guid ReceivedBy, DateTimeOffset? ReceivedAt, DateTimeOffset? PostedAt, string? Notes);
 }
 
 public sealed record AddReceivingLineCommand(Guid ReceivingDocumentId, AddReceivingLineRequest Request)

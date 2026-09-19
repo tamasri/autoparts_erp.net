@@ -1,12 +1,12 @@
 namespace AutoPartsERP.Application.Features.IssueOrders;
 
 public sealed record GetIssueOrdersQuery(int PageNumber = 1, int PageSize = 20)
-    : IRequest<Result<PagedResponse<object>>>, IAuthorizedRequest
+    : IRequest<Result<PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>>>, IAuthorizedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Read;
 }
 
-public sealed class GetIssueOrdersQueryHandler : IRequestHandler<GetIssueOrdersQuery, Result<PagedResponse<object>>>
+public sealed class GetIssueOrdersQueryHandler : IRequestHandler<GetIssueOrdersQuery, Result<PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
@@ -15,34 +15,33 @@ public sealed class GetIssueOrdersQueryHandler : IRequestHandler<GetIssueOrdersQ
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<Result<PagedResponse<object>>> Handle(GetIssueOrdersQuery request, CancellationToken cancellationToken)
+    public async Task<Result<PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>>> Handle(GetIssueOrdersQuery request, CancellationToken cancellationToken)
     {
         var pageNumber = request.PageNumber <= 0 ? 1 : request.PageNumber;
         var pageSize = request.PageSize <= 0 ? 20 : Math.Min(request.PageSize, 100);
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
 
-        var rows = await connection.QueryAsync(
+        var rows = (await connection.QueryAsync<Row>(
             new CommandDefinition(
                 """
-                SELECT
-                    id,
-                    order_no AS orderNo,
-                    source_type AS sourceType,
-                    source_id AS sourceId,
-                    warehouse_id AS warehouseId,
-                    status,
-                    issued_at AS issuedAt,
-                    created_at AS createdAt
+                SELECT id AS Id, order_no AS OrderNo, source_type AS SourceType, source_id AS SourceId, warehouse_id AS WarehouseId,
+                       status AS Status, issued_at AS IssuedAt, created_at AS CreatedAt, COUNT(*) OVER() AS TotalCount
                 FROM issue_orders
                 ORDER BY created_at DESC
                 OFFSET @Offset LIMIT @PageSize;
                 """,
                 new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
-                cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken))).ToArray();
 
-        var items = rows.Cast<object>().ToArray();
-        return Result<PagedResponse<object>>.Success(new PagedResponse<object>(items, pageNumber, pageSize, items.LongLength));
+        var items = rows.Select(x => new AutoPartsERP.Contracts.Wms.IssueOrderListDto(
+            x.Id, x.OrderNo, x.SourceType, x.SourceId, x.WarehouseId, x.Status, x.IssuedAt, x.CreatedAt)).ToArray();
+        return Result<PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>>.Success(
+            new PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>(items, pageNumber, pageSize, rows.Length == 0 ? 0 : rows[0].TotalCount));
     }
+
+    private sealed record Row(
+        Guid Id, string OrderNo, string SourceType, Guid? SourceId, Guid WarehouseId, string Status,
+        DateTimeOffset? IssuedAt, DateTimeOffset CreatedAt, long TotalCount);
 }
 
 public sealed record CreateIssueOrderCommand(

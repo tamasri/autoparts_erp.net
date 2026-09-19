@@ -12,6 +12,12 @@ public sealed class CycleCountsModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new AutoPartsERP.Application.Features.Wms.GetCycleCountPlanByIdQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapPost("/", async Task<IResult> (CreateCycleCountPlanRequest request, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(new CreateCycleCountPlanCommand(request), cancellationToken);
