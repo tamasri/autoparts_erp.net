@@ -160,10 +160,19 @@ builder.Services.AddScoped<IIdempotencyService, DistributedIdempotencyService>()
 builder.Services.AddScoped<IPeriodLockService, PeriodLockService>();
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
 builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
-// ERPNext accounting hand-off: no live instance is deployed yet, so the null client is
-// registered unconditionally. Swap for a real HTTP-based IErpNextClient once ErpNext:Enabled is
-// configured - no call site (InvoicePostedOutboxHandler etc.) needs to change.
-builder.Services.AddScoped<IErpNextClient, NullErpNextClient>();
+// ERPNext accounting hand-off. Every call site (InvoicePostedOutboxHandler, SyncCatalogToErpNextJob)
+// depends only on IErpNextClient, so flipping Erpnext:Enabled is the only thing that changes
+// behaviour - no call site needs to change.
+builder.Services.Configure<ErpNextOptions>(builder.Configuration.GetSection(ErpNextOptions.SectionName));
+var erpNextEnabled = builder.Configuration.GetValue<bool>($"{ErpNextOptions.SectionName}:Enabled");
+if (erpNextEnabled)
+{
+    builder.Services.AddHttpClient<IErpNextClient, ErpNextClient>();
+}
+else
+{
+    builder.Services.AddScoped<IErpNextClient, NullErpNextClient>();
+}
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
@@ -205,6 +214,7 @@ builder.Services.AddScoped<RefreshAccountSummaryJob>();
 builder.Services.AddScoped<RefreshStockSummaryJob>();
 builder.Services.AddScoped<RefreshMonthlyPlJob>();
 builder.Services.AddScoped<SyncInventoryBalancesJob>();
+builder.Services.AddScoped<SyncCatalogToErpNextJob>();
 builder.Services.AddScoped<ExpireWarrantyRecordsJob>();
 builder.Services.AddScoped<LowStockAlertJob>();
 builder.Services.AddScoped<AccountingCheckJob>();
@@ -289,6 +299,12 @@ if (!app.Environment.IsEnvironment("Testing"))
         "governance",
         job => job.RunAsync(CancellationToken.None),
         "*/5 * * * *");
+
+    RecurringJob.AddOrUpdate<SyncCatalogToErpNextJob>(
+        "operational-sync-catalog-erpnext",
+        "governance",
+        job => job.RunAsync(CancellationToken.None),
+        "*/30 * * * *");
 
     RecurringJob.AddOrUpdate<ExpireWarrantyRecordsJob>(
         "operational-expire-warranty-records",
