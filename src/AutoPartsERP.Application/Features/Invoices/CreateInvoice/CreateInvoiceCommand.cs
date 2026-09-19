@@ -113,6 +113,7 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                 request.DueDate,
                 request.DeliveryFeeSyp,
                 request.DeliveryFeeUsd,
+                request.FxRateId,
                 FxRateSnapshot = fxRate.MidRate,
                 request.SalesRepId,
                 CreatedBy = _currentUser.UserId
@@ -179,6 +180,22 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                 cancellationToken: cancellationToken));
         }
 
+        // Lines were inserted directly, so roll the header totals up now (a draft used to be saved with total 0).
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE invoices
+            SET subtotal_syp = COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
+                subtotal_usd = COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
+                total_syp = COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_syp + delivery_fee_syp + tax_amount_syp,
+                total_usd = COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_usd + delivery_fee_usd + tax_amount_usd,
+                updated_at = now(),
+                updated_by = @UpdatedBy
+            WHERE id = @InvoiceId;
+            """,
+            new { InvoiceId = invoiceId, UpdatedBy = _currentUser.UserId },
+            transaction,
+            cancellationToken: cancellationToken));
+
         var invoice = await LoadInvoiceAsync(connection, transaction, invoiceId, cancellationToken);
         if (invoice is null)
         {
@@ -192,7 +209,7 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
 
     private static async Task<InvoiceDto?> LoadInvoiceAsync(DbConnection connection, DbTransaction transaction, Guid invoiceId, CancellationToken cancellationToken)
     {
-        var header = await connection.QuerySingleOrDefaultAsync(
+        var header = await connection.QuerySingleOrDefaultAsync<InvoiceHeaderRow>(
             new CommandDefinition(
                 """
                 SELECT
@@ -254,19 +271,19 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                 cancellationToken: cancellationToken))).ToArray();
 
         return InvoiceMappings.ToInvoiceDto(
-            header.id,
-            header.invoicenumber ?? string.Empty,
-            header.status,
-            header.type,
-            header.customerid,
-            header.customercode,
-            header.customername,
-            header.invoicedate,
-            header.duedate,
-            header.totalsyp,
-            header.totalusd,
-            header.paidsyp,
-            header.paidusd,
+            header.Id,
+            header.InvoiceNumber ?? string.Empty,
+            header.Status,
+            header.Type,
+            header.CustomerId,
+            header.CustomerCode,
+            header.CustomerName,
+            header.InvoiceDate,
+            header.DueDate,
+            header.TotalSyp,
+            header.TotalUsd,
+            header.PaidSyp,
+            header.PaidUsd,
             lines);
     }
 }

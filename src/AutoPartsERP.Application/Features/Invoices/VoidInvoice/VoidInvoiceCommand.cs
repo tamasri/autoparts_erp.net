@@ -42,10 +42,10 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var invoice = await connection.QuerySingleOrDefaultAsync(
+        var invoice = await connection.QuerySingleOrDefaultAsync<VoidRow>(
             new CommandDefinition(
                 """
-                SELECT id, customer_id AS CustomerId, invoice_date AS InvoiceDate, total_syp AS TotalSyp, total_usd AS TotalUsd, paid_syp AS PaidSyp, paid_usd AS PaidUsd, status AS Status
+                SELECT id AS Id, customer_id AS CustomerId, invoice_date AS InvoiceDate, total_syp AS TotalSyp, total_usd AS TotalUsd, paid_syp AS PaidSyp, paid_usd AS PaidUsd, status AS Status
                 FROM invoices
                 WHERE id = @InvoiceId
                 FOR UPDATE;
@@ -60,13 +60,13 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
             return Result<Guid>.Failure(new Error("Invoice.NotFound", "Invoice was not found."));
         }
 
-        if (!string.Equals((string)invoice.Status, "POSTED", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(invoice.Status, "POSTED", StringComparison.OrdinalIgnoreCase))
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.InvalidState", "Only posted invoices can be voided."));
         }
 
-        if ((decimal)invoice.PaidSyp > 0m || (decimal)invoice.PaidUsd > 0m)
+        if (invoice.PaidSyp > 0m || invoice.PaidUsd > 0m)
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.HasAllocations", "Cannot void an invoice that has payment allocations."));
@@ -154,4 +154,6 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(reversalId);
     }
+
+    private sealed record VoidRow(Guid Id, Guid CustomerId, DateOnly InvoiceDate, decimal TotalSyp, decimal TotalUsd, decimal PaidSyp, decimal PaidUsd, string Status);
 }

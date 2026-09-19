@@ -28,7 +28,7 @@ public sealed class GetInvoiceByIdQueryHandler : IRequestHandler<GetInvoiceByIdQ
     public async Task<Result<InvoiceDto>> Handle(GetInvoiceByIdQuery request, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var header = await connection.QuerySingleOrDefaultAsync(
+        var header = await connection.QuerySingleOrDefaultAsync<InvoiceHeaderRow>(
             new CommandDefinition(
                 """
                 SELECT
@@ -88,19 +88,19 @@ public sealed class GetInvoiceByIdQueryHandler : IRequestHandler<GetInvoiceByIdQ
                 cancellationToken: cancellationToken))).ToArray();
 
         return Result<InvoiceDto>.Success(InvoiceMappings.ToInvoiceDto(
-            header.id,
-            header.invoicenumber ?? string.Empty,
-            header.status,
-            header.type,
-            header.customerid,
-            header.customercode,
-            header.customername,
-            header.invoicedate,
-            header.duedate,
-            header.totalsyp,
-            header.totalusd,
-            header.paidsyp,
-            header.paidusd,
+            header.Id,
+            header.InvoiceNumber ?? string.Empty,
+            header.Status,
+            header.Type,
+            header.CustomerId,
+            header.CustomerCode,
+            header.CustomerName,
+            header.InvoiceDate,
+            header.DueDate,
+            header.TotalSyp,
+            header.TotalUsd,
+            header.PaidSyp,
+            header.PaidUsd,
             lines));
     }
 }

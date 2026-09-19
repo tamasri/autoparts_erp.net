@@ -87,13 +87,21 @@ public sealed class GovernanceService : IGovernanceService
             return Result<ApprovalRequestDto>.Failure(result.Error);
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
+        // The approval only counts if the approved command actually succeeds. Run it BEFORE persisting the decision;
+        // on failure discard the in-memory decision so the request stays pending and the approver sees the real error
+        // (previously the command result was ignored, so a failed post/void was recorded as an approved success).
         if (string.Equals(entity.Status, ApprovalStatuses.Approved, StringComparison.OrdinalIgnoreCase))
         {
-            await ReplayApprovedRequestAsync(approvalId, cancellationToken);
+            var replay = await ReplayApprovedRequestAsync(approvalId, cancellationToken);
+            if (replay.IsFailure)
+            {
+                _dbContext.ChangeTracker.Clear();
+                _logger.LogError("Approval {ApprovalId}: approved command failed: {Code} {Message}", approvalId, replay.Error.Code, replay.Error.Message);
+                return Result<ApprovalRequestDto>.Failure(new Error("approval.execution-failed", $"{replay.Error.Code}: {replay.Error.Message}"));
+            }
         }
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return Result<ApprovalRequestDto>.Success(ToDto(entity));
     }
 
@@ -104,7 +112,7 @@ public sealed class GovernanceService : IGovernanceService
     /// entity) because <c>request_type</c>/<c>payload_json</c> are written by <c>ApprovalService.CreatePendingApprovalAsync</c>'s
     /// raw SQL insert and are not part of the EF entity model.
     /// </summary>
-    private async Task ReplayApprovedRequestAsync(Guid approvalId, CancellationToken cancellationToken)
+    private async Task<Result> ReplayApprovedRequestAsync(Guid approvalId, CancellationToken cancellationToken)
     {
         await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
         var payload = await connection.QuerySingleOrDefaultAsync<(string RequestType, string PayloadJson)>(
@@ -116,7 +124,7 @@ public sealed class GovernanceService : IGovernanceService
         if (payload.RequestType is null)
         {
             _logger.LogWarning("Approval {ApprovalId} approved but no payload_json/request_type row was found to replay.", approvalId);
-            return;
+            return Result.Failure(new Error("approval.payload-missing", "The approved request has no stored payload to execute."));
         }
 
         var requestType = ApprovalRequestTypeResolver.Resolve(payload.RequestType);
@@ -125,7 +133,7 @@ public sealed class GovernanceService : IGovernanceService
             _logger.LogError(
                 "Approval {ApprovalId} approved but request type '{RequestType}' could not be resolved to a CLR type; the original command was NOT re-executed.",
                 approvalId, payload.RequestType);
-            return;
+            return Result.Failure(new Error("approval.type-unresolved", $"Request type '{payload.RequestType}' could not be resolved."));
         }
 
         var deserialized = JsonSerializer.Deserialize(payload.PayloadJson, requestType);
@@ -134,13 +142,14 @@ public sealed class GovernanceService : IGovernanceService
             _logger.LogError(
                 "Approval {ApprovalId} approved but payload_json could not be deserialized into {RequestType}; the original command was NOT re-executed.",
                 approvalId, requestType.Name);
-            return;
+            return Result.Failure(new Error("approval.payload-invalid", "The stored request payload could not be read."));
         }
 
         _replayContext.IsReplaying = true;
         try
         {
-            await _mediator.Send(deserialized, cancellationToken);
+            var response = await _mediator.Send(deserialized, cancellationToken);
+            return response is Result result && result.IsFailure ? Result.Failure(result.Error) : Result.Success();
         }
         finally
         {

@@ -45,7 +45,7 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var header = await connection.QuerySingleOrDefaultAsync(
+        var header = await connection.QuerySingleOrDefaultAsync<PostHeaderRow>(
             new CommandDefinition(
                 """
                 SELECT
@@ -79,13 +79,13 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
             return Result<Guid>.Failure(new Error("Invoice.NotFound", "Invoice was not found."));
         }
 
-        if (!string.Equals((string)header.Status, "CONFIRMED", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(header.Status, "CONFIRMED", StringComparison.OrdinalIgnoreCase))
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.InvalidState", "Only confirmed invoices can be posted."));
         }
 
-        var lines = (await connection.QueryAsync(
+        var lines = (await connection.QueryAsync<PostLineRow>(
             new CommandDefinition(
                 """
                 SELECT
@@ -135,11 +135,11 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                     WHERE sku_id = @SkuId AND location_id = @LocationId
                     FOR UPDATE;
                     """,
-                    new { SkuId = (Guid)line.SkuId, LocationId = (Guid)line.LocationId },
+                    new { SkuId = line.SkuId, LocationId = line.LocationId },
                     transaction,
                     cancellationToken: cancellationToken));
 
-            if (stock.Id == Guid.Empty || stock.QuantityOnHand < (decimal)line.Quantity)
+            if (stock.Id == Guid.Empty || stock.QuantityOnHand < line.Quantity)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return Result<Guid>.Failure(new Error("Stock.InsufficientQuantity", "Insufficient stock quantity."));
@@ -152,7 +152,7 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                     updated_at = now()
                 WHERE sku_id = @SkuId AND location_id = @LocationId;
                 """,
-                new { Quantity = (decimal)line.Quantity, SkuId = (Guid)line.SkuId, LocationId = (Guid)line.LocationId },
+                new { Quantity = line.Quantity, SkuId = line.SkuId, LocationId = line.LocationId },
                 transaction,
                 cancellationToken: cancellationToken));
 
@@ -166,13 +166,13 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                         WHERE id = @BatchId
                         FOR UPDATE;
                         """,
-                        new { BatchId = (Guid)line.BatchId },
+                        new { BatchId = line.BatchId!.Value },
                         transaction,
                         cancellationToken: cancellationToken));
 
                 if (batch.Id != Guid.Empty)
                 {
-                    if (batch.QuantityCurrent < (decimal)line.Quantity)
+                    if (batch.QuantityCurrent < line.Quantity)
                     {
                         await transaction.RollbackAsync(cancellationToken);
                         return Result<Guid>.Failure(new Error("Stock.InsufficientQuantity", "Insufficient batch quantity."));
@@ -180,34 +180,38 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
 
                     await connection.ExecuteAsync(new CommandDefinition(
                         "UPDATE batches SET quantity_current = quantity_current - @Quantity, status = CASE WHEN quantity_current - @Quantity = 0 THEN 'DEPLETED' ELSE status END WHERE id = @BatchId;",
-                        new { Quantity = (decimal)line.Quantity, BatchId = (Guid)line.BatchId },
+                        new { Quantity = line.Quantity, BatchId = line.BatchId!.Value },
                         transaction,
                         cancellationToken: cancellationToken));
                 }
             }
 
-            await connection.ExecuteAsync(new CommandDefinition(
-                """
-                INSERT INTO batch_movements (
-                    id, batch_id, movement_type, quantity, direction, reference_type, reference_id,
-                    from_location_id, to_location_id, unit_cost_syp, unit_cost_usd, performed_by, notes, created_at)
-                VALUES (@Id, @BatchId, 'INVOICE_OUT', @Quantity, 'OUT', 'INVOICE', @ReferenceId,
-                    @LocationId, NULL, 0, 0, @PerformedBy, @Notes, now());
-                """,
-                new
-                {
-                    Id = Guid.NewGuid(),
-                    BatchId = (Guid?)line.BatchId,
-                    Quantity = (decimal)line.Quantity,
-                    ReferenceId = request.InvoiceId,
-                    LocationId = (Guid)line.LocationId,
-                    PerformedBy = _currentUser.UserId,
-                    Notes = $"Posted invoice {request.InvoiceId}"
-                },
-                transaction,
-                cancellationToken: cancellationToken));
+            // batch_movements.batch_id is NOT NULL: only batch-tracked lines have a batch movement to record.
+            if (line.BatchId is not null)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    """
+                    INSERT INTO batch_movements (
+                        id, batch_id, movement_type, quantity, direction, reference_type, reference_id,
+                        from_location_id, to_location_id, unit_cost_syp, unit_cost_usd, performed_by, notes, created_at)
+                    VALUES (@Id, @BatchId, 'INVOICE_OUT', @Quantity, 'OUT', 'INVOICE', @ReferenceId,
+                        @LocationId, NULL, 0, 0, @PerformedBy, @Notes, now());
+                    """,
+                    new
+                    {
+                        Id = Guid.NewGuid(),
+                        BatchId = line.BatchId,
+                        Quantity = line.Quantity,
+                        ReferenceId = request.InvoiceId,
+                        LocationId = line.LocationId,
+                        PerformedBy = _currentUser.UserId,
+                        Notes = $"Posted invoice {request.InvoiceId}"
+                    },
+                    transaction,
+                    cancellationToken: cancellationToken));
+            }
 
-            if ((bool)line.HasWarranty)
+            if (line.HasWarranty)
             {
                 await connection.ExecuteAsync(new CommandDefinition(
                     """
@@ -223,12 +227,12 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                         Id = Guid.NewGuid(),
                         WarrantyNumber = $"WR-{DateTime.UtcNow:yyyy}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}",
                         InvoiceId = request.InvoiceId,
-                        InvoiceLineId = (Guid)line.Id,
-                        SkuId = (Guid)line.SkuId,
-                        BatchId = (Guid?)line.BatchId,
-                        CustomerId = (Guid)header.CustomerId,
-                        SaleDate = (DateTime)header.InvoiceDate,
-                        ExpiryDate = ((DateTime)header.InvoiceDate).AddMonths((int)line.WarrantyMonths),
+                        InvoiceLineId = line.Id,
+                        SkuId = line.SkuId,
+                        BatchId = line.BatchId,
+                        CustomerId = header.CustomerId,
+                        SaleDate = header.InvoiceDate,
+                        ExpiryDate = header.InvoiceDate.AddMonths(line.WarrantyMonths),
                         CreatedBy = _currentUser.UserId
                     },
                     transaction,
@@ -256,11 +260,11 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
             request.InvoiceId,
             new InvoicePostedPayload(
                 request.InvoiceId,
-                (Guid)header.CustomerId,
-                (decimal)header.TotalSyp,
-                (decimal)header.TotalUsd,
-                DateOnly.FromDateTime((DateTime)header.InvoiceDate),
-                header.SalesRepId is null ? null : (Guid?)header.SalesRepId,
+                header.CustomerId,
+                header.TotalSyp,
+                header.TotalUsd,
+                header.InvoiceDate,
+                header.SalesRepId,
                 lines.Length),
             _currentUser.CorrelationId);
 
@@ -292,4 +296,14 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(request.InvoiceId);
     }
+
+    private sealed record PostHeaderRow(
+        Guid Id, string Status, Guid CustomerId, string CustomerCode, string CustomerName, DateOnly InvoiceDate, DateOnly DueDate,
+        Guid FxRateId, decimal FxRateSnapshot, decimal TotalSyp, decimal TotalUsd, decimal PaidSyp, decimal PaidUsd, Guid? SalesRepId, string Type);
+
+    private sealed record PostLineRow(
+        Guid Id, int LineNumber, Guid SkuId, string SkuCode, string SkuName, Guid? BatchId, Guid LocationId, decimal Quantity,
+        decimal UnitPriceSyp, decimal UnitPriceUsd, decimal DiscountPct, decimal LineTotalSyp, decimal LineTotalUsd,
+        decimal GrossMarginSyp, decimal GrossMarginUsd, decimal GrossMarginPct, bool IsPriceOverride, string? OverrideReason,
+        bool HasWarranty, int WarrantyMonths);
 }
