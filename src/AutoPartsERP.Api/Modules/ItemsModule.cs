@@ -8,13 +8,13 @@ public sealed class ItemsModule : ICarterModule
 
         group.MapGet("/", async Task<IResult> (
                 string? search,
-                int page,
-                int pageSize,
-                bool includeInactive,
+                int? page,
+                int? pageSize,
+                bool? includeInactive,
                 ISender sender,
                 CancellationToken cancellationToken) =>
             {
-                var result = await sender.Send(new BrowseItemsQuery(search, page, pageSize, includeInactive), cancellationToken);
+                var result = await sender.Send(new BrowseItemsQuery(search, page ?? 1, pageSize ?? 20, includeInactive ?? false), cancellationToken);
                 return result.ToApiResult();
             });
 

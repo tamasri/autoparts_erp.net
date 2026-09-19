@@ -15,7 +15,10 @@ public sealed class CurrentUserService : ICurrentUser
 
     public bool IsAuthenticated => User.Identity?.IsAuthenticated == true;
 
-    public Guid UserId => Guid.TryParse(User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub), out var userId)
+    public Guid UserId => Guid.TryParse(
+        User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier),
+        out var userId)
         ? userId
         : Guid.Empty;
 

@@ -27,14 +27,14 @@ public sealed class ErpNextSyncModule : ICarterModule
         });
 
         group.MapGet("/sync-log", async Task<IResult> (
-            int page,
-            int pageSize,
+            int? page,
+            int? pageSize,
             string? status,
             IDbConnectionFactory connectionFactory,
             CancellationToken cancellationToken) =>
         {
-            var pageNumber = page <= 0 ? 1 : page;
-            var size = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 100);
+            var pageNumber = page is > 0 ? page.Value : 1;
+            var size = Math.Clamp(pageSize is > 0 ? pageSize.Value : 20, 1, 100);
             await using var connection = await connectionFactory.CreateAsync(cancellationToken);
             var rows = (await connection.QueryAsync(new CommandDefinition(
                 """

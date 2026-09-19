@@ -18,7 +18,19 @@ public sealed class ApprovalService : IApprovalService
         var id = Guid.NewGuid();
         await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
         await connection.ExecuteAsync(
-            "INSERT INTO approval_requests (id, correlation_id, request_type, entity_type, entity_id, payload_json, requester_id, requester_notes, reason_code, status, expires_at, created_at) VALUES (@Id, @CorrelationId, @RequestType, @EntityType, @EntityId, CAST(@PayloadJson AS jsonb), @RequesterId, @RequesterNotes, @ReasonCode, 'PENDING', @ExpiresAt, @CreatedAt);",
+            // Populate BOTH column generations: the original hand-written ones (requester_id, created_at, ...) and the
+            // ones FixApprovalGovernanceSchema made NOT NULL for the EF ApprovalRequest entity. Omitting the latter made
+            // every maker-checker submission fail with a not-null violation.
+            """
+            INSERT INTO approval_requests (
+                id, correlation_id, request_type, entity_type, entity_id, payload_json,
+                requester_id, requester_notes, reason_code, status, expires_at, created_at,
+                action_code, requested_by_user_id, reason, required_approvals, requested_at_utc, created_at_utc)
+            VALUES (
+                @Id, @CorrelationId, @RequestType, @EntityType, COALESCE(@EntityId, ''), CAST(@PayloadJson AS jsonb),
+                @RequesterId, @RequesterNotes, @ReasonCode, 'PENDING', @ExpiresAt, @CreatedAt,
+                @RequestType, @RequesterId, COALESCE(@RequesterNotes, ''), 1, @CreatedAt, @CreatedAt);
+            """,
             new
             {
                 Id = id,

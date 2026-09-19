@@ -6,9 +6,16 @@ internal static class ResultFactory
     {
         var responseType = typeof(TResponse);
 
+        // Commands that return a plain Result (no payload) must be short-circuited by the pipeline
+        // behaviors too — otherwise a validation/permission/approval failure surfaces as a 500.
+        if (responseType == typeof(Result))
+        {
+            return (TResponse)(object)Result.Failure(error);
+        }
+
         if (!responseType.IsGenericType || responseType.GetGenericTypeDefinition() != typeof(Result<>))
         {
-            throw new InvalidOperationException($"{responseType.Name} must be a Result<T>.");
+            throw new InvalidOperationException($"{responseType.Name} must be a Result or a Result<T>.");
         }
 
         var innerType = responseType.GetGenericArguments()[0];

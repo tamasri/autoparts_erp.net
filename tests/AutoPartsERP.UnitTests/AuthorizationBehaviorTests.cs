@@ -56,6 +56,24 @@ public sealed class AuthorizationBehaviorTests
         await audit.Received(1).LogRejectionAsync(Arg.Any<RejectionEntry>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_ShouldReturnFailure_NotThrow_WhenCommandReturnsPlainResult()
+    {
+        // Regression: ResultFactory only supported Result<T>, so a plain-Result command (e.g. stop-ship)
+        // that was rejected by the pipeline threw InvalidOperationException and surfaced as HTTP 500.
+        var currentUser = BuildCurrentUser(hasPermission: false);
+        var audit = Substitute.For<IManualAuditService>();
+        var behavior = new AuthorizationBehavior<AuthorizedCommand, Result>(currentUser, audit);
+
+        var result = await behavior.Handle(
+            new AuthorizedCommand("items:stop_ship"),
+            _ => Task.FromResult(Result.Success()),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Authorization.Forbidden");
+    }
+
     private static ICurrentUser BuildCurrentUser(bool hasPermission)
     {
         var user = Substitute.For<ICurrentUser>();

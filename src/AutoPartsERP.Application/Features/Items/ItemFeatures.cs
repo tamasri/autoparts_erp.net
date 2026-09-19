@@ -517,23 +517,25 @@ public sealed class AddItemInterchangeCommandHandler : IRequestHandler<AddItemIn
         var dto = await connection.QuerySingleOrDefaultAsync<ItemInterchangeDto>(
             new CommandDefinition(
                 """
-                INSERT INTO item_interchanges (
-                    id, item_id, interchange_item_id, type, priority, notes, is_active, created_at, created_by)
-                VALUES (
-                    @Id, @ItemId, @InterchangeItemId, @Type, @Priority, @Notes, TRUE, now(), @CreatedBy)
-                ON CONFLICT (item_id, interchange_item_id) DO NOTHING
-                RETURNING
+                WITH inserted AS (
+                    INSERT INTO item_interchanges (
+                        id, item_id, interchange_item_id, type, priority, notes, is_active, created_at, created_by)
+                    VALUES (
+                        @Id, @ItemId, @InterchangeItemId, @Type, @Priority, @Notes, TRUE, now(), @CreatedBy)
+                    ON CONFLICT (item_id, interchange_item_id) DO NOTHING
+                    RETURNING id, item_id, interchange_item_id, type, priority, is_active
+                )
+                SELECT
                     i.id AS Id,
                     i.item_id AS ItemId,
                     i.interchange_item_id AS InterchangeItemId,
-                    ii.part_number_canonical AS InterchangePartNumber,
+                    ii.part_number AS InterchangePartNumber,
                     ii.name_ar AS InterchangeNameAr,
                     i.type AS Type,
                     i.priority AS Priority,
                     i.is_active AS IsActive
-                FROM item_interchanges i
-                INNER JOIN items ii ON ii.id = i.interchange_item_id
-                WHERE i.id = @Id;
+                FROM inserted i
+                INNER JOIN items ii ON ii.id = i.interchange_item_id;
                 """,
                 new
                 {
@@ -632,7 +634,7 @@ public sealed class GetItemInterchangesQueryHandler : IRequestHandler<GetItemInt
                     i.id AS Id,
                     i.item_id AS ItemId,
                     i.interchange_item_id AS InterchangeItemId,
-                    ii.part_number_canonical AS InterchangePartNumber,
+                    ii.part_number AS InterchangePartNumber,
                     ii.name_ar AS InterchangeNameAr,
                     i.type AS Type,
                     i.priority AS Priority,

@@ -61,24 +61,13 @@ public sealed class AiService : IAiService
             return Result<AiChatResult>.Failure(new Error("Ai.PolicyViolation", "AI core-data writes are forbidden by policy."));
         }
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = BuildSafeResponse(message, context);
-        stopwatch.Stop();
-
-        await WritePromptLogAsync(sessionId, userId, featureCode, flag.ModelName, message, response, true, (int)stopwatch.ElapsedMilliseconds, cancellationToken);
-
-        return Result<AiChatResult>.Success(new AiChatResult(response, Array.Empty<string>(), flag.ModelName, (int)stopwatch.ElapsedMilliseconds));
-    }
-
-    private static string BuildSafeResponse(string message, IReadOnlyDictionary<string, object?>? context)
-    {
-        if (context is null || context.Count == 0)
-        {
-            return $"تم استلام طلبك: {message.Trim()}";
-        }
-
-        var contextKeys = string.Join(", ", context.Keys.Take(4));
-        return $"تم استلام طلبك: {message.Trim()} (السياق: {contextKeys})";
+        // No language-model provider is wired yet (Phase 6: an OpenAI-compatible provider such as Groq/DeepSeek).
+        // Say so plainly. This method used to echo the user's own message back as if it were an answer, which
+        // made a stub look like a working assistant.
+        await WritePromptLogAsync(sessionId, userId, featureCode, flag.ModelName, message, "Provider not configured", false, 0, cancellationToken);
+        return Result<AiChatResult>.Failure(new Error(
+            "Ai.ProviderNotConfigured",
+            "The AI assistant is not available yet: no language-model provider is configured."));
     }
 
     private async Task WritePromptLogAsync(

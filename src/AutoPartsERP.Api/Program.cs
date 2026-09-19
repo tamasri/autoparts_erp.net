@@ -62,6 +62,11 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
+        // Keep claim names exactly as issued (sub, email, ...). The default inbound mapping renamed `sub` to
+        // ClaimTypes.NameIdentifier, so ICurrentUser.UserId was always Guid.Empty: every created_by / audit /
+        // maker-checker record was attributed to nobody and /auth/me could not find the user.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,

@@ -10,25 +10,31 @@ public sealed class GovernanceService : IGovernanceService
     private readonly IMediator _mediator;
     private readonly IApprovalReplayContext _replayContext;
     private readonly ILogger<GovernanceService> _logger;
+    private readonly bool _allowSelfApproval;
 
     public GovernanceService(
         AppDbContext dbContext,
         IDbConnectionFactory dbConnectionFactory,
         IMediator mediator,
         IApprovalReplayContext replayContext,
-        ILogger<GovernanceService> logger)
+        ILogger<GovernanceService> logger,
+        Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
         _dbContext = dbContext;
         _dbConnectionFactory = dbConnectionFactory;
         _mediator = mediator;
         _replayContext = replayContext;
         _logger = logger;
+
+        // Maker-checker means a second person approves. Single-operator installs can opt out explicitly with
+        // Governance:AllowSelfApproval=true (env Governance__AllowSelfApproval); the default is the safe one.
+        _allowSelfApproval = configuration.GetValue<bool>("Governance:AllowSelfApproval");
     }
 
     public async Task<Result<PagedResponse<ApprovalRequestDto>>> GetApprovalsAsync(ApprovalListFilter filter, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.ApprovalRequests.AsNoTracking();
-        if (filter.ExcludeCurrentUserRequests && filter.CurrentUserId.HasValue)
+        if (filter.ExcludeCurrentUserRequests && !_allowSelfApproval && filter.CurrentUserId.HasValue)
         {
             query = query.Where(x => x.RequestedByUserId != filter.CurrentUserId.Value);
         }
@@ -68,6 +74,11 @@ public sealed class GovernanceService : IGovernanceService
         if (entity is null)
         {
             return Result<ApprovalRequestDto>.Failure(new Error("Approvals.NotFound", "Approval request was not found."));
+        }
+
+        if (!_allowSelfApproval && entity.RequestedByUserId == reviewerUserId)
+        {
+            return Result<ApprovalRequestDto>.Failure(new Error("approval.self-approval-forbidden", "You cannot approve a request you submitted; another approver must review it."));
         }
 
         var result = entity.Approve(reviewerUserId, comment);
