@@ -67,5 +67,5 @@ export function usePagedList<T>({ fetcher, pageSize: initialPageSize = 20, error
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
   const changePageSize = useCallback((size: number) => { setPageSize(size); setPage(1); }, []);
 
-  return { items, totalCount, page, pageSize, setPage, changePageSize, searchInput, setSearchInput, loading, error, reload };
+  return { items, totalCount, page, pageSize, setPage, changePageSize, searchInput, setSearchInput, search, loading, error, reload };
 }

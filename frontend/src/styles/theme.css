@@ -654,3 +654,16 @@ button, input, select, textarea {
 .invoice-paper__payments {
   padding: 0 40px 32px;
 }
+
+/* ── Modal / picker dialogs ─────────────────────────────── */
+.vex-modal-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(20, 20, 40, 0.55); display: flex; align-items: flex-start; justify-content: center; padding: 4vh 16px; overflow-y: auto; }
+.vex-modal { width: min(1120px, 100%); background: var(--clr-surface); border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); display: flex; flex-direction: column; max-height: 92vh; direction: rtl; }
+.vex-modal__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 22px; border-bottom: 1px solid var(--clr-border); }
+.vex-modal__body { padding: 16px 22px; overflow-y: auto; flex: 1; }
+.vex-modal__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px; border-top: 1px solid var(--clr-border); background: var(--clr-surface-2); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.vex-combobox { position: relative; }
+.vex-combobox__list { position: absolute; top: calc(100% + 4px); inset-inline: 0; z-index: 50; background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); max-height: 280px; overflow-y: auto; }
+.vex-combobox__option { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--clr-border); }
+.vex-combobox__option:last-child { border-bottom: 0; }
+.vex-combobox__option--active, .vex-combobox__option:hover { background: var(--clr-primary-light); }
+.vex-row--active { background: var(--clr-primary-light) !important; }
