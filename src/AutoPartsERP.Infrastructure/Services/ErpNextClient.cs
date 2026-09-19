@@ -17,7 +17,7 @@ namespace AutoPartsERP.Infrastructure.Services;
 /// thrown, carrying Frappe's own error text, so InvoicePostedOutboxHandler (and any future caller)
 /// can log the exact reason into erpnext_sync_log instead of a generic "sync failed".
 ///
-/// Field defaults (item_group "All Item Groups", customer_group "All Customer Groups", etc.) use
+/// Field defaults (item_group "All Item Groups", customer_group "Commercial", etc.) use
 /// Frappe's standard root groups, which exist in every fresh install regardless of whether demo
 /// data was seeded. If this specific instance's setup wizard produced different names, the first
 /// sync attempt will surface Frappe's exact validation error in erpnext_sync_log rather than
@@ -79,8 +79,8 @@ public sealed class ErpNextClient : IErpNextClient
                 new JsonObject
                 {
                     ["customer_name"] = party.Name,
-                    ["customer_group"] = "All Customer Groups",
-                    ["territory"] = "All Territories",
+                    ["customer_group"] = "Commercial",
+                    ["territory"] = "Rest Of The World",
                     ["customer_type"] = "Individual",
                     ["tax_id"] = party.TaxId
                 },
@@ -93,7 +93,7 @@ public sealed class ErpNextClient : IErpNextClient
             new JsonObject
             {
                 ["supplier_name"] = party.Name,
-                ["supplier_group"] = "All Supplier Groups",
+                ["supplier_group"] = "Local",
                 ["supplier_type"] = "Individual",
                 ["tax_id"] = party.TaxId
             },
