@@ -165,6 +165,7 @@ builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
 // ERPNext accounting hand-off. Every call site (InvoicePostedOutboxHandler, SyncCatalogToErpNextJob)
 // depends only on IErpNextClient, so flipping Erpnext:Enabled is the only thing that changes
 // behaviour - no call site needs to change.
+builder.Services.AddScoped<SalesInvoiceErpNextSyncer>();
 builder.Services.Configure<ErpNextOptions>(builder.Configuration.GetSection(ErpNextOptions.SectionName));
 var erpNextEnabled = builder.Configuration.GetValue<bool>($"{ErpNextOptions.SectionName}:Enabled");
 if (erpNextEnabled)

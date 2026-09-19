@@ -11,4 +11,7 @@ public sealed class ErpNextOptions
     public string ApiKey { get; set; } = string.Empty;
 
     public string ApiSecret { get; set; } = string.Empty;
+
+    /// <summary>Currency the invoice unit prices (USD in our schema) are expressed in; must match the ERPNext company currency.</summary>
+    public string Currency { get; set; } = "USD";
 }

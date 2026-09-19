@@ -1,3 +1,5 @@
+using AutoPartsERP.Infrastructure.Services;
+
 namespace AutoPartsERP.Infrastructure.Jobs;
 
 /// <summary>
@@ -12,12 +14,14 @@ public sealed class SyncCatalogToErpNextJob
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IErpNextClient _erpNextClient;
+    private readonly SalesInvoiceErpNextSyncer _invoiceSyncer;
     private readonly ILogger<SyncCatalogToErpNextJob> _logger;
 
-    public SyncCatalogToErpNextJob(IDbConnectionFactory connectionFactory, IErpNextClient erpNextClient, ILogger<SyncCatalogToErpNextJob> logger)
+    public SyncCatalogToErpNextJob(IDbConnectionFactory connectionFactory, IErpNextClient erpNextClient, SalesInvoiceErpNextSyncer invoiceSyncer, ILogger<SyncCatalogToErpNextJob> logger)
     {
         _connectionFactory = connectionFactory;
         _erpNextClient = erpNextClient;
+        _invoiceSyncer = invoiceSyncer;
         _logger = logger;
     }
 
@@ -79,6 +83,23 @@ public sealed class SyncCatalogToErpNextJob
 
                 await LogSyncAsync(connection, "Party", party.Id, typeCode == PartyTypeCodes.Customer ? "Customer" : "Supplier", result, cancellationToken);
             }
+        }
+
+        // Invoices last: they need the customers and items above to exist in ERPNext. Covers the
+        // backlog of already-posted invoices and retries any previously FAILED sync.
+        var pendingInvoiceIds = await connection.QueryAsync<Guid>(new CommandDefinition(
+            """
+            SELECT i.id
+            FROM invoices i
+            LEFT JOIN erpnext_sync_log l ON l.local_entity_type = 'Invoice' AND l.local_entity_id = i.id AND l.erpnext_doctype = 'Sales Invoice'
+            WHERE i.status = 'POSTED' AND i.invoice_type = 'SALE' AND (l.id IS NULL OR l.status <> 'SYNCED')
+            ORDER BY i.invoice_date, i.created_at;
+            """,
+            cancellationToken: cancellationToken));
+
+        foreach (var invoiceId in pendingInvoiceIds)
+        {
+            await _invoiceSyncer.SyncAsync(invoiceId, cancellationToken);
         }
     }
 

@@ -107,31 +107,35 @@ public sealed class ErpNextClient : IErpNextClient
             return Result<string>.Failure(new Error("ErpNext.NoLines", "Cannot sync a sales invoice with no lines to ERPNext."));
         }
 
-        // NOTE: item_code must be the same code SyncItemAsync registered in ERPNext (our sku.Code),
-        // not the local Guid - ErpNextInvoiceLineSync only carries ItemId today because
-        // InvoicePostedOutboxHandler doesn't fetch invoice lines yet (see its own comment). Whoever
-        // wires real line data through must resolve ItemId -> sku code before this reaches ERPNext,
-        // or every invoice line will fail with "Item <guid> not found".
         var lines = new JsonArray();
         foreach (var line in invoice.Lines)
         {
             lines.Add(new JsonObject
             {
-                ["item_code"] = line.ItemId.ToString(),
+                ["item_code"] = line.ItemCode,
                 ["qty"] = line.Quantity,
-                ["rate"] = line.UnitPrice
+                ["rate"] = line.UnitPrice,
+                ["discount_percentage"] = line.DiscountPercent
             });
         }
 
+        // docstatus=1 inserts AND submits, which is what posts the general-ledger entries; a draft
+        // Sales Invoice would sit in ERPNext without touching any account. update_stock stays 0
+        // because this application, not ERPNext, is the system of record for inventory.
         return await UpsertAsync(
             "Sales Invoice",
             invoice.InvoiceNumber,
             new JsonObject
             {
-                ["customer"] = invoice.CustomerId.ToString(),
+                ["customer"] = invoice.CustomerName,
+                ["currency"] = _options.Currency,
                 ["posting_date"] = invoice.InvoiceDate.ToString("yyyy-MM-dd"),
-                ["due_date"] = invoice.InvoiceDate.ToString("yyyy-MM-dd"),
-                ["items"] = lines
+                ["set_posting_time"] = 1,
+                ["due_date"] = invoice.DueDate.ToString("yyyy-MM-dd"),
+                ["update_stock"] = 0,
+                ["remarks"] = $"AutoPartsERP invoice {invoice.InvoiceNumber}",
+                ["items"] = lines,
+                ["docstatus"] = 1
             },
             cancellationToken);
     }

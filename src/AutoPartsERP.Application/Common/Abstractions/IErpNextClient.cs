@@ -29,8 +29,8 @@ public sealed record ErpNextItemSync(Guid LocalItemId, string Code, string NameE
 
 public sealed record ErpNextPartySync(Guid LocalPartyId, string Name, string PartyType, string? TaxId);
 
-public sealed record ErpNextSalesInvoiceSync(Guid LocalInvoiceId, string InvoiceNumber, Guid CustomerId, DateOnly InvoiceDate, decimal TotalSyp, decimal TotalUsd, IReadOnlyList<ErpNextInvoiceLineSync> Lines);
+public sealed record ErpNextSalesInvoiceSync(Guid LocalInvoiceId, string InvoiceNumber, string CustomerName, DateOnly InvoiceDate, DateOnly DueDate, IReadOnlyList<ErpNextInvoiceLineSync> Lines);
 
-public sealed record ErpNextInvoiceLineSync(Guid ItemId, decimal Quantity, decimal UnitPrice, decimal LineTotal);
+public sealed record ErpNextInvoiceLineSync(string ItemCode, decimal Quantity, decimal UnitPrice, decimal DiscountPercent);
 
 public sealed record ErpNextPaymentSync(Guid LocalPaymentId, Guid CustomerId, decimal Amount, string Currency, DateOnly PaymentDate, Guid? AgainstInvoiceId);
