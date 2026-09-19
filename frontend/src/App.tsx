@@ -23,6 +23,7 @@ import Users from './pages/settings/Users';
 import Roles from './pages/settings/Roles';
 import Approvals from './pages/approvals/Approvals';
 import AuditLog from './pages/audit/AuditLog';
+import AccountingSync from './pages/accounting/AccountingSync';
 import PeriodLocks from './pages/periods/PeriodLocks';
 
 function PrivateRoute({ children }: { children: JSX.Element }): JSX.Element {
@@ -62,6 +63,7 @@ export default function App(): JSX.Element {
         <Route path="parties/:id/statement" element={<CombinedStatement />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="audit" element={<AuditLog />} />
+        <Route path="accounting/sync" element={<AccountingSync />} />
         <Route path="periods" element={<PeriodLocks />} />
         <Route path="users" element={<Users />} />
         <Route path="roles" element={<Roles />} />

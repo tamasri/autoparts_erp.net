@@ -43,6 +43,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/approvals', label: 'الموافقات', icon: '✓' },
       { to: '/audit', label: 'سجل التدقيق', icon: '◎' },
+      { to: '/accounting/sync', label: 'مزامنة المحاسبة', icon: '⇄' },
       { to: '/periods', label: 'إقفال الفترات', icon: '⊝' },
       { to: '/users', label: 'المستخدمون', icon: '◉' },
       { to: '/roles', label: 'الأدوار', icon: '◈' },
