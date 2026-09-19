@@ -167,15 +167,15 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] **D8 — CI does not exercise SQL.** Make the integration tests migrate + seed a Testcontainers database and hit the
       real endpoints (login → dashboard/items/approvals flows) so a green run means something. Until then, local verification
       on real Postgres is mandatory (see ENGINEERING_PLAYBOOK §2.1).
-- [ ] **D10 — Cost of goods is not booked in ERPNext.** Sales Invoices are sent with `update_stock = 0` (we own inventory), so ERPNext
+- [x] **D10 — Cost of goods (DONE: COGS Journal Entry per invoice; cost taken from batch/SKU).** Was: not booked in ERPNext. Sales Invoices are sent with `update_stock = 0` (we own inventory), so ERPNext
       records income and receivables but no COGS — its P&L overstates profit. Decide: post a COGS/inventory Journal Entry per
       invoice from our cost prices, or move stock valuation into ERPNext. Also `invoice_lines.cost_price_*` is 0 at creation.
-- [ ] **D11 — Voiding an invoice does not return stock** (it creates a credit note and flips the status only).
-- [ ] **D12 — RETURN invoices** decrement stock when posted and are not synced to ERPNext (needs `is_return` + `return_against`).
-- [ ] **D13 — Raw-ID inputs remain** on Receiving, Transfers, Issue orders, Stock adjustments and Cycle counts (warehouse/item/vendor
+- [x] **D11 — DONE (InvoiceStockMover): voiding returns stock.** Was: voiding did not return stock (it creates a credit note and flips the status only).
+- [x] **D12 — DONE: returns add stock and sync as is_return.** Was: RETURN invoices decrement stock when posted and are not synced to ERPNext (needs `is_return` + `return_against`).
+- [x] **D13 — DONE: all five inventory screens and Payments use pickers (LocationSelect, WmsLinesEditor, EntityPicker, ReasonCodeSelect).** Was: raw-ID inputs remained on Receiving, Transfers, Issue orders, Stock adjustments and Cycle counts (warehouse/item/vendor
       ids typed by hand). Use `LocationSelect`, `ItemPickerModal mode="warehouse"` and `EntityPicker`. Their list endpoints for
       issue orders/transfers also read `dynamic` rows and need the same typed-record fix.
-- [ ] **D14 — Renaming a customer** is not propagated to ERPNext (it identifies customers by name).
+- [x] **D14 — DONE: rename propagates via rename_doc.** Was: renaming a customer is not propagated to ERPNext (it identifies customers by name).
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
