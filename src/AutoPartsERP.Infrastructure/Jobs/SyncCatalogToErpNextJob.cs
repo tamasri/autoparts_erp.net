@@ -86,12 +86,12 @@ public sealed class SyncCatalogToErpNextJob
                 var syncedName = await ErpNextSyncLogWriter.FindSyncedNameAsync(connection, "Party", party.Id, doctype, cancellationToken);
                 if (syncedName is not null && !string.Equals(syncedName, party.DisplayName, StringComparison.Ordinal))
                 {
+                    // If the rename is refused (typically because a record with the new name already exists), fall through to the
+                    // upsert below: it updates that existing record and the sync log then points at it, so we stop retrying the rename.
                     var renamed = await _erpNextClient.RenameDocumentAsync(doctype, syncedName, party.DisplayName, cancellationToken);
                     if (renamed.IsFailure)
                     {
-                        await ErpNextSyncLogWriter.WriteAsync(connection, "Party", party.Id, doctype, syncedName, ErpNextSyncLogWriter.Failed,
-                            $"Rename to '{party.DisplayName}' failed: {renamed.Error.Message}", cancellationToken);
-                        continue;
+                        _logger.LogWarning("ERPNext rename of {Doctype} '{Old}' to '{New}' refused ({Error}); adopting the record with the new name.", doctype, syncedName, party.DisplayName, renamed.Error.Message);
                     }
                 }
 

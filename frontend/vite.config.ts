@@ -27,7 +27,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           // MUI core — shared by all screens
-          'vendor-mui': ['@mui/material', '@mui/system', '@mui/icons-material'],
+          'vendor-mui': ['@mui/material', '@mui/system'],
           // MUI X DataGrid — larger package, only screens that use it need it
           'vendor-datagrid': ['@mui/x-data-grid'],
           // Emotion — MUI styling engine

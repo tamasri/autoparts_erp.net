@@ -241,3 +241,8 @@ ENGINEERING_PLAYBOOK.md                              [MODIFY]
 AGENT_ONBOARDING.md                                  [MODIFY]
 ```
 
+### 2026-09-19 — Claude (ERPNext sync fixes, inventory/payments screens)
+- Company lookup asked ERPNext for a non-existent field  (→ every COGS Journal Entry and payment sync FAILED). Now reads .
+- Customer rename: when ERPNext refuses the rename (a record with the new name already exists) the catalog job now adopts that record via upsert instead of failing forever.
+- Removed  from  manualChunks (not a dependency; broke ).
+- New Payments screen and picker-based inventory screens (old-style components; migrate to the MUI stack with the rest).

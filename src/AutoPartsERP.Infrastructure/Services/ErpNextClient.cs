@@ -423,7 +423,7 @@ public sealed class ErpNextClient : IErpNextClient
             return Result<CompanyInfo>.Success(_company);
         }
 
-        var fields = Uri.EscapeDataString("[\"name\",\"abbr\",\"default_receivable_account\",\"default_payable_account\",\"default_cash_account\",\"default_bank_account\",\"cost_of_goods_sold_account\"]");
+        var fields = Uri.EscapeDataString("[\"name\",\"abbr\",\"default_receivable_account\",\"default_payable_account\",\"default_cash_account\",\"default_bank_account\",\"default_expense_account\"]");
         var response = await _httpClient.GetAsync($"api/resource/Company?fields={fields}&limit_page_length=1", cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -437,7 +437,7 @@ public sealed class ErpNextClient : IErpNextClient
             var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
             var first = document!.RootElement.GetProperty("data").EnumerateArray().First();
             string? Read(string key) => first.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-            _company = new CompanyInfo(Read("name")!, Read("abbr") ?? string.Empty, Read("default_receivable_account"), Read("default_payable_account"), Read("default_cash_account"), Read("default_bank_account"), Read("cost_of_goods_sold_account"));
+            _company = new CompanyInfo(Read("name")!, Read("abbr") ?? string.Empty, Read("default_receivable_account"), Read("default_payable_account"), Read("default_cash_account"), Read("default_bank_account"), Read("default_expense_account"));
             return Result<CompanyInfo>.Success(_company);
         }
         catch (Exception ex)

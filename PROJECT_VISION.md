@@ -120,7 +120,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | Issue orders (picking) | full | `IssueOrders.tsx` | ✅ (unpaged) |
 | Inventory alerts | list/ack/resolve + low-stock job | `InventoryAlerts.tsx` | ✅ |
 | Invoices | create/lines/confirm/post/void/PDF | `Invoices.tsx` (paged), **`InvoiceWorkspace.tsx` (item-picker dialog, customer/FX pickers)**, `InvoiceDetail.tsx` | ✅ (full lifecycle verified on Postgres) |
-| **Payments & allocations** | create, allocate to many invoices, reverse (returns the money to the invoices) — **synced to ERPNext as Payment Entry; reversal cancels it** | — | 🟡 backend + ERPNext link done, **no screen yet** |
+| **Payments & allocations** | create, allocate to many invoices, reverse (returns the money to the invoices) — **synced to ERPNext as Payment Entry; reversal cancels it** | — | ✅ screen `/payments` (auto-allocation oldest-first, reversal) + backend + ERPNext link |
 | FX rates | list/latest/create | `FxRates.tsx` | ✅ |
 | Warranty | list/claim/process/reject + expiry job | — | 🟡 |
 | Reports | P&L, inventory value (+Excel), batch trace, account statement | — | 🟡 |
@@ -211,7 +211,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 
 #### PHASE 1 — Accounting core  · `Status: Not Started`
 - [x] Sync payments to ERPNext as Payment Entry (settles the Sales Invoices it was allocated to) and cancel on reversal — backend done and verified against a mock ERPNext.
-- [ ] Payments **screen** (create, partial/multiple, allocate, reverse).
+- [x] Payments **screen** (create, partial/multiple, allocate, reverse).
 - [ ] Bank/cash accounts (ERPNext accounts) and per-account statements.
 - [ ] Purchase invoices, purchase returns, discounts (ERPNext Purchase Invoice); quick-add supplier; bulk pay/receive.
 - [ ] Financial reports read from ERPNext: trial balance, P&L, balance sheet, AR/AP aging, general ledger.
