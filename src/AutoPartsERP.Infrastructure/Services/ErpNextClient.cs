@@ -152,7 +152,8 @@ public sealed class ErpNextClient : IErpNextClient
         }
 
         var c = company.Value!;
-        var isCash = string.Equals(payment.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase);
+        var isCash = string.Equals(payment.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(payment.PaymentMethod, "USD_CASH", StringComparison.OrdinalIgnoreCase);
         var paidTo = isCash ? c.CashAccount : (c.BankAccount ?? c.CashAccount);
         if (string.IsNullOrWhiteSpace(c.ReceivableAccount) || string.IsNullOrWhiteSpace(paidTo))
         {
@@ -305,7 +306,8 @@ public sealed class ErpNextClient : IErpNextClient
         }
 
         var c = company.Value!;
-        var isCash = string.Equals(payment.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase);
+        var isCash = string.Equals(payment.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(payment.PaymentMethod, "USD_CASH", StringComparison.OrdinalIgnoreCase);
         var paidFrom = isCash ? c.CashAccount : (c.BankAccount ?? c.CashAccount);
         if (string.IsNullOrWhiteSpace(c.PayableAccount) || string.IsNullOrWhiteSpace(paidFrom))
         {

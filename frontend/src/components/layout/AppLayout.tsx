@@ -20,6 +20,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/customers', label: 'العملاء', icon: '◎' },
       { to: '/invoices', label: 'الفواتير', icon: '☰' },
+      { to: '/payments', label: 'الدفعات والقبض', icon: '＄' },
       { to: '/fx-rates', label: 'أسعار الصرف', icon: '⇄' },
       { to: '/parties', label: 'الأطراف', icon: '⊂' },
     ],

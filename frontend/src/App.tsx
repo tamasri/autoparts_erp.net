@@ -7,6 +7,7 @@ import KpiDashboard from './pages/kpi/KpiDashboard';
 import Customers from './pages/customers/Customers';
 import CustomerDetail from './pages/customers/CustomerDetail';
 import Invoices from './pages/invoices/Invoices';
+import Payments from './pages/sales/Payments';
 import InvoiceWorkspace from './pages/invoices/InvoiceWorkspace';
 import InvoiceDetail from './pages/invoices/InvoiceDetail';
 import FxRates from './pages/sales/FxRates';
@@ -51,6 +52,7 @@ export default function App(): JSX.Element {
         <Route path="customers" element={<Customers />} />
         <Route path="customers/:id" element={<CustomerDetail />} />
         <Route path="invoices" element={<Invoices />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="invoices/new" element={<InvoiceWorkspace />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="fx-rates" element={<FxRates />} />

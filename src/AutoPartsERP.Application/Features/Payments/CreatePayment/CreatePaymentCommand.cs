@@ -84,19 +84,21 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
         var paymentType = request.PaymentType.Trim().ToUpperInvariant();
         var paymentMethod = request.PaymentMethod.Trim().ToUpperInvariant();
 
+        var paymentNumber = $"PAY-{DateTime.UtcNow:yyyy}-{paymentId.ToString("N")[..8].ToUpperInvariant()}";
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO payments (
-                id, payment_type, customer_id, payment_date, payment_method, amount_syp, amount_usd,
+                id, payment_number, payment_type, customer_id, payment_date, payment_method, amount_syp, amount_usd,
                 allocated_syp, allocated_usd, fx_rate_id, reference_number, bank_name, cheque_number,
                 cheque_date, notes, created_at, created_by, received_by)
             VALUES (
-                @Id, @PaymentType, @CustomerId, @PaymentDate, @PaymentMethod, @AmountSyp, @AmountUsd,
+                @Id, @PaymentNumber, @PaymentType, @CustomerId, @PaymentDate, @PaymentMethod, @AmountSyp, @AmountUsd,
                 0, 0, @FxRateId, @ReferenceNumber, @BankName, @ChequeNumber, @ChequeDate, @Notes, now(), @CreatedBy, @ReceivedBy);
             """,
             new
             {
                 Id = paymentId,
+                PaymentNumber = paymentNumber,
                 PaymentType = paymentType,
                 request.CustomerId,
                 request.PaymentDate,
@@ -119,7 +121,7 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
 
         return Result<PaymentDto>.Success(PaymentMappings.ToPaymentDto(
             paymentId,
-            $"PAY-{DateTime.UtcNow:yyyy}-{paymentId.ToString("N")[..8].ToUpperInvariant()}",
+            paymentNumber,
             paymentType,
             request.CustomerId,
             customer.Name,
