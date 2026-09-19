@@ -28,6 +28,9 @@ public sealed class NullErpNextClient : IErpNextClient
     public Task<Result<string>> SyncPaymentAsync(ErpNextPaymentSync payment, CancellationToken cancellationToken = default) =>
         Skip(nameof(SyncPaymentAsync), payment.LocalPaymentId);
 
+    public Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default) =>
+        Skip(nameof(CancelDocumentAsync), Guid.Empty);
+
     private Task<Result<string>> Skip(string operation, Guid localId)
     {
         _logger.LogDebug("ERPNext sync skipped (not configured): {Operation} for {LocalId}", operation, localId);

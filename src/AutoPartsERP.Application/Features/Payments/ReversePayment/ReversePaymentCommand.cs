@@ -60,6 +60,23 @@ public sealed class ReversePaymentCommandHandler : IRequestHandler<ReversePaymen
             return Result<Guid>.Failure(new Error("Payment.AlreadyReversed", "Payment is already reversed."));
         }
 
+        // Reversing a receipt must give the money back to the invoices it had settled. payment_allocations is append-only
+        // (a trigger forbids UPDATE/DELETE), so the allocation rows stay as history and the invoices' paid amounts are what
+        // gets corrected. Before this the flag was flipped and the invoices stayed "paid", leaving customer balances wrong.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE invoices i
+            SET paid_syp = i.paid_syp - a.allocated_syp,
+                paid_usd = i.paid_usd - a.allocated_usd,
+                updated_at = now(),
+                updated_by = @ReversedBy
+            FROM payment_allocations a
+            WHERE a.payment_id = @PaymentId AND a.invoice_id = i.id;
+            """,
+            new { request.PaymentId, ReversedBy = _currentUser.UserId },
+            transaction,
+            cancellationToken: cancellationToken));
+
         var outboxMessage = OutboxMessage.Create(
             OutboxEventTypes.PaymentReversed,
             "Payment",

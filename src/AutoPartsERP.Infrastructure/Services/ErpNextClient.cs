@@ -140,20 +140,113 @@ public sealed class ErpNextClient : IErpNextClient
             cancellationToken);
     }
 
-    public Task<Result<string>> SyncPaymentAsync(ErpNextPaymentSync payment, CancellationToken cancellationToken = default) =>
-        UpsertAsync(
-            "Payment Entry",
-            payment.LocalPaymentId.ToString(),
-            new JsonObject
+    public async Task<Result<string>> SyncPaymentAsync(ErpNextPaymentSync payment, CancellationToken cancellationToken = default)
+    {
+        var company = await GetCompanyAsync(cancellationToken);
+        if (company.IsFailure)
+        {
+            return Result<string>.Failure(company.Error);
+        }
+
+        var c = company.Value!;
+        var isCash = string.Equals(payment.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase);
+        var paidTo = isCash ? c.CashAccount : (c.BankAccount ?? c.CashAccount);
+        if (string.IsNullOrWhiteSpace(c.ReceivableAccount) || string.IsNullOrWhiteSpace(paidTo))
+        {
+            return Result<string>.Failure(new Error(
+                "ErpNext.AccountsMissing",
+                $"Company '{c.Name}' has no default receivable/{(isCash ? "cash" : "bank")} account in ERPNext; set it in the chart of accounts."));
+        }
+
+        var references = new JsonArray();
+        foreach (var r in payment.References)
+        {
+            references.Add(new JsonObject
             {
-                ["payment_type"] = "Receive",
-                ["party_type"] = "Customer",
-                ["party"] = payment.CustomerId.ToString(),
-                ["paid_amount"] = payment.Amount,
-                ["received_amount"] = payment.Amount,
-                ["posting_date"] = payment.PaymentDate.ToString("yyyy-MM-dd")
-            },
+                ["reference_doctype"] = "Sales Invoice",
+                ["reference_name"] = r.SalesInvoiceName,
+                ["allocated_amount"] = r.AllocatedAmount
+            });
+        }
+
+        var date = payment.PaymentDate.ToString("yyyy-MM-dd");
+        var doc = new JsonObject
+        {
+            ["payment_type"] = "Receive",
+            ["company"] = c.Name,
+            ["posting_date"] = date,
+            ["party_type"] = "Customer",
+            ["party"] = payment.CustomerName,
+            ["paid_from"] = c.ReceivableAccount,
+            ["paid_to"] = paidTo,
+            ["paid_amount"] = payment.Amount,
+            ["received_amount"] = payment.Amount,
+            ["references"] = references,
+            ["remarks"] = $"AutoPartsERP payment {payment.LocalPaymentId}",
+            ["docstatus"] = 1
+        };
+
+        // ERPNext insists on a reference number/date for bank-type receipts.
+        if (!isCash)
+        {
+            doc["reference_no"] = string.IsNullOrWhiteSpace(payment.ReferenceNumber) ? payment.LocalPaymentId.ToString("N")[..12] : payment.ReferenceNumber;
+            doc["reference_date"] = date;
+        }
+
+        return await UpsertAsync("Payment Entry", payment.LocalPaymentId.ToString(), doc, cancellationToken);
+    }
+
+    public async Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            "api/method/frappe.client.cancel",
+            new JsonObject { ["doctype"] = doctype, ["name"] = name },
             cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return Result<string>.Success(name);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning("ERPNext cancel failed for {Doctype} {Name}: {Status} {Body}", doctype, name, response.StatusCode, body);
+        return Result<string>.Failure(new Error("ErpNext.CancelFailed", $"{response.StatusCode}: {Truncate(body)}"));
+    }
+
+    private sealed record CompanyInfo(string Name, string? ReceivableAccount, string? CashAccount, string? BankAccount);
+
+    private CompanyInfo? _company;
+
+    /// <summary>The single ERPNext company and its default accounts (receivable / cash / bank), read once per client instance.</summary>
+    private async Task<Result<CompanyInfo>> GetCompanyAsync(CancellationToken cancellationToken)
+    {
+        if (_company is not null)
+        {
+            return Result<CompanyInfo>.Success(_company);
+        }
+
+        var fields = Uri.EscapeDataString("[\"name\",\"default_receivable_account\",\"default_cash_account\",\"default_bank_account\"]");
+        var response = await _httpClient.GetAsync($"api/resource/Company?fields={fields}&limit_page_length=1", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            return Result<CompanyInfo>.Failure(new Error("ErpNext.CompanyLookupFailed", $"{response.StatusCode}: {Truncate(body)}"));
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
+            var first = document!.RootElement.GetProperty("data").EnumerateArray().First();
+            string? Read(string key) => first.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            _company = new CompanyInfo(Read("name")!, Read("default_receivable_account"), Read("default_cash_account"), Read("default_bank_account"));
+            return Result<CompanyInfo>.Success(_company);
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyInfo>.Failure(new Error("ErpNext.CompanyLookupFailed", $"Unexpected company response: {ex.Message}"));
+        }
+    }
 
     private async Task<Result<string>> UpsertAsync(string doctype, string localName, JsonObject payload, CancellationToken cancellationToken)
     {

@@ -15,13 +15,15 @@ public sealed class SyncCatalogToErpNextJob
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IErpNextClient _erpNextClient;
     private readonly SalesInvoiceErpNextSyncer _invoiceSyncer;
+    private readonly PaymentErpNextSyncer _paymentSyncer;
     private readonly ILogger<SyncCatalogToErpNextJob> _logger;
 
-    public SyncCatalogToErpNextJob(IDbConnectionFactory connectionFactory, IErpNextClient erpNextClient, SalesInvoiceErpNextSyncer invoiceSyncer, ILogger<SyncCatalogToErpNextJob> logger)
+    public SyncCatalogToErpNextJob(IDbConnectionFactory connectionFactory, IErpNextClient erpNextClient, SalesInvoiceErpNextSyncer invoiceSyncer, PaymentErpNextSyncer paymentSyncer, ILogger<SyncCatalogToErpNextJob> logger)
     {
         _connectionFactory = connectionFactory;
         _erpNextClient = erpNextClient;
         _invoiceSyncer = invoiceSyncer;
+        _paymentSyncer = paymentSyncer;
         _logger = logger;
     }
 
@@ -100,6 +102,12 @@ public sealed class SyncCatalogToErpNextJob
         foreach (var invoiceId in pendingInvoiceIds)
         {
             await _invoiceSyncer.SyncAsync(invoiceId, cancellationToken);
+        }
+
+        // Receipts last: a Payment Entry references Sales Invoices that must already be in ERPNext.
+        foreach (var paymentId in await _paymentSyncer.FindPendingAsync(cancellationToken))
+        {
+            await _paymentSyncer.SyncAsync(paymentId, cancellationToken);
         }
     }
 

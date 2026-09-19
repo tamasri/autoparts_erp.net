@@ -23,6 +23,9 @@ public interface IErpNextClient
     Task<Result<string>> SyncSalesInvoiceAsync(ErpNextSalesInvoiceSync invoice, CancellationToken cancellationToken = default);
 
     Task<Result<string>> SyncPaymentAsync(ErpNextPaymentSync payment, CancellationToken cancellationToken = default);
+
+    /// <summary>Cancels a submitted ERPNext document (Sales Invoice, Payment Entry, ...) by its ERPNext name.</summary>
+    Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default);
 }
 
 public sealed record ErpNextItemSync(Guid LocalItemId, string Code, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice);
@@ -33,4 +36,14 @@ public sealed record ErpNextSalesInvoiceSync(Guid LocalInvoiceId, string Invoice
 
 public sealed record ErpNextInvoiceLineSync(string ItemCode, decimal Quantity, decimal UnitPrice, decimal DiscountPercent);
 
-public sealed record ErpNextPaymentSync(Guid LocalPaymentId, Guid CustomerId, decimal Amount, string Currency, DateOnly PaymentDate, Guid? AgainstInvoiceId);
+/// <summary>A customer receipt. Amount is in the ERPNext company currency (USD); References are the Sales Invoices it settles.</summary>
+public sealed record ErpNextPaymentSync(
+    Guid LocalPaymentId,
+    string CustomerName,
+    decimal Amount,
+    DateOnly PaymentDate,
+    string PaymentMethod,
+    string? ReferenceNumber,
+    IReadOnlyList<ErpNextPaymentReference> References);
+
+public sealed record ErpNextPaymentReference(string SalesInvoiceName, decimal AllocatedAmount);

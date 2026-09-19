@@ -171,6 +171,7 @@ builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
 // depends only on IErpNextClient, so flipping Erpnext:Enabled is the only thing that changes
 // behaviour - no call site needs to change.
 builder.Services.AddScoped<SalesInvoiceErpNextSyncer>();
+builder.Services.AddScoped<PaymentErpNextSyncer>();
 builder.Services.Configure<ErpNextOptions>(builder.Configuration.GetSection(ErpNextOptions.SectionName));
 var erpNextEnabled = builder.Configuration.GetValue<bool>($"{ErpNextOptions.SectionName}:Enabled");
 if (erpNextEnabled)
@@ -230,6 +231,8 @@ builder.Services.AddSingleton<HangfireAuthorizationFilter>();
 builder.Services.AddHostedService<OutboxDispatcherService>();
 builder.Services.AddScoped<IOutboxEventHandler, InvoicePostedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, PaymentAllocatedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, PaymentReversedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, InvoiceVoidedOutboxHandler>();
 
 // Audit configuration
 AuditConfiguration.Configure(builder.Configuration);
