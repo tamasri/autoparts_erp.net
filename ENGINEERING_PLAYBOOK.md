@@ -132,6 +132,8 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 
 > **Policy change:** `ENGINEERING_PLAYBOOK.md §2.5` (old) prohibited MUI, TanStack Query, react-hook-form and Zod. The owner overrode this on 2026-09-19 (see `PROJECT_VISION.md §2a`). The rules below replace the old §2.5 in full.
 
+> **Never use `require()` in `frontend/src`.** It works in the Vite dev server but not in the production bundle, where it blanks the whole app (`require is not defined`) — this happened on 2026-09-19 with `rtlCache.ts`. Use ES `import`s (add a `.d.ts` for untyped packages). After any change to `main.tsx`, the theme or the emotion cache, run `npm run build && npx vite preview` and open the page: a green `tsc`/`build` does not prove the bundle runs.
+
 - **Component model:** React 19 function components + hooks. **No class components.**
 - **Data fetching:** **@tanstack/react-query v5** — `useQuery` / `useMutation` with typed query keys. Every entity has a `features/<entity>/queries.ts` exporting `use<Entity>List`, `use<Entity>ById`, `useSave<Entity>`, `useDelete<Entity>`. `staleTime` default 30 s. `keepPreviousData` (alias `placeholderData`) on list queries to prevent flash. Cache invalidation via `queryClient.invalidateQueries({ queryKey: [entity] })` in `onSuccess`. **No raw `useEffect` data fetching.** `usePagedList` is deprecated — migrate screen by screen.
 - **API layer:** single `lib/apiClient.ts` instance (wraps `api/client.ts`) that unwraps the `ApiResponse` envelope (`res.data?.data ?? res.data`) once and throws a typed `ApiError`. Typed endpoint modules in `api/endpoints/*` stay; they return the raw axios response — `apiClient.ts` normalises it for TanStack Query.
