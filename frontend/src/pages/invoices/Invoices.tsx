@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { invoicesApi } from '../../api/endpoints/invoices';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
 
 type Invoice = {
@@ -28,40 +28,20 @@ const STATUS_TABS = [
 
 export default function Invoices(): JSX.Element {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [status, setStatus] = useState<string>('ALL');
-  const [items, setItems] = useState<Invoice[]>([]);
-
-  useEffect(() => {
-    let mounted = true;
-    async function load(): Promise<void> {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await invoicesApi.getInvoices({
-          page: 1,
-          pageSize: 50,
-          status: status === 'ALL' ? undefined : status,
-        });
-        if (mounted) setItems(unwrapList<Invoice>(res.data));
-      } catch (e: unknown) {
-        if (!mounted) return;
-        const msg = (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.detail
-          ?? (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.message
-          ?? 'تعذر تحميل الفواتير';
-        setError(msg);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-    void load();
-    return () => { mounted = false; };
-  }, [status]);
+  const list = usePagedList<Invoice>({
+    errorMessage: 'تعذر تحميل الفواتير',
+    deps: [status],
+    fetcher: ({ page, pageSize, search }) => invoicesApi.getInvoices({
+      page,
+      pageSize,
+      status: status === 'ALL' ? undefined : status,
+      searchTerm: search || undefined,
+    }),
+  });
+  const { items, error, loading } = list;
 
   const today = useMemo(() => new Date(), []);
-
-  if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{ direction: 'rtl' }}>
@@ -77,6 +57,14 @@ export default function Invoices(): JSX.Element {
       </div>
 
       {error ? <ErrorBanner message={error} /> : null}
+
+      <input
+        value={list.searchInput}
+        onChange={(e) => list.setSearchInput(e.target.value)}
+        placeholder="ابحث برقم الفاتورة أو اسم العميل..."
+        className="vex-input"
+        style={{ marginBottom: 16, maxWidth: 420 }}
+      />
 
       {/* Status Tab Pills */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -107,7 +95,7 @@ export default function Invoices(): JSX.Element {
       </div>
 
       {/* Table Card */}
-      <div className="vex-card vex-card--no-pad">
+      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
             <thead>
@@ -168,6 +156,7 @@ export default function Invoices(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
       </div>
     </div>
   );

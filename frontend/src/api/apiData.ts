@@ -30,3 +30,22 @@ export function unwrapNode<T>(payload: unknown): T | null {
   const data = (root?.data ?? payload) as T | undefined;
   return (data ?? null) as T | null;
 }
+
+export type PagedData<T> = { items: T[]; page: number; pageSize: number; totalCount: number };
+
+/** Unwrap a server-paged payload ({ data: { items, pageNumber, pageSize, totalCount } }). */
+export function unwrapPaged<T>(payload: unknown): PagedData<T> {
+  const root = payload as { data?: unknown } | undefined;
+  const data = (root?.data ?? payload) as
+    | { items?: T[]; pageNumber?: number; page?: number; pageSize?: number; totalCount?: number }
+    | T[]
+    | undefined;
+  if (Array.isArray(data)) return { items: data, page: 1, pageSize: data.length, totalCount: data.length };
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    items,
+    page: data?.pageNumber ?? data?.page ?? 1,
+    pageSize: data?.pageSize ?? items.length,
+    totalCount: data?.totalCount ?? items.length,
+  };
+}

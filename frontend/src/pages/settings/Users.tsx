@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
 import { usersApi } from '../../api/endpoints/users';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 type User = {
   id: string;
@@ -24,30 +23,11 @@ const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 export default function Users(): JSX.Element {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [rows, setRows] = useState<User[]>([]);
-
-  useEffect(() => {
-    let mounted = true;
-    async function load(): Promise<void> {
-      setLoading(true); setError('');
-      try {
-        const res = await usersApi.getUsers(1, 50);
-        if (mounted) setRows(unwrapList<User>(res.data));
-      } catch (e: unknown) {
-        if (!mounted) return;
-        const msg = (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.detail
-          ?? (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.message
-          ?? 'تعذر تحميل المستخدمين';
-        setError(msg);
-      } finally { if (mounted) setLoading(false); }
-    }
-    void load();
-    return () => { mounted = false; };
-  }, []);
-
-  if (loading) return <LoadingSpinner />;
+  const list = usePagedList<User>({
+    errorMessage: 'تعذر تحميل المستخدمين',
+    fetcher: ({ page, pageSize, search }) => usersApi.getUsers(page, pageSize, search),
+  });
+  const { items: rows, error, loading } = list;
 
   const activeCount = rows.filter((r) => r.isActive ?? true).length;
 
@@ -63,14 +43,22 @@ export default function Users(): JSX.Element {
             ✓ نشط: {activeCount}
           </div>
           <div style={{ background: 'var(--clr-surface-2)', color: 'var(--txt-muted)', border: '1px solid var(--clr-border)', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-            إجمالي: {rows.length}
+            إجمالي: {list.totalCount}
           </div>
         </div>
       </div>
 
       {error ? <ErrorBanner message={error} /> : null}
 
-      <div className="vex-card vex-card--no-pad">
+      <input
+        value={list.searchInput}
+        onChange={(e) => list.setSearchInput(e.target.value)}
+        placeholder="ابحث باسم المستخدم أو الاسم الكامل..."
+        className="vex-input"
+        style={{ marginBottom: 16, maxWidth: 420 }}
+      />
+
+      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
             <thead>
@@ -132,6 +120,7 @@ export default function Users(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { partiesApi } from '../../api/endpoints/parties';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 type PartyType = { typeCode?: string; code?: string; isActive?: boolean };
 type Party = { id: string; code?: string; displayName?: string; city?: string; isActive?: boolean; typeAssignments?: PartyType[]; types?: PartyType[] };
@@ -20,9 +20,13 @@ const TYPE_BADGE: Record<string, { bg: string; color: string }> = {
 
 export default function Parties(): JSX.Element {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [rows, setRows] = useState<Party[]>([]);
+  const list = usePagedList<Party>({
+    errorMessage: 'تعذر تحميل الأطراف',
+    fetcher: ({ page, pageSize, search }) => partiesApi.getParties({ page, pageSize, searchTerm: search || undefined }),
+  });
+  const { items: rows, error: listError, loading } = list;
+  const [formError, setError] = useState('');
+  const error = formError || listError;
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -31,14 +35,7 @@ export default function Parties(): JSX.Element {
   const [notes, setNotes] = useState('');
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['CUSTOMER']);
 
-  async function load(): Promise<void> {
-    setLoading(true); setError('');
-    try { const res = await partiesApi.getParties({ page: 1, pageSize: 50 }); setRows(unwrapList<Party>(res.data)); }
-    catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل الأطراف')); }
-    finally { setLoading(false); }
-  }
-
-  useEffect(() => { void load(); }, []);
+  const load = async (): Promise<void> => { list.reload(); };
 
   function toggleType(t: string): void {
     setSelectedTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -55,8 +52,6 @@ export default function Parties(): JSX.Element {
     finally { setBusy(false); }
   }
 
-  if (loading) return <LoadingSpinner />;
-
   return (
     <div style={{ direction: 'rtl' }}>
       <div className="vex-page-header">
@@ -70,6 +65,14 @@ export default function Parties(): JSX.Element {
       </div>
 
       {error ? <ErrorBanner message={error} /> : null}
+
+      <input
+        value={list.searchInput}
+        onChange={(e) => list.setSearchInput(e.target.value)}
+        placeholder="ابحث بالاسم أو الرقم الضريبي..."
+        className="vex-input"
+        style={{ marginBottom: 16, maxWidth: 420 }}
+      />
 
       {showForm ? (
         <div className="vex-card" style={{ marginBottom: 20 }}>
@@ -130,7 +133,7 @@ export default function Parties(): JSX.Element {
         </div>
       ) : null}
 
-      <div className="vex-card vex-card--no-pad">
+      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
             <thead>
@@ -185,6 +188,7 @@ export default function Parties(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { approvalsApi } from '../../api/endpoints/approvals';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import { toast, extractApiError } from '../../lib/toast';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
 
 type Approval = {
@@ -18,19 +18,14 @@ type Approval = {
 };
 
 export default function Approvals(): JSX.Element {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [rows, setRows] = useState<Approval[]>([]);
+  const list = usePagedList<Approval>({
+    errorMessage: 'تعذر تحميل الطلبات',
+    fetcher: ({ page, pageSize }) => approvalsApi.getPending(page, pageSize),
+  });
+  const { items: rows, error, loading } = list;
   const [busy, setBusy] = useState('');
 
-  async function load(): Promise<void> {
-    setLoading(true); setError('');
-    try { const res = await approvalsApi.getPending(1, 50); setRows(unwrapList<Approval>(res.data)); }
-    catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل الطلبات')); }
-    finally { setLoading(false); }
-  }
-
-  useEffect(() => { void load(); }, []);
+  const load = async (): Promise<void> => { list.reload(); };
 
   async function approve(id: string): Promise<void> {
     setBusy(id);
@@ -48,8 +43,6 @@ export default function Approvals(): JSX.Element {
     finally { setBusy(''); }
   }
 
-  if (loading) return <LoadingSpinner />;
-
   return (
     <div style={{ direction: 'rtl' }}>
       <div className="vex-page-header">
@@ -59,19 +52,19 @@ export default function Approvals(): JSX.Element {
         </div>
         {rows.length > 0 && (
           <div style={{ background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-            ⏳ معلّق: {rows.length}
+            ⏳ معلّق: {list.totalCount}
           </div>
         )}
       </div>
 
       {error ? <ErrorBanner message={error} /> : null}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && !loading ? (
         <div className="vex-card" style={{ textAlign: 'center', padding: '48px 0' }}>
           <EmptyState icon="✅" message="لا توجد طلبات موافقة معلقة" />
         </div>
       ) : (
-        <div className="vex-card vex-card--no-pad">
+        <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
           <div style={{ overflowX: 'auto' }}>
             <table className="vex-table">
               <thead>
@@ -123,6 +116,7 @@ export default function Approvals(): JSX.Element {
               </tbody>
             </table>
           </div>
+          <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
         </div>
       )}
     </div>

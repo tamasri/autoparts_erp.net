@@ -1,7 +1,8 @@
 import { apiClient } from '../client';
 
 export const usersApi = {
-  getUsers: (page = 1, pageSize = 20) => apiClient.get('/users', { params: { page, pageSize } }),
+  getUsers: (page = 1, pageSize = 20, search?: string) =>
+    apiClient.get('/users', { params: { page, pageSize, search: search || undefined } }),
   getUserById: (userId: string) => apiClient.get(`/users/${userId}`),
   createUser: (payload: unknown) => apiClient.post('/users', payload),
   updateUser: (userId: string, payload: unknown) => apiClient.put(`/users/${userId}`, payload),

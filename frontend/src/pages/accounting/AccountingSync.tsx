@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { erpnextApi } from '../../api/endpoints/erpnext';
-import { unwrapList } from '../../api/apiData';
+import { unwrapNode } from '../../api/apiData';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
+import Pagination from '../../components/common/Pagination';
+import { usePagedList } from '../../hooks/usePagedList';
 import StatusBadge from '../../components/common/StatusBadge';
 
 type SyncRow = {
@@ -23,40 +24,52 @@ const doctypeLabels: Record<string, string> = {
   'Payment Entry': 'مدفوعات',
 };
 
-export default function AccountingSync(): JSX.Element {
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
-  const [rows, setRows] = useState<SyncRow[]>([]);
+type Summary = { doctype: string; status: string; count: number };
+type RecentError = { doctype: string; lastError?: string | null };
+type SummaryPayload = { summary: Summary[]; recentErrors: RecentError[] };
 
-  const load = useCallback(async (): Promise<void> => {
-    setError('');
+const STATUS_FILTERS = [
+  { key: '', label: 'الكل' },
+  { key: 'SYNCED', label: 'تمت' },
+  { key: 'FAILED', label: 'فشلت' },
+  { key: 'SKIPPED', label: 'متخطاة' },
+];
+
+export default function AccountingSync(): JSX.Element {
+  const [syncing, setSyncing] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [info, setInfo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [summaryData, setSummaryData] = useState<SummaryPayload>({ summary: [], recentErrors: [] });
+
+  const list = usePagedList<SyncRow>({
+    errorMessage: 'تعذر تحميل حالة المزامنة',
+    deps: [statusFilter],
+    fetcher: ({ page, pageSize }) => erpnextApi.getSyncLog(page, pageSize, statusFilter),
+  });
+  const rows = list.items;
+  const loading = list.loading;
+  const error = actionError || list.error;
+
+  const loadSummary = useCallback(async (): Promise<void> => {
     try {
-      const res = await erpnextApi.getSyncLog();
-      setRows(unwrapList<SyncRow>(res.data));
-    } catch (e: unknown) {
-      const r = e as { response?: { status?: number; data?: { detail?: string; message?: string } } };
-      setError(
-        r.response?.status === 403
-          ? 'هذه الشاشة متاحة لمدير النظام فقط'
-          : r.response?.data?.detail ?? r.response?.data?.message ?? 'تعذر تحميل حالة المزامنة',
-      );
-    } finally {
-      setLoading(false);
-    }
+      const res = await erpnextApi.getSummary();
+      setSummaryData(unwrapNode<SummaryPayload>(res.data) ?? { summary: [], recentErrors: [] });
+    } catch { /* the list request already surfaces access/connectivity errors */ }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadSummary(); }, [loadSummary]);
+
+  function refresh(): void { list.reload(); void loadSummary(); }
 
   async function runSync(): Promise<void> {
-    setSyncing(true); setError(''); setInfo('');
+    setSyncing(true); setActionError(''); setInfo('');
     try {
       await erpnextApi.triggerSync();
       setInfo('بدأت المزامنة في الخلفية. حدّث الشاشة بعد لحظات لرؤية النتيجة.');
     } catch (e: unknown) {
       const r = e as { response?: { status?: number; data?: { error?: string; detail?: string } } };
-      setError(
+      setActionError(
         r.response?.status === 409
           ? 'تكامل ERPNext غير مفعّل في إعدادات الخادم'
           : r.response?.data?.error ?? r.response?.data?.detail ?? 'تعذر بدء المزامنة',
@@ -68,17 +81,17 @@ export default function AccountingSync(): JSX.Element {
 
   const summary = useMemo(() => {
     const groups = new Map<string, { synced: number; failed: number; skipped: number }>();
-    for (const row of rows) {
-      const g = groups.get(row.erpnextDoctype) ?? { synced: 0, failed: 0, skipped: 0 };
-      if (row.status === 'SYNCED') g.synced += 1;
-      else if (row.status === 'FAILED') g.failed += 1;
-      else g.skipped += 1;
-      groups.set(row.erpnextDoctype, g);
+    for (const row of summaryData.summary) {
+      const g = groups.get(row.doctype) ?? { synced: 0, failed: 0, skipped: 0 };
+      if (row.status === 'SYNCED') g.synced += row.count;
+      else if (row.status === 'FAILED') g.failed += row.count;
+      else g.skipped += row.count;
+      groups.set(row.doctype, g);
     }
     return [...groups.entries()];
-  }, [rows]);
+  }, [summaryData]);
 
-  const failures = rows.filter((r) => r.status === 'FAILED');
+  const failures = summaryData.recentErrors;
 
   return (
     <div style={{ direction: 'rtl' }}>
@@ -88,7 +101,7 @@ export default function AccountingSync(): JSX.Element {
           <div className="vex-page-header__breadcrumb">حالة ترحيل الأصناف والعملاء والفواتير إلى دفتر الأستاذ</div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" className="btn-ghost" onClick={() => { setLoading(true); void load(); }}>↺ تحديث</button>
+          <button type="button" className="btn-ghost" onClick={refresh}>↺ تحديث</button>
           <button type="button" className="btn-primary" disabled={syncing} onClick={() => void runSync()}>
             {syncing ? 'جارٍ البدء...' : '⇄ مزامنة الآن'}
           </button>
@@ -98,7 +111,7 @@ export default function AccountingSync(): JSX.Element {
       {error ? <ErrorBanner message={error} /> : null}
       {info ? <div className="vex-card" style={{ marginBottom: 16, color: 'var(--clr-primary)' }}>{info}</div> : null}
 
-      {loading ? <LoadingSpinner /> : (
+      {(
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
             {summary.length === 0 ? (
@@ -115,16 +128,22 @@ export default function AccountingSync(): JSX.Element {
 
           {failures.length > 0 ? (
             <div className="vex-card" style={{ marginBottom: 20 }}>
-              <h2 className="vex-section-title">أخطاء تحتاج انتباهاً ({failures.length})</h2>
-              {failures.slice(0, 20).map((f, i) => (
-                <div key={`${f.erpnextDoctype}-${i}`} style={{ fontSize: 12, padding: '6px 0', borderTop: i ? '1px solid var(--clr-border)' : 'none' }}>
-                  <strong>{doctypeLabels[f.erpnextDoctype] ?? f.erpnextDoctype}</strong>: {f.lastError ?? '-'}
+              <h2 className="vex-section-title">آخر الأخطاء</h2>
+              {failures.map((f, i) => (
+                <div key={`${f.doctype}-${i}`} style={{ fontSize: 12, padding: '6px 0', borderTop: i ? '1px solid var(--clr-border)' : 'none' }}>
+                  <strong>{doctypeLabels[f.doctype] ?? f.doctype}</strong>: {f.lastError ?? '-'}
                 </div>
               ))}
             </div>
           ) : null}
 
-          <div className="vex-card vex-card--no-pad">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            {STATUS_FILTERS.map((f) => (
+              <button key={f.key} type="button" onClick={() => setStatusFilter(f.key)} className={statusFilter === f.key ? 'btn-primary' : 'btn-ghost'} style={{ padding: '5px 14px', fontSize: 12 }}>{f.label}</button>
+            ))}
+          </div>
+
+          <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
             <div style={{ overflowX: 'auto' }}>
               <table className="vex-table">
                 <thead>
@@ -153,6 +172,7 @@ export default function AccountingSync(): JSX.Element {
                 </tbody>
               </table>
             </div>
+            <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
           </div>
         </>
       )}

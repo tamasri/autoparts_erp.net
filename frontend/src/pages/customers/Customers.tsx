@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customersApi, type CreateCustomer, type UpdateCustomer } from '../../api/endpoints/customers';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
 
 type Customer = {
@@ -52,34 +52,18 @@ const TYPE_STYLES: Record<string, { bg: string; color: string; label: string }> 
 
 export default function Customers(): JSX.Element {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [rows, setRows] = useState<Customer[]>([]);
+  const list = usePagedList<Customer>({
+    errorMessage: 'تعذر تحميل العملاء',
+    fetcher: ({ page, pageSize, search }) => customersApi.getCustomers({ page, pageSize, searchTerm: search || undefined }),
+  });
+  const { items: rows, error: listError, loading } = list;
+  const [formError, setError] = useState('');
+  const error = formError || listError;
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [busy, setBusy] = useState(false);
-
-  async function load(): Promise<void> {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await customersApi.getCustomers({ page: 1, pageSize: 50 });
-      setRows(unwrapList<Customer>(res.data));
-    } catch (e: unknown) {
-      setError(extractApiError(e, 'تعذر تحميل العملاء'));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  const filtered = useMemo(
-    () => rows.filter((r) => r.name?.toLowerCase().includes(search.toLowerCase()) || r.code?.toLowerCase().includes(search.toLowerCase())),
-    [rows, search],
-  );
+  const load = async (): Promise<void> => { list.reload(); };
 
   function openCreate(): void {
     setEditId(null);
@@ -159,8 +143,6 @@ export default function Customers(): JSX.Element {
       setBusy(false);
     }
   }
-
-  if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{ direction: 'rtl' }}>
@@ -267,8 +249,8 @@ export default function Customers(): JSX.Element {
       <div style={{ marginBottom: 16, position: 'relative' }}>
         <span style={{ position: 'absolute', top: '50%', right: 14, transform: 'translateY(-50%)', color: 'var(--txt-muted)', pointerEvents: 'none', fontSize: 16 }}>🔍</span>
         <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={list.searchInput}
+          onChange={(e) => list.setSearchInput(e.target.value)}
           placeholder="بحث بالاسم أو الكود..."
           className="vex-input"
           style={{ paddingRight: 40 }}
@@ -276,7 +258,7 @@ export default function Customers(): JSX.Element {
       </div>
 
       {/* Customers Table */}
-      <div className="vex-card vex-card--no-pad">
+      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
             <thead>
@@ -292,13 +274,13 @@ export default function Customers(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '36px 0' }}>
-                    {search ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء'}
+                    {list.searchInput ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء'}
                   </td>
                 </tr>
-              ) : filtered.map((row) => {
+              ) : rows.map((row) => {
                 const typeStyle = TYPE_STYLES[row.type.toUpperCase()] ?? { bg: '#f1f5f9', color: '#475569', label: row.type };
                 return (
                   <tr key={row.id} onClick={() => navigate(`/customers/${row.id}`)} style={{ cursor: 'pointer' }}>
@@ -337,9 +319,7 @@ export default function Customers(): JSX.Element {
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '10px 18px', borderTop: '1px solid var(--clr-border)', fontSize: 12, color: 'var(--txt-muted)' }}>
-          إجمالي النتائج: {filtered.length} من {rows.length} عميل
-        </div>
+        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
       </div>
     </div>
   );

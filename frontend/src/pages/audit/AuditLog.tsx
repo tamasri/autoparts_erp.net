@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { auditApi } from '../../api/endpoints/audit';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
 
 type AuditRow = { id: string; createdAt?: string; actorUsername?: string; action?: string; module?: string; entityType?: string; status?: string };
@@ -11,30 +11,25 @@ type Filters = { module: string; entityType: string; from: string; to: string };
 const emptyFilters: Filters = { module: '', entityType: '', from: '', to: '' };
 
 export default function AuditLog(): JSX.Element {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [rows, setRows] = useState<AuditRow[]>([]);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [applied, setApplied] = useState<Filters>(emptyFilters);
 
-  const load = useCallback(async (f: Filters): Promise<void> => {
-    setLoading(true); setError('');
-    try {
-      const params: Record<string, unknown> = { page: 1, pageSize: 50 };
-      if (f.module.trim()) params.module = f.module.trim();
-      if (f.entityType.trim()) params.entityType = f.entityType.trim();
-      if (f.from) params.from = new Date(f.from).toISOString();
-      if (f.to) params.to = new Date(f.to).toISOString();
-      const res = await auditApi.getLogs(params);
-      setRows(unwrapList<AuditRow>(res.data));
-    } catch (e: unknown) {
-      const r = e as { response?: { data?: { detail?: string; message?: string } } };
-      setError(r.response?.data?.detail ?? r.response?.data?.message ?? 'تعذر تحميل سجل التدقيق');
-    } finally { setLoading(false); }
-  }, []);
+  const list = usePagedList<AuditRow>({
+    errorMessage: 'تعذر تحميل سجل التدقيق',
+    pageSize: 50,
+    deps: [applied],
+    fetcher: ({ page, pageSize }) => {
+      const params: Record<string, unknown> = { page, pageSize };
+      if (applied.module.trim()) params.module = applied.module.trim();
+      if (applied.entityType.trim()) params.entityType = applied.entityType.trim();
+      if (applied.from) params.from = new Date(applied.from).toISOString();
+      if (applied.to) params.to = new Date(applied.to).toISOString();
+      return auditApi.getLogs(params);
+    },
+  });
+  const { items: rows, error, loading } = list;
 
-  useEffect(() => { void load(emptyFilters); }, [load]);
-
-  function reset(): void { setFilters(emptyFilters); void load(emptyFilters); }
+  function reset(): void { setFilters(emptyFilters); setApplied(emptyFilters); }
 
   return (
     <div style={{ direction: 'rtl' }}>
@@ -69,7 +64,7 @@ export default function AuditLog(): JSX.Element {
           </label>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" onClick={() => void load(filters)} className="btn-primary">
+          <button type="button" onClick={() => setApplied(filters)} className="btn-primary">
             🔍 تطبيق الفلاتر
           </button>
           <button type="button" onClick={reset} className="btn-ghost">
@@ -79,8 +74,8 @@ export default function AuditLog(): JSX.Element {
       </div>
 
       {/* Audit Table */}
-      {loading ? <LoadingSpinner /> : (
-        <div className="vex-card vex-card--no-pad">
+      {(
+        <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
           <div style={{ overflowX: 'auto' }}>
             <table className="vex-table">
               <thead>
@@ -130,9 +125,7 @@ export default function AuditLog(): JSX.Element {
               </tbody>
             </table>
           </div>
-          <div style={{ padding: '10px 18px', borderTop: '1px solid var(--clr-border)', fontSize: 12, color: 'var(--txt-muted)' }}>
-            {rows.length} سجل
-          </div>
+          <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
         </div>
       )}
     </div>

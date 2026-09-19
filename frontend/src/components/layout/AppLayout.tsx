@@ -28,6 +28,7 @@ const navGroups: NavGroup[] = [
     title: 'المشتريات والمخازن',
     icon: '📦',
     items: [
+      { to: '/items', label: 'الأصناف', icon: '◧' },
       { to: '/inventory', label: 'المخزون', icon: '▦' },
       { to: '/inventory/receiving', label: 'الاستلام', icon: '↙' },
       { to: '/inventory/transfers', label: 'التحويلات', icon: '⇌' },

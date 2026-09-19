@@ -23,6 +23,8 @@ import Users from './pages/settings/Users';
 import Roles from './pages/settings/Roles';
 import Approvals from './pages/approvals/Approvals';
 import AuditLog from './pages/audit/AuditLog';
+import Items from './pages/items/Items';
+import ItemCard from './pages/items/ItemCard';
 import AccountingSync from './pages/accounting/AccountingSync';
 import PeriodLocks from './pages/periods/PeriodLocks';
 
@@ -59,6 +61,8 @@ export default function App(): JSX.Element {
         <Route path="inventory/adjustments" element={<StockAdjustments />} />
         <Route path="inventory/issue-orders" element={<IssueOrders />} />
         <Route path="inventory/alerts" element={<InventoryAlerts />} />
+        <Route path="items" element={<Items />} />
+        <Route path="items/:id" element={<ItemCard />} />
         <Route path="parties" element={<Parties />} />
         <Route path="parties/:id/statement" element={<CombinedStatement />} />
         <Route path="approvals" element={<Approvals />} />

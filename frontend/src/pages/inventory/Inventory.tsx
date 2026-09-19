@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { inventoryApi } from '../../api/endpoints/inventory';
-import { unwrapList } from '../../api/apiData';
+import { usePagedList } from '../../hooks/usePagedList';
+import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 type StockRow = {
   id: string;
@@ -19,50 +19,16 @@ type StockRow = {
 };
 
 export default function Inventory(): JSX.Element {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
-  const [stockRows, setStockRows] = useState<StockRow[]>([]);
-  const [searchRows, setSearchRows] = useState<StockRow[]>([]);
+  const list = usePagedList<StockRow>({
+    errorMessage: 'تعذر تحميل المخزون',
+    pageSize: 25,
+    fetcher: ({ page, pageSize, search }) => inventoryApi.getStock({ page, pageSize, searchTerm: search || undefined }),
+  });
+  const { items: activeRows, error, loading } = list;
+  const query = list.searchInput;
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadSummary(): Promise<void> {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await inventoryApi.getStock({ page: 1, pageSize: 200 });
-        if (mounted) setStockRows(unwrapList<StockRow>(res.data));
-      } catch (e: unknown) {
-        if (!mounted) return;
-        const msg = (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.detail
-          ?? (e as { response?: { data?: { detail?: string; message?: string } } }).response?.data?.message
-          ?? 'تعذر تحميل المخزون';
-        setError(msg);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-    void loadSummary();
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    const handle = window.setTimeout(async () => {
-      if (!query.trim()) { setSearchRows([]); return; }
-      try {
-        const res = await inventoryApi.getStock({ page: 1, pageSize: 100, searchTerm: query.trim() });
-        setSearchRows(unwrapList<StockRow>(res.data));
-      } catch { setSearchRows([]); }
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [query]);
-
-  const activeRows = query.trim() ? searchRows : stockRows;
   const lowCount = useMemo(() => activeRows.filter((r) => Number(r.totalStock ?? r.quantityOnHand ?? 0) <= 0).length, [activeRows]);
   const stopShipCount = useMemo(() => activeRows.filter((r) => r.isStopShip).length, [activeRows]);
-
-  if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{ direction: 'rtl' }}>
@@ -80,7 +46,7 @@ export default function Inventory(): JSX.Element {
               border: '1px solid #fecaca', borderRadius: 'var(--radius-pill)',
               padding: '6px 14px', fontSize: 13, fontWeight: 700,
             }}>
-              ⚠ نافد: {lowCount}
+              ⚠ نافد (بالصفحة): {lowCount}
             </div>
           )}
           {stopShipCount > 0 && (
@@ -89,7 +55,7 @@ export default function Inventory(): JSX.Element {
               border: '1px solid #fde68a', borderRadius: 'var(--radius-pill)',
               padding: '6px 14px', fontSize: 13, fontWeight: 700,
             }}>
-              🚫 موقوف: {stopShipCount}
+              🚫 موقوف (بالصفحة): {stopShipCount}
             </div>
           )}
         </div>
@@ -106,7 +72,7 @@ export default function Inventory(): JSX.Element {
         }}>🔍</span>
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => list.setSearchInput(e.target.value)}
           placeholder="ابحث عن قطعة غيار... مثال: A 169 540 16 17"
           className="vex-input"
           style={{ paddingRight: 44, fontSize: 15 }}
@@ -114,7 +80,7 @@ export default function Inventory(): JSX.Element {
       </div>
 
       {/* Stock Table */}
-      <div className="vex-card vex-card--no-pad">
+      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
             <thead>
@@ -180,9 +146,7 @@ export default function Inventory(): JSX.Element {
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '10px 18px', borderTop: '1px solid var(--clr-border)', fontSize: 12, color: 'var(--txt-muted)' }}>
-          إجمالي الأصناف: {activeRows.length}
-        </div>
+        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
       </div>
     </div>
   );

@@ -57,3 +57,16 @@ public sealed record ItemInterchangeDto(
     int Priority,
     bool IsActive);
 
+
+public sealed record ItemListDto(
+    Guid Id,
+    string PartNumber,
+    string NameEn,
+    string NameAr,
+    string? Brand,
+    bool IsActive,
+    bool IsStopShip,
+    bool HasWarranty,
+    decimal ReorderLevel,
+    decimal AvailableQty,
+    long TotalCount);

@@ -6,6 +6,30 @@ public sealed class ItemsModule : ICarterModule
     {
         var group = app.MapGroup("/api/v1/items").RequireAuthorization();
 
+        group.MapGet("/", async Task<IResult> (
+                string? search,
+                int page,
+                int pageSize,
+                bool includeInactive,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new BrowseItemsQuery(search, page, pageSize, includeInactive), cancellationToken);
+                return result.ToApiResult();
+            });
+
+        group.MapGet("/{id:guid}/stock", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new GetItemStockQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
+        group.MapGet("/{id:guid}/aliases", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new GetItemAliasesQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapGet("/search", async Task<IResult> (
                 string query,
                 int page,
