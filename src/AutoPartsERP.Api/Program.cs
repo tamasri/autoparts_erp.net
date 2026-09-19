@@ -99,7 +99,9 @@ if (!builder.Environment.IsEnvironment("Testing"))
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
         .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(databaseConnectionString)));
-    builder.Services.AddHangfireServer();
+    // Every job class is tagged [Queue("governance")]; a server that only listens to "default"
+    // (the AddHangfireServer() default) silently never runs any of them.
+    builder.Services.AddHangfireServer(options => options.Queues = new[] { "default", "governance" });
 }
 
 // HealthChecks
