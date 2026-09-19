@@ -1,144 +1,168 @@
 # SETUP_HARDENING.md — AutoPartsERP
 
-> **Isolation notice:** Setup for **`autoparts_erp.net`** (.NET 9 / PostgreSQL / React) only.
+> Setup, deployment and hardening for **`autoparts_erp.net`** only. *Last verified 2026-09-19 against the running VPS.*
+> Never paste secrets into chat, tickets or commits. Anything that has been pasted in a chat is considered exposed.
 
 ---
 
 ## 1. Prerequisites (pinned)
 
-| Tool | Required version | Notes |
+| Tool | Version | Notes |
 |---|---|---|
-| .NET SDK | **9.0.312** (or newer 9.0 feature band) | Pinned in `global.json` (`rollForward: latestFeature`) |
-| Node.js | 20 LTS or 22 LTS | Frontend uses Vite 6 / React 19; `@types/node@22` |
-| Docker + Docker Compose | current | Provisions Postgres 16, Redis 7, Seq, pgAdmin |
-| PostgreSQL | 16 (via Docker) | Must support `ltree` + `pgvector` extensions |
-
-**Pin the SDK** — `global.json` (already present):
-```json
-{ "sdk": { "version": "9.0.312", "rollForward": "latestFeature" } }
-```
-Verify locally: `dotnet --version` should resolve to a 9.0.x band ≥ 9.0.312.
+| .NET SDK | **9.0.312** or newer | `global.json` → `rollForward: latestMajor` |
+| Node.js | 20 LTS or 22 LTS | Vite 6 / React 19 |
+| Docker + Compose | current | dev infra and production stack |
+| PostgreSQL | 16 | needs `uuid-ossp`, `pg_trgm`, `ltree`; `pgvector` for AI embeddings |
+| GitHub CLI (`gh`) | current | used to watch CI (`gh run list`) |
 
 ---
 
-## 2. One-command dev startup
+## 2. Local development
 
-### Option A — Windows all-in-one (recommended on this machine)
-From the repo root, this starts Docker infra, restores+builds the backend, installs frontend deps, and launches
-API (`:5000`) + Vite (`:5173`), then waits on health checks:
+### Option A — Windows all-in-one
 ```powershell
-./run-local.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1     # switches: -SkipDocker -SkipBuild -SkipFrontendInstall
+.\scripts\stop-local.ps1
 ```
-Useful switches: `-SkipDocker`, `-SkipBuild`, `-SkipFrontendInstall`.
-Logs land in `scripts/logs/` (`api.out.log`, `api.err.log`, `frontend.*`). Stop with `./scripts/stop-local.ps1`.
+(`START-FULLSTACK.bat` / `.vbs` are double-click wrappers.) Logs land in `scripts/logs/` (git-ignored).
 
-### Option B — Manual / cross-platform (3 terminals)
+### Option B — manual
 ```bash
-# 1) Infrastructure (Postgres 16, Redis 7, Seq, pgAdmin)
-docker compose -f docker-compose.dev.yml up -d
-
-# 2) API (auto-migrates + seeds on boot) -> http://localhost:5000
+docker compose -f docker-compose.dev.yml up -d          # Postgres 16, Redis 7, Seq, pgAdmin
 dotnet restore AutoPartsERP.sln --configfile NuGet.Config
-dotnet run --project src/AutoPartsERP.Api --launch-profile Development
-
-# 3) Frontend -> http://localhost:5173  (proxies /api and /hubs to :5000)
-cd frontend
-npm install
-npm run dev
+dotnet run --project src/AutoPartsERP.Api --launch-profile Development     # http://localhost:5000
+cd frontend && npm install && npm run dev                                   # http://localhost:5173
 ```
 
-### Entry URLs
 | Surface | URL |
 |---|---|
-| API base | http://localhost:5000 |
-| API docs (Scalar) | http://localhost:5000/scalar/v1 |
-| OpenAPI | http://localhost:5000/openapi/v1.json |
-| Health | http://localhost:5000/health (`/health/live`, `/health/ready`) |
-| Metrics (Prometheus) | http://localhost:5000/metrics |
-| Hangfire dashboard | http://localhost:5000/hangfire |
-| SignalR hub | ws://localhost:5000/hubs/erp |
-| Frontend SPA | http://localhost:5173 |
-| Seq logs | http://localhost:5341 |
-| pgAdmin | http://localhost:5050 (admin@erp.local / admin) |
+| API / Scalar / OpenAPI | `http://localhost:5000` · `/scalar/v1` · `/openapi/v1.json` |
+| Health / Metrics | `/health`, `/health/live`, `/health/ready` · `/metrics` |
+| Hangfire | `/hangfire` (needs a `SYSTEM_ADMIN` **Bearer** token — a plain browser gets 401) |
+| SignalR | `ws://localhost:5000/hubs/erp` |
+| Seq / pgAdmin | `:5341` / `:5050` |
 
-**Default admin login (dev seed):** `admin@autoparts.local` / `Admin@123456`.
+**Bootstrap admin.** Created once by `DatabaseSeeder` from `Seed:AdminEmail`, `Seed:AdminUsername`,
+`Seed:AdminPassword` (env: `Seed__AdminPassword`, …). In **Development** a fallback exists so a fresh checkout works; in
+**Production** the API refuses to start without a real password. There is no shared default password.
+
+**Migrations** auto-apply on startup outside `Testing`. They are raw SQL (`Persistence/Migrations`, ids
+`202401010000NN`); to add one, create the next numbered class — see ENGINEERING_PLAYBOOK §2.2.
+
+**Tests.** `dotnet test tests/AutoPartsERP.UnitTests` runs anywhere. `IntegrationTests` need Docker (Testcontainers);
+CI runs them. Frontend: `cd frontend && npx tsc --noEmit && npm run build`.
 
 ---
 
-## 3. EF Core migrations
+## 3. Production topology (the VPS as deployed)
 
-Migrations **auto-apply on API startup** (non-`Testing`). To manage them manually:
-```bash
-# install the CLI once, matching the pinned SDK band
-dotnet tool install --global dotnet-ef --version 9.*
-
-# add a migration (startup = Api, project = Infrastructure)
-dotnet ef migrations add <Name> \
-  --project src/AutoPartsERP.Infrastructure \
-  --startup-project src/AutoPartsERP.Api
-
-# apply explicitly
-dotnet ef database update \
-  --project src/AutoPartsERP.Infrastructure \
-  --startup-project src/AutoPartsERP.Api
 ```
-> Migrations must respect snake_case naming and the `ltree` / `pgvector` column types already in the schema.
+Internet ─▶ nginx (Docker, 80→443 redirect, self-signed TLS on the IP)
+              ├─ /              → static SPA (frontend/dist, built on the host)
+              ├─ /api/, /hubs/, /hangfire → api container :8080
+              └─ /health (127.0.0.1 only), /metrics (Docker subnets only)
+api container ──▶ host PostgreSQL 16   (host.docker.internal:5432)
+              ──▶ redis container
+              ──▶ ERPNext on the host (host.docker.internal:8080)   [frappe_docker pwd.yml, headless]
+```
+Host: Ubuntu 24.04, 1 vCPU / 2 GB RAM + swap. **Not enough** for ERPNext + app + growth — upgrade before production.
+No domain yet, so TLS is self-signed on the IP.
+
+### 3.1 Files
+- `docker-compose.vps.yml` — `api`, `redis`, `nginx` (adds `extra_hosts: host.docker.internal:host-gateway`).
+- `.env.vps` — **secrets, untracked**, created from `.env.vps.template` by the deploy script.
+- `nginx/nginx.conf` — bind-mounted; `/health` is loopback-only; unrouted paths fall back to the SPA.
+- `scripts/deploy-vps.sh` — the **only supported way to deploy**.
+
+### 3.2 Deploying
+```bash
+cd /erp
+git pull origin main
+bash scripts/deploy-vps.sh        # keeps working even if the file lost its +x bit
+```
+The script: validates prerequisites → creates/validates `.env.vps` → ensures JWT keys → ensures the seed admin
+password (generates one if it is still a placeholder) → checks Postgres reachability from a container → prepares TLS
+files → **builds the frontend into `frontend/dist`** → `docker compose down/up --build` → waits for `/health` → checks
+the HTTPS edge.
+
+**Do not** run `docker compose up` by hand:
+- it does not rebuild `frontend/dist` (the UI would stay stale);
+- without `--env-file .env.vps` the api boots with **blank** configuration and nginx returns 502.
+
+If `git pull` complains about local changes on the server, look at them (`git diff`), then `git stash` (or
+`git checkout -- <file>`), pull, and deploy. If the script loses its executable bit, use `bash scripts/...` and
+`git config core.fileMode false`.
+
+### 3.3 `.env.vps` keys (values are secrets — never share)
+`POSTGRES_HOST/PORT/DB/USER/PASSWORD`, `REDIS_PASSWORD`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `ALLOWED_ORIGINS`,
+`SEED_ADMIN_EMAIL/USERNAME/PASSWORD`, `ERPNEXT_ENABLED`, `ERPNEXT_BASE_URL` (`http://host.docker.internal:8080`),
+`ERPNEXT_API_KEY`, `ERPNEXT_API_SECRET`. Enter API keys **directly on the server**; verify without printing them
+(`grep -c PASTE_ .env.vps` should be `0`). Planned additions: `AI_*` (provider, base URL, model, key), `SMTP_*`,
+`BACKUP_*`.
+
+### 3.4 ERPNext (accounting engine)
+- Runs from frappe_docker (`pwd.yml`) on the host, port 8080; the API reaches it through the host port.
+- Company currency **USD**. An API key/secret pair belongs to a dedicated user, stored only in `.env.vps`.
+- Operators use **Accounting Sync** in our app (trigger, log, summary) — not ERPNext's UI and not `/hangfire`.
+- Verify a sync from the server: log in through the API, `POST /api/v1/erpnext/sync`, then read
+  `SELECT erpnext_doctype, status, count(*) FROM erpnext_sync_log GROUP BY 1,2;`.
+- **Change the default ERPNext `Administrator` password (`admin`)** — pending (H-4).
+
+### 3.5 Firewall / network
+- `ufw` should allow only 22, 80, 443 to the world. Container → host Postgres needs `5432` from `172.16.0.0/12`.
+- ERPNext's port 8080 was opened to reach the setup wizard from a browser. Check `ufw status` and close it to the
+  internet (the api reaches it through the host, not the public interface) — see H-4.
 
 ---
 
-## 4. Tool version pinning guidelines
+## 4. Troubleshooting (real incidents)
 
-- **.NET SDK:** keep `global.json` authoritative; bump deliberately in a `chore:` commit.
-- **NuGet:** `.csproj` uses floating minor bands (e.g. `MediatR 12.*`, `Npgsql...PostgreSQL 9.*`). For reproducible
-  builds, consider adding a `Directory.Packages.props` (Central Package Management) and/or committing a
-  `packages.lock.json` (`RestorePackagesWithLockFile=true`). Restore uses repo-local `NuGet.Config`.
-- **Node/npm:** add an `.nvmrc` / `engines` field to pin Node 20|22. Commit `frontend/package-lock.json` for
-  deterministic installs (`npm ci` in CI).
-- **Docker images:** already pinned by tag (`postgres:16-alpine`, `redis:7-alpine`). Prefer digest pinning for prod.
-
----
-
-## 5. Database setup checklist
-
-- [ ] `docker compose -f docker-compose.dev.yml up -d` is healthy (`pg_isready` passes).
-- [ ] Database `autoparts_erp`, user `erp_user`, password `erp_secret_dev` exist (compose creates them).
-- [ ] Extensions available: **`ltree`** and **`pgvector`** (add `CREATE EXTENSION` in a migration if a bare
-      Postgres image is used instead of a vector-enabled one).
-- [ ] API boots and applies all 6 migrations (Identity, Governance, Party+Outbox, Operational Core, Inventory WMS,
-      AI Foundation) with no errors.
-- [ ] Seed ran: admin user present; demo data (`DemoDataSeeder`) present in dev.
-- [ ] Hangfire schema created (jobs visible at `/hangfire`).
-- [ ] Redis reachable (`/health/ready` green).
-
----
-
-## 6. Environment variables / configuration checklist
-
-Config is read from `appsettings*.json` and can be overridden by environment variables (double-underscore
-section syntax). Keys observed in code:
-
-| Key | Purpose | Dev default |
+| Symptom | Cause | Fix |
 |---|---|---|
-| `Database__ConnectionString` (or `ConnectionStrings__DefaultConnection`) | PostgreSQL | `Host=localhost;Port=5432;Database=autoparts_erp;Username=erp_user;Password=erp_secret_dev` |
-| `Redis__ConnectionString` (or `ConnectionStrings__Redis`) | Redis | `localhost:6379,abortConnect=false` |
-| `Jwt__Issuer` | JWT issuer | `AutoPartsERP` |
-| `Jwt__Audience` | JWT audience | `AutoPartsERP-Client` |
-| `Jwt__PrivateKeyPemBase64` | RS256 signing key (**secret**) | dev key in appsettings — **replace in prod** |
-| `Jwt__PublicKeyPemBase64` | RS256 validation key | dev key in appsettings |
-| `Jwt__AccessTokenExpiryMinutes` | access token TTL | `15` |
-| `Jwt__RefreshTokenExpiryDays` | refresh token TTL | `7` |
-| `AllowedOrigins` | CORS origins | `http://localhost:5173` |
-| `Seq__Url` | Serilog Seq sink | `http://localhost:5341` |
-| `ASPNETCORE_ENVIRONMENT` | env selector | `Development` (use `Testing` for integration tests) |
+| Deploy says "PostgreSQL unreachable" | container could not resolve the host | `host.docker.internal:host-gateway` + `ufw allow from 172.16.0.0/12 to any port 5432` |
+| Health check fails though api is up | nginx `/health` is loopback-only | the script checks via `docker compose exec api wget` |
+| **502 Bad Gateway** | api restarted with blank env (compose run without `--env-file`), or still starting | run `bash scripts/deploy-vps.sh` |
+| UI changes not visible | `frontend/dist` not rebuilt | deploy via the script |
+| `/hangfire` shows the SPA or 401 | route was missing / dashboard needs a Bearer token | use the Accounting Sync screen |
+| Jobs never run, `hangfire.job` rows stay `Enqueued` | server not listening to the `governance` queue | fixed in `Program.cs`; keep it |
+| 500s on list endpoints | Dapper positional-record type mismatch, or EF/schema drift | alias columns, match CLR types, check the log |
+| API crashes on boot: seed password | password policy (needs upper/lower/digit/symbol, ≥ 8) or missing in Production | set `SEED_ADMIN_PASSWORD` |
+| Locked out over SSH | SSH hardening applied without a working key | use the provider's VNC console to revert `PermitRootLogin`/`PasswordAuthentication`; multi-line paste into noVNC corrupts text |
+| ERPNext rejects a customer | group-type link (`All Customer Groups`) | use leaf groups (`Commercial`, `Rest Of The World`, `Local`) |
+| CI red on a test that passed before | timing-dependent test | make it deterministic (see the metrics test) |
 
-### Production hardening checklist
-- [ ] **Rotate JWT keys** — never ship the dev PEM keys; inject `Jwt__PrivateKeyPemBase64` / `PublicKeyPemBase64`
-      from a secret manager. Do not commit prod keys.
-- [ ] **Tighten CORS** — replace `AllowAnyOrigin()` with the real origin list from `AllowedOrigins`.
-- [ ] **Secrets out of `appsettings`** — DB password, Redis, JWT via env/secret store (`.env.prod.template` /
-      `.env.vps.template` exist as starting points; keep real `.env` files untracked).
-- [ ] **Disable Scalar/OpenAPI publicly** (or auth-gate) in prod if not desired.
-- [ ] **Secure the Hangfire dashboard** (`HangfireAuthorizationFilter` exists — enforce real auth in prod).
-- [ ] **HTTPS/Nginx** — terminate TLS at `nginx/` reverse proxy (`docker-compose.prod.yml` / `docker-compose.vps.yml`).
-- [ ] **Migrations in prod** — decide between auto-migrate-on-boot vs a controlled `dotnet ef database update` step.
-- [ ] **Backups** — schedule Postgres backups for `autoparts_erp` (financial + inventory data).
+---
+
+## 5. Production hardening checklist
+
+**Done ✔**
+- [x] CORS from `AllowedOrigins`; fails closed outside Development.
+- [x] Hangfire dashboard requires an authenticated `SYSTEM_ADMIN`.
+- [x] No committed default admin password; production requires `Seed__AdminPassword`.
+- [x] JWT keys, DB and Redis passwords, ERPNext keys come from `.env.vps` (untracked; local secret files are git-ignored).
+- [x] TLS at nginx (self-signed for now), HSTS and security headers, login rate limit.
+- [x] Scripted deploy with health verification; CI green; approval replay and Hangfire queues fixed.
+- [x] Scalar/OpenAPI are **not proxied** by nginx (unreachable from outside).
+
+**Pending**
+- [ ] **H-1 Rotate exposed secrets:** Postgres password, JWT key pair (invalidates sessions), Redis password. Then
+      delete/relocate any local `ADMIN PASSWORD.txt`.
+- [ ] **H-2 Domain + real TLS** (Let's Encrypt or Cloudflare). `docs/cloudflare-setup.md` is a template that still
+      mentions another provider — adapt before use. Then set `ALLOWED_ORIGINS` to the real origins.
+- [ ] **H-3 SSH:** install a key, verify a second session works, *then* set `PasswordAuthentication no`; add `fail2ban`.
+- [ ] **H-4 ERPNext:** change the `Administrator` password; close port 8080 to the internet (`ufw status` to check).
+- [ ] **H-5 Backups:** scheduled `pg_dump` of `autoparts_erp` with rotation and an off-server copy; restore test; the
+      one-click backup screen is Phase 5.
+- [ ] **H-6** Map Scalar/OpenAPI only in Development (or gate by role).
+- [ ] **H-7** Server upgrade (RAM/CPU) before production load; monitor swap.
+- [ ] **H-8** Set GitHub secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` so CI can deploy (currently skipped).
+- [ ] **H-9** Decide migration policy for production (auto-migrate on boot vs a controlled step) and take a backup first.
+- [ ] **H-10** AI/notification keys (`AI_*`, `SMTP_*`) live only in `.env.vps`; document their rotation.
+
+---
+
+## 6. Reproducibility notes
+- Commit `frontend/package-lock.json`; use `npm ci` in CI. Consider `Directory.Packages.props` and lock files for
+  NuGet. Prefer image digests in production compose files.
+- Remove unused dependencies (see PROJECT_VISION §2) to shrink builds and attack surface.
+- `NuGet.Config` must stay simple — a hardcoded global packages folder once broke CI (a missing font asset path).

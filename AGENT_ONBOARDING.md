@@ -1,7 +1,9 @@
 # AGENT_ONBOARDING.md — AutoPartsERP
 
 > **READ THIS FIRST.** Any AI agent (or human) starting work on `autoparts_erp.net` must read this file
-> completely before writing a single line of code.
+> completely before writing a single line of code. Companion docs: `PROJECT_VISION.md` (what exists / roadmap),
+> `ENGINEERING_PLAYBOOK.md` (rules), `SETUP_HARDENING.md` (run, deploy, harden), `docs/FEATURE_GAP_AND_ROADMAP.md`
+> (gap analysis + phased plan). *Last verified against the code: 2026-09-19.*
 
 ---
 
@@ -11,120 +13,151 @@
 You are working ONLY on the `autoparts_erp.net` repository.
 
 HARD CONTEXT:
-- This is a .NET 9 Clean Architecture ERP for an automotive spare-parts business.
-- Stack: ASP.NET Core Minimal APIs + Carter, MediatR (CQRS) with pipeline behaviors,
-  EF Core 9 + Dapper on PostgreSQL 16, ASP.NET Identity + JWT RS256, Redis, Hangfire,
-  SignalR, Audit.NET, OpenTelemetry, Semantic Kernel + pgvector. Frontend: React 19 +
-  Vite 6 + TypeScript + MUI 6 (RTL/Arabic) + Zustand + TanStack Query + i18next.
-- Projects: Domain -> Contracts -> Application -> Infrastructure -> Api (Clean Architecture
-  dependency rule is absolute). Tests: UnitTests, IntegrationTests, E2ETests. SPA in /frontend.
+- .NET 9 Clean Architecture ERP for an automotive spare-parts business (Arabic-first, RTL).
+- Backend: ASP.NET Core Minimal APIs + Carter, MediatR (CQRS) with pipeline behaviors, EF Core 9 (writes,
+  migrations) + Dapper (reads) on PostgreSQL 16, ASP.NET Identity + JWT RS256, Redis, Hangfire, SignalR,
+  Audit.NET, OpenTelemetry.
+- Accounting: ERPNext runs as a HEADLESS accounting engine. This app is the system of record for items,
+  inventory, warehouse ops, warranty and governance; ERPNext is the system of record for the ledger (chart of
+  accounts, payments, purchase invoices, taxes, financial reports). The ONLY door between them is
+  `IErpNextClient`. Users never open ERPNext's UI — every accounting screen must live inside OUR frontend.
+- Frontend: React 19 + Vite 6 + TypeScript + react-router 7 + Zustand + axios + sonner, styled with our own
+  "Vex" design system (`frontend/src/styles/theme.css`, classes `vex-*`, `btn-*`, `badge*`). It does NOT use
+  MUI, TanStack Query, react-hook-form or Zod even though some are still listed in package.json (dead deps).
+- Projects: Domain -> Contracts -> Application -> Infrastructure -> Api (dependency rule is absolute).
+  Tests: UnitTests, IntegrationTests (need Docker/Testcontainers), E2ETests (empty). SPA in /frontend.
 
 ABSOLUTE RULES:
-1. This project is ISOLATED. Do NOT import any stack, tooling, pattern, env var, port, or
-   convention from any Next.js / NestJS / TypeScript-backend project. Those do not exist here.
-2. All cross-cutting rules (authorization, idempotency, period-lock, maker-checker, audit) are
-   enforced via MediatR pipeline behaviors and marker interfaces on commands. Do NOT reimplement
-   them in handlers or endpoints.
+1. ISOLATED project. Import nothing from any Next.js / NestJS / TS-backend project.
+2. Cross-cutting rules (authorization, idempotency, period-lock, maker-checker, audit) are enforced by
+   MediatR pipeline behaviors + marker interfaces on commands. Never reimplement them in handlers/endpoints.
 3. Business outcomes use Result / Result<T> + Error. Do not throw for expected failures.
-4. Database is snake_case (auto-converted in AppDbContext). Reads = Dapper SQL in snake_case
-   with AS-aliases; writes/invariants = Domain entity factories + EF/parameterized SQL.
-5. Every stateful write must consciously decide: which PermissionCode guards it, is it idempotent,
-   is it period-sensitive, does it need maker-checker approval, must it be audited. Encode each via
-   the marker interfaces (IAuthorizedRequest, IIdempotentRequest, IPeriodSensitiveRequest,
-   IMakerCheckerRequest, IAuditableRequest).
-6. Build must pass with TreatWarningsAsErrors=true. Warnings are errors.
-7. All UI strings via i18next (ar.json/en.json). Arabic is the primary end-user language; keep RTL.
-8. Follow the feature-folder convention under Application/Features/<Domain>/<Action>/.
+4. DB is snake_case. Reads = Dapper SQL with AS-aliases; writes/invariants = Domain factories + EF/parameterized SQL.
+5. Every stateful write decides: permission, idempotency, period-sensitivity, maker-checker, audit.
+6. Api/Application/Infrastructure build with TreatWarningsAsErrors=true. (Domain and Contracts do NOT yet —
+   known debt, do not rely on it.)
+7. UI strings: Arabic is the end-user language and RTL must stay intact. i18next is initialised
+   (`frontend/src/i18n`) but NO screen uses it yet — strings are hardcoded Arabic in the TSX. New screens follow
+   the existing hardcoded-Arabic convention until an externalisation pass is scheduled; never mix languages.
+8. Feature-folder convention under Application/Features/<Domain>/<Action>/.
+9. LISTS ARE SERVER-PAGED. Never fetch "a big page" and filter/aggregate in the browser. Use
+   `usePagedList` + `<Pagination>` for lists and server-side endpoints for every total/KPI.
+10. AI NEVER WRITES core data. It reads through permission-checked tools and proposes; execution goes
+    through the existing approval (maker-checker) flow.
+11. NEVER put secrets in code, commits, docs or chat. Keys live in env / .env.vps on the server only.
+12. Background jobs must do real work or be off. A job that records "completed" without doing anything is a bug.
 
-BEFORE CODING: run a context check — `git log --oneline -20`, `git status`, and read the target
-module + its Domain entity + Contracts DTOs. Do not modify code you have not read.
+BEFORE CODING: `git log --oneline -20`, `git status`, and read the target module + Domain entity + Contracts DTOs.
+Do not modify code you have not read.
 
-DELIVERY CADENCE: Build -> Stop -> Summarize (Features, Files, Dependencies, Next Steps) -> wait
-for approval before the next phase.
+DELIVERY: build + unit tests locally -> commit (Conventional Commits, with the Co-Authored-By line the session
+requires) -> push to `main` -> confirm the GitHub Actions run is GREEN (`gh run list`) -> report. If a run
+goes red, fixing it is the next task. Update PROJECT_VISION.md status whenever an Epic/Phase item completes.
 ```
 
 ---
 
-## 2. Confirmed Current State (verified from the codebase)
+## 2. Confirmed Current State (verified 2026-09-19)
 
-**Repository:** `https://github.com/tamasri/autoparts_erp.net.git` (remote `origin`, branch `main`).
+**Repository:** `https://github.com/tamasri/autoparts_erp.net.git`, branch `main`. The owner has explicitly
+authorised direct pushes to `main`; the working tree was clean at the last check.
 
-**Recent history (git log):**
-```
-fec10f9 fix: login flow + vite proxy + auth store + EF shadow property
-e2e881e fix: local run - identity schema migration + constructor bindings
-21943b8 feat: phase 3.5 operational core scaffold
-6138642 feat: phase 3 operational core
-7b13b07 feat: Phase 2 Operational Core - complete
-d982f21 feat: Phase 1 Governance Layer - complete scaffold
-```
-The project has progressed through **Phase 1 (Governance) → Phase 2/3/3.5 (Operational Core)** and a login/local-run
-fix pass. There are **substantial uncommitted working-tree changes** (new frontend pages, endpoints, `DemoDataSeeder.cs`,
-VPS compose/env templates, local run scripts) — treat the working tree, not just the last commit, as current state.
+**Live environment (dev/staging):** a Lightnode VPS — Ubuntu 24.04, 1 vCPU / 2 GB RAM (+ swap) — running the app
+behind nginx with a self-signed certificate on the bare IP (no domain yet). PostgreSQL 16 runs on the **host**
+(not in Docker); the `api` and `redis` containers run from `docker-compose.vps.yml`. ERPNext (frappe_docker
+`pwd.yml`) runs on the same host on port 8080. The server must be upgraded before production (see roadmap).
+Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md).
 
-**What is built and working:**
-- Full Clean Architecture solution (5 src projects + 3 test projects) that composes in `Program.cs`.
-- Governance pipeline: Validation, Authorization, Idempotency, PeriodLock, MakerChecker behaviors — all registered.
-- ~30 Carter API modules across Auth, Users, Roles, Approvals, Audit, Periods, ReasonCodes, Customers, Parties,
-  Catalog, Items, Inventory, Receiving, Transfers, CycleCounts, StockAdjustments, IssueOrders, InventoryAlerts,
-  Invoices, Payments, Warranty, FxRates, Reports, Barcodes, AI, KPIs, FX.
-- 40+ persisted entities; 6 EF migrations (Identity, Governance, Party+Outbox, Operational Core, Inventory WMS, AI).
-- Identity + JWT RS256 auth; login flow wired to the React SPA through the Vite proxy.
-- Hangfire recurring jobs (approval expiry, idempotency cleanup, summary refreshes, warranty expiry, low-stock,
-  AI accounting check) + Outbox dispatcher.
-- Observability, health checks, Scalar API docs, SignalR hub.
-- React SPA with auth store, app layout, and screens for Dashboard, Customers (+detail), Invoices (+detail),
-  Inventory, Parties, Users, Roles, Approvals, Audit, Period Locks.
+**What is built and working (verified in the running system):**
+- Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
+  approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
+- ~28 Carter modules; 12 raw-SQL migrations (ids `202401010000xx`); 60+ tables.
+- Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
+- Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
+  `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
+  (`sync_items_from_skus`, `sync_inventory_balances_from_stock`). Reverse sync (WMS → stock) is NOT done.
+- **ERPNext hand-off is live:** `ErpNextClient` syncs Items, Customers, Suppliers and posted Sales Invoices
+  (submitted, so GL entries post). Results are recorded in `erpnext_sync_log`. Company currency is **USD**
+  (owner decision). Payments, purchase invoices and reports are not synced yet.
+- Frontend screens (all RTL Arabic): Login, Dashboard, KPI, Customers (+detail), Parties (+combined statement),
+  Invoices (+workspace, detail), FX rates, Items list + **item card** (details/edit, stop-ship, stock, aliases,
+  interchanges, prices), Inventory, Receiving, Transfers, Cycle counts, Adjustments, Issue orders, Inventory
+  alerts, Approvals, Audit log, Period locks, Users (list), Roles, **Accounting Sync**.
+- Server-side paging on: invoices, customers, parties, inventory, users, approvals, audit, ERPNext sync log,
+  items. Still unpaged in the UI: receiving, transfers, cycle counts, adjustments, issue orders, FX rates.
+- CI (`.github/workflows/deploy.yml`): build + unit + integration tests on every push; the deploy job only
+  runs when the VPS secrets are configured (they are not yet, so CI is build/test only) and it is GREEN.
 
-**What is thin / missing (high level — see completion plan for detail):**
-- Frontend UI is missing for many built backend modules: Receiving, Transfers, Cycle Counts, Stock Adjustments,
-  Issue Orders, Inventory Alerts, Warranty, FX Rates, Reports, Barcodes/scanning, AI assistant, Reason Codes.
-- RBAC seeding is inconsistent (see quirks below).
-- Reporting/finance and AI modules have backend surface but no end-user screens.
+**What is stubbed or missing (do not assume it works):**
+- **AI is a stub.** `AiService.ChatAsync` echoes the user's message; nothing generates suggestions;
+  `AccountingCheckJob` writes a fake "completed" row; no screen calls `/ai/*`. See PROJECT_VISION §6.
+- Backend with no screen: AI, Payments, Warranty, Reports, Barcodes, Catalog categories, batches, user/role
+  editors, reason codes. Tables with no API: `party_contacts`, `party_addresses`, `party_notes`,
+  `attribute_schemas`, `item_reorder_settings`, `barcode_scan_logs`.
+- Dashboard/KPI numbers are computed in the browser from a sample page — wrong at scale (Phase 0 fix).
+- No purchase invoices, bank/cash accounts, POS, public invoice links, e-mail/SMS, CRM extras, backups UI.
 
-**Default seeded admin (dev only):** username `admin`, email `admin@autoparts.local`, password `Admin@123456`.
+**Bootstrap admin:** created once by `DatabaseSeeder` from `Seed:AdminEmail/AdminUsername/AdminPassword`.
+In Production the app refuses to start without a real password (the deploy script generates one into
+`.env.vps`). A dev-only fallback exists in Development. There is **no** universal default password any more.
 
 ---
 
-## 3. Environment Quirks (ACTUALLY found in this .NET repo)
+## 3. Decisions already made by the owner (do not re-litigate)
 
-1. **Ports (non-negotiable in dev):**
-   - API listens on **`http://localhost:5000`** (`launchSettings.json` → profile `Development`).
-   - Frontend Vite dev server on **`5173`**, and its proxy hard-targets **`localhost:5000`** for `/api` and `/hubs`
-     (`frontend/vite.config.ts`). If you change the API port, you must change the proxy too.
-   - Docker infra: PostgreSQL **5432**, Redis **6379**, Seq **5341** (UI), pgAdmin **5050** (`docker-compose.dev.yml`).
+| Topic | Decision |
+|---|---|
+| Accounting | ERPNext as headless engine; all accounting screens inside our UI |
+| Inventory model | Option A — unify `items`/`skus`; skus stay the operational source for now |
+| Company currency | **USD** |
+| AI provider | OpenAI-compatible hosted API: **Groq (free tier) preferred, DeepSeek as cheap alternative**; keys only on the server |
+| Sham Cash | API integration comes later — build only the abstraction/plumbing now (`IPaymentGateway`, webhook endpoint, public payment page shell) |
+| E-mail / SMS | Free solutions: SMTP for e-mail; SMS via a pluggable channel (see ROADMAP §7) |
+| Git | Push straight to `main`; GitHub Actions must always be green |
+| Secrets | Never in chat/commits; anything ever pasted in chat is considered exposed and must be rotated |
 
-2. **Database connection (dev):** `Host=localhost;Port=5432;Database=autoparts_erp;Username=erp_user;Password=erp_secret_dev`
-   (`appsettings.Development.json`). The compose file provisions exactly this DB/user/password — they must match.
+---
 
-3. **PostgreSQL extensions required:** the schema uses **`ltree`** (category paths) and **`pgvector`** (AI embeddings).
-   The database must have these extensions enabled or migrations/queries will fail.
+## 4. Environment Quirks (all found the hard way)
 
-4. **snake_case everywhere in SQL.** `AppDbContext.OnModelCreating` rewrites all identifiers to snake_case. Any raw
-   Dapper SQL must use snake_case table/column names and alias back to PascalCase DTO properties.
-
-5. **`Testing` environment shortcuts:** when `ASPNETCORE_ENVIRONMENT == "Testing"`, the app **skips** Hangfire,
-   the Hangfire dashboard, auto-migration, and seeding. Integration tests rely on this.
-
-6. **Auto-migrate + seed on startup:** outside `Testing`, `Program.cs` runs `dbContext.Database.Migrate()` then
-   `DatabaseSeeder.SeedAsync` and `DemoDataSeeder.SeedAsync`. A reachable, migratable Postgres is required to boot.
-
-7. **JWT is RS256 with keys in `appsettings.Development.json`** (base64 PEM public+private) for local dev **only**.
-   Token lifetime 15 min access / 7 day refresh. Production keys must come from env/secret store.
-
-8. **Warnings are build errors** (`TreatWarningsAsErrors=true`) across all projects — CI and local build will fail
-   on any warning.
-
-9. **SDK is pinned** to `9.0.312` via `global.json` (`rollForward: latestFeature`). Use a matching .NET 9 SDK.
-
-10. **Windows local-run scripts are heavily environment-normalized.** `scripts/start-local.ps1` explicitly resets
-    `SystemRoot`, `TEMP`, `NUGET_PACKAGES=C:\NuGetPackages`, `PATH`, etc., and launches API + Vite via absolute
-    tool paths (`C:\Program Files\dotnet\dotnet.exe`, `C:\Program Files\nodejs\node.exe`). This is a sandbox quirk;
-    on a normal machine you can run the tools directly (see SETUP_HARDENING.md).
-
-11. **NuGet restore uses a repo-local `NuGet.Config`** — restore with `--configfile NuGet.Config` if the scripts do.
-
-12. **CORS is wide-open (`AllowAnyOrigin`) in the current composition** — acceptable for dev, must be tightened for prod.
-
-13. **Untracked run/log artifacts** exist in the tree (`fc_api_run_*.log`, `s8_npm_dev_*.log`, `scripts/logs/*`,
-    a stray `%SystemDrive%/` folder). Do not commit these; they are local noise.
+1. **Dev ports:** API `http://localhost:5000`; Vite `5173` (its proxy targets `localhost:5000` for `/api`, `/hubs`);
+   dev Docker infra: Postgres 5432, Redis 6379, Seq 5341, pgAdmin 5050 (`docker-compose.dev.yml`).
+2. **Dev DB:** `Host=localhost;Port=5432;Database=autoparts_erp;Username=erp_user;Password=erp_secret_dev`
+   (dev compose only). Production credentials come from `.env.vps`.
+3. **Postgres extensions:** `uuid-ossp`, `pg_trgm`, `ltree` are required; `vector` (pgvector) is needed for
+   embeddings — see `EnsureRequiredExtensions`. On the VPS, Postgres is on the host, so extensions must be
+   installed there.
+4. **snake_case everywhere in SQL.** `AppDbContext` applies entity configurations **first** and the snake_case
+   rewrite **second** (reversing this breaks column names). Raw Dapper SQL: snake_case + `AS` aliases.
+5. **Dapper + positional records:** constructor matching needs the *exact* CLR type of each column. `DateOnly`
+   and `DateTimeOffset` need the handlers in `DapperTypeHandlers` (registered first thing in `Program.cs`).
+   Always alias columns. A `date` column vs a `string` property silently fails materialisation.
+6. **Postgres UNIQUE treats NULLs as distinct** — `ON CONFLICT` on a nullable column never fires; use
+   update-then-insert.
+7. **Migrations are raw SQL** (`migrationBuilder.Sql`) with ids `202401010000NN`. Add new ones with the next
+   number; never edit an applied one. Verify against a fresh database, not just an upgraded one.
+8. **`Testing` environment** skips Hangfire, the dashboard, auto-migrate and seeding. Integration tests rely on
+   it and need Docker (Testcontainers) — they cannot run on a machine without Docker; CI runs them.
+9. **Auto-migrate + seed on boot** outside `Testing`.
+10. **Hangfire:** every job class is tagged `[Queue("governance")]` and the server MUST list that queue
+    (`AddHangfireServer(o => o.Queues = { "default", "governance" })`) — omitting it silently disabled every
+    job for months. The `/hangfire` dashboard needs a Bearer JWT of a `SYSTEM_ADMIN`; a plain browser visit
+    gets 401. Operate jobs from the in-app **Accounting Sync** screen instead.
+11. **Docker on Linux:** the api container reaches host services via `host.docker.internal`, which needs
+    `extra_hosts: host.docker.internal:host-gateway`. ERPNext lives on another Docker network; the api reaches it
+    through the host port. `ufw` must allow 5432 from `172.16.0.0/12` for container → host Postgres.
+12. **nginx:** `/health` is restricted to 127.0.0.1; unrouted paths fall back to the SPA `index.html`
+    (so `https://ip/erp` "works" but is just the SPA). `nginx.conf` is bind-mounted — after a `git pull` the
+    container must be recreated through the deploy script, not `docker compose up` by hand (which also loses
+    `--env-file` and boots the api with blank config).
+13. **`docker compose up --build` does NOT rebuild the frontend** (it is built on the host into `frontend/dist`).
+    Always deploy with `./scripts/deploy-vps.sh`.
+14. **JWT keys** for dev live in `appsettings.Development.json` (git-ignored patterns exist); production keys
+    come from `.env.vps`.
+15. **Windows dev machine:** Git Bash has no `python`/`jq`; use PowerShell or `node` for JSON. Pasting
+    multi-line text into noVNC corrupts it — do server work over SSH. Never disable SSH password auth without a
+    verified working key (this locked the owner out once).
+16. **SDK pin:** `global.json` = 9.0.312 with `rollForward: latestMajor`.
+17. **Local secrets/noise:** `ADMIN PASSWORD.txt`, `*password*.txt`, `appsettings.Development.json`,
+    `scripts/logs/`, `*_run_*.log` are git-ignored. One of them was committed once and had to be purged — check
+    `git status` before every commit.
