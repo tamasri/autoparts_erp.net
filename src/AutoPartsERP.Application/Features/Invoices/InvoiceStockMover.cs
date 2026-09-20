@@ -1,4 +1,5 @@
 using System.Data.Common;
+using AutoPartsERP.Application.Features.Inventory;
 using Dapper;
 
 namespace AutoPartsERP.Application.Features.Invoices;
@@ -53,6 +54,10 @@ internal static class InvoiceStockMover
                 """,
                 new { skuId, locationId, quantity }, transaction, cancellationToken: cancellationToken));
         }
+
+        await InventoryMovementWriter.RecordAsync(
+            connection, transaction, skuId, locationId, batchId, quantity, direction == StockDirection.In,
+            direction == StockDirection.In ? "SALE_RETURN" : "SALE", "INVOICE", invoiceId, performedBy, note, cancellationToken);
 
         if (batchId is null)
         {

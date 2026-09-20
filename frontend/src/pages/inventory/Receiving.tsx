@@ -11,6 +11,8 @@ import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
+import DocumentViewButton from '../../components/ui/DocumentViewButton';
+import { receivingDocument } from '../../lib/wmsDocuments';
 import LocationSelect from '../../components/pickers/LocationSelect';
 import WmsLinesEditor, { type WmsLine } from '../../components/wms/WmsLinesEditor';
 
@@ -201,7 +203,7 @@ export default function Receiving(): JSX.Element {
                     <td style={{ color: 'var(--txt-secondary)' }}>{d.purchaseOrderRef || '-'}</td>
                     <td><StatusBadge status={d.status} type="invoice" /></td>
                     <td style={{ color: 'var(--txt-secondary)' }}>{d.postedAt ? new Date(d.postedAt).toLocaleDateString('ar') : '-'}</td>
-                    <td><button type="button" onClick={() => toggle(d.id)} className="btn-secondary" style={{ padding: '5px 14px', fontSize: 12 }}>{openId === d.id ? '▲ إخفاء' : '▼ الأسطر والتخزين'}</button></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><DocumentViewButton load={() => receivingDocument(d.id, names.label)} />{' '}<button type="button" onClick={() => toggle(d.id)} className="btn-secondary" style={{ padding: '5px 14px', fontSize: 12 }}>{openId === d.id ? '▲ إخفاء' : '▼ الأسطر والتخزين'}</button></td>
                   </tr>
                   {openId === d.id ? (
                     <tr>

@@ -28,6 +28,7 @@ export const transfersApi = {
     apiClient.post('/transfers/requests', body),
   listOrders: (page = 1, pageSize = 20) =>
     apiClient.get('/transfers/orders', { params: { page, pageSize } }),
+  getOrder: (id: string) => apiClient.get(`/transfers/orders/${id}`),
   createOrder: (body: CreateTransferOrder) =>
     apiClient.post('/transfers/orders', body),
   ship: (id: string) =>

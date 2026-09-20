@@ -15,6 +15,11 @@ function load(type: string): Promise<LocationOption[]> {
   return p;
 }
 
+/** Forget the cached lists after a warehouse/location was created or changed. */
+export function invalidateLocations(): void {
+  cache.clear();
+}
+
 export function useLocations(type = ''): { locations: LocationOption[]; loading: boolean } {
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(true);

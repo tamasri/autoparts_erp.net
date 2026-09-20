@@ -9,6 +9,8 @@ import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
+import DocumentViewButton from '../../components/ui/DocumentViewButton';
+import { cycleCountDocument } from '../../lib/wmsDocuments';
 import LocationSelect from '../../components/pickers/LocationSelect';
 
 type Plan = { id: string; warehouseId: string; scopeType: string; status: string; scheduledFor?: string };
@@ -138,6 +140,7 @@ export default function CycleCounts(): JSX.Element {
                     <td style={{ color: 'var(--txt-secondary)' }}>{p.scheduledFor ?? '-'}</td>
                     <td><StatusBadge status={p.status} type="invoice" /></td>
                     <td style={{ whiteSpace: 'nowrap' }}>
+                      <DocumentViewButton load={() => cycleCountDocument(p.id, names.label)} />{' '}
                       <button type="button" onClick={() => togglePlan(p.id)} className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12, marginLeft: 6 }}>
                         {openId === p.id ? '▲ إخفاء' : '📋 أسطر الجرد'}
                       </button>

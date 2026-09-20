@@ -33,6 +33,8 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/items', label: 'الأصناف', icon: '◧' },
       { to: '/inventory', label: 'المخزون', icon: '▦' },
+      { to: '/inventory/warehouses', label: 'المستودعات', icon: '⌂' },
+      { to: '/inventory/movements', label: 'حركة الأصناف', icon: '⇅' },
       { to: '/inventory/receiving', label: 'الاستلام', icon: '↙' },
       { to: '/inventory/transfers', label: 'التحويلات', icon: '⇌' },
       { to: '/inventory/issue-orders', label: 'أوامر الصرف', icon: '↗' },

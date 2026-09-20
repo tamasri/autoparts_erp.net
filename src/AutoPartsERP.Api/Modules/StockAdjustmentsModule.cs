@@ -12,6 +12,12 @@ public sealed class StockAdjustmentsModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new AutoPartsERP.Application.Features.Wms.GetStockAdjustmentByIdQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapPost("/", async Task<IResult> (CreateStockAdjustmentRequest request, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(new CreateStockAdjustmentCommand(request), cancellationToken);

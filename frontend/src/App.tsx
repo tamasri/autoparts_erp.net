@@ -33,6 +33,8 @@ const Transfers        = lazy(() => import('./pages/inventory/Transfers'));
 const CycleCounts      = lazy(() => import('./pages/inventory/CycleCounts'));
 const StockAdjustments = lazy(() => import('./pages/inventory/StockAdjustments'));
 const IssueOrders      = lazy(() => import('./pages/inventory/IssueOrders'));
+const Warehouses       = lazy(() => import('./pages/inventory/Warehouses'));
+const Movements        = lazy(() => import('./pages/inventory/Movements'));
 const InventoryAlerts  = lazy(() => import('./pages/inventory/InventoryAlerts'));
 const Parties          = lazy(() => import('./pages/parties/Parties'));
 const CombinedStatement= lazy(() => import('./pages/parties/CombinedStatement'));
@@ -120,6 +122,10 @@ export default function App(): JSX.Element {
         <Route path="inventory/cycle-counts"  element={<RouteWrapper><CycleCounts /></RouteWrapper>} />
         <Route path="inventory/adjustments"   element={<RouteWrapper><StockAdjustments /></RouteWrapper>} />
         <Route path="inventory/issue-orders"  element={<RouteWrapper><IssueOrders /></RouteWrapper>} />
+        <Route path="inventory/warehouses"    element={<RouteWrapper><Warehouses /></RouteWrapper>} />
+
+        <Route path="inventory/movements"      element={<RouteWrapper><Movements /></RouteWrapper>} />
+
         <Route path="inventory/alerts"        element={<RouteWrapper><InventoryAlerts /></RouteWrapper>} />
         <Route path="items"                   element={<RouteWrapper><Items /></RouteWrapper>} />
         <Route path="items/:id"               element={<RouteWrapper><ItemCard /></RouteWrapper>} />

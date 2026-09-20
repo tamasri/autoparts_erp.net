@@ -24,6 +24,24 @@ public sealed class InventoryModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/movements", async Task<IResult> (
+                Guid? itemId,
+                Guid? locationId,
+                string? movementType,
+                string? direction,
+                DateOnly? from,
+                DateOnly? to,
+                string? search,
+                int? page,
+                int? pageSize,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new AutoPartsERP.Application.Features.Wms.GetStockMovementsQuery(
+                    itemId, locationId, movementType, direction, from, to, search, page is > 0 ? page.Value : 1, pageSize is > 0 ? pageSize.Value : 50), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapGet("/pick", async Task<IResult> (
                 string? search,
                 string? mode,

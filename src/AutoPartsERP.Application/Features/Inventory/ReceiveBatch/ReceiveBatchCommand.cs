@@ -150,6 +150,10 @@ public sealed class ReceiveBatchCommandHandler : IRequestHandler<ReceiveBatchCom
                     transaction,
                     cancellationToken: cancellationToken));
 
+            await InventoryMovementWriter.RecordAsync(
+                connection, transaction, request.SkuId, request.LocationId, batchId, request.Quantity, true,
+                "RECEIPT", "BATCH_RECEIPT", batchId, _currentUser.UserId, request.Notes, cancellationToken);
+
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     """

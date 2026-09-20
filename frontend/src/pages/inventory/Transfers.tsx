@@ -8,6 +8,8 @@ import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import StatusBadge from '../../components/common/StatusBadge';
 import LocationSelect from '../../components/pickers/LocationSelect';
+import DocumentViewButton from '../../components/ui/DocumentViewButton';
+import { transferDocument } from '../../lib/wmsDocuments';
 import WmsLinesEditor, { type WmsLine } from '../../components/wms/WmsLinesEditor';
 
 type TransferOrder = {
@@ -127,6 +129,7 @@ export default function Transfers(): JSX.Element {
                   <td><span className="badge badge--primary">{names.label(o.destinationWarehouseId)}</span></td>
                   <td><StatusBadge status={o.status} type="invoice" /></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
+                    <DocumentViewButton load={() => transferDocument(o.id, names.label)} />{' '}
                     {o.status !== 'SHIPPED' && o.status !== 'RECEIVED' ? (
                       <button type="button" disabled={busy === o.id} onClick={() => void act(o.id, 'ship')} className="btn-primary" style={{ padding: '5px 14px', fontSize: 12 }}>✈ شحن</button>
                     ) : null}

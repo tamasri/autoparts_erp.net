@@ -339,30 +339,102 @@ public sealed record IssueOrderCommand(Guid IssueOrderId)
 public sealed class IssueOrderCommandHandler : IRequestHandler<IssueOrderCommand, Result<Guid>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public IssueOrderCommandHandler(IDbConnectionFactory connectionFactory)
+    public IssueOrderCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
+    /// <summary>
+    /// Issuing an order is what takes the goods out of the warehouse: each verified quantity leaves stock at its source location,
+    /// the line records what was issued and the movement is written to the item ledger. Before this the order only changed status.
+    /// </summary>
     public async Task<Result<Guid>> Handle(IssueOrderCommand request, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var affected = await connection.ExecuteAsync(
-            new CommandDefinition(
-                """
-                UPDATE issue_orders
-                SET status = 'ISSUED',
-                    issued_at = now()
-                WHERE id = @Id
-                  AND status IN ('PICKING','VERIFYING');
-                """,
-                new { Id = request.IssueOrderId },
-                cancellationToken: cancellationToken));
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        return affected == 0
-            ? Result<Guid>.Failure(new Error("IssueOrder.InvalidState", "Issue order cannot be issued in current state."))
-            : Result<Guid>.Success(request.IssueOrderId);
+        var order = await connection.QuerySingleOrDefaultAsync<(Guid Id, Guid WarehouseId, string Status, string OrderNo)>(new CommandDefinition(
+            "SELECT id AS Id, warehouse_id AS WarehouseId, status AS Status, order_no AS OrderNo FROM issue_orders WHERE id = @Id FOR UPDATE;",
+            new { Id = request.IssueOrderId }, transaction, cancellationToken: cancellationToken));
+        if (order.Id == Guid.Empty || order.Status is not ("PICKING" or "VERIFYING"))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(new Error("IssueOrder.InvalidState", "Issue order cannot be issued in current state."));
+        }
+
+        var lines = (await connection.QueryAsync<(Guid Id, Guid ItemId, Guid? SourceLocationId, Guid? BatchId, decimal Qty)>(new CommandDefinition(
+            """
+            SELECT id AS Id, item_id AS ItemId, source_location_id AS SourceLocationId, batch_id AS BatchId,
+                   CASE WHEN verified_qty > 0 THEN verified_qty ELSE picked_qty END AS Qty
+            FROM issue_order_lines
+            WHERE issue_order_id = @Id;
+            """,
+            new { Id = request.IssueOrderId }, transaction, cancellationToken: cancellationToken))).ToList();
+
+        if (lines.All(l => l.Qty <= 0))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(new Error("IssueOrder.NothingPicked", "Nothing has been picked and verified yet."));
+        }
+
+        foreach (var line in lines.Where(l => l.Qty > 0))
+        {
+            var locationId = line.SourceLocationId ?? order.WarehouseId;
+
+            var sku = await connection.ExecuteScalarAsync<Guid?>(new CommandDefinition(
+                "SELECT sku_id FROM items WHERE id = @ItemId;", new { line.ItemId }, transaction, cancellationToken: cancellationToken));
+            if (sku is not null)
+            {
+                var onHand = await connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
+                    "SELECT quantity_on_hand FROM inventory_stock WHERE sku_id = @Sku AND location_id = @locationId FOR UPDATE;",
+                    new { Sku = sku, locationId }, transaction, cancellationToken: cancellationToken));
+                if (onHand is null || onHand < line.Qty)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return Result<Guid>.Failure(new Error("Stock.InsufficientQuantity", "Insufficient stock quantity at the source location."));
+                }
+
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "UPDATE inventory_stock SET quantity_on_hand = quantity_on_hand - @Qty, updated_at = now() WHERE sku_id = @Sku AND location_id = @locationId;",
+                    new { line.Qty, Sku = sku, locationId }, transaction, cancellationToken: cancellationToken));
+            }
+
+            // Keep the warehouse-side balance in step immediately (the periodic sync would otherwise correct it later).
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                WITH target AS (
+                    SELECT id FROM inventory_balances
+                    WHERE item_id = @ItemId AND location_id = @locationId AND status = 'AVAILABLE' AND qty >= @Qty
+                    ORDER BY qty DESC LIMIT 1)
+                UPDATE inventory_balances b SET qty = b.qty - @Qty, updated_at = now() FROM target t WHERE b.id = t.id;
+                """,
+                new { line.ItemId, locationId, line.Qty }, transaction, cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO inventory_movements (
+                    id, item_id, location_id, batch_id, movement_type, qty, direction, from_status, to_status,
+                    reference_type, reference_id, performed_by, correlation_id, notes, created_at)
+                VALUES (uuid_generate_v4(), @ItemId, @locationId, @BatchId, 'ISSUE', @Qty, 'OUT', 'AVAILABLE', NULL,
+                        'ISSUE_ORDER', @OrderId, @By, uuid_generate_v4(), @Notes, now());
+                """,
+                new { line.ItemId, locationId, line.BatchId, line.Qty, OrderId = order.Id, By = _currentUser.UserId, Notes = $"Issue order {order.OrderNo}" },
+                transaction, cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE issue_order_lines SET issued_qty = @Qty WHERE id = @Id;",
+                new { line.Qty, line.Id }, transaction, cancellationToken: cancellationToken));
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE issue_orders SET status = 'ISSUED', issued_at = now() WHERE id = @Id;",
+            new { Id = request.IssueOrderId }, transaction, cancellationToken: cancellationToken));
+
+        await transaction.CommitAsync(cancellationToken);
+        return Result<Guid>.Success(request.IssueOrderId);
     }
 }
 

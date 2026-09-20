@@ -9,6 +9,8 @@ import { notifyResult } from '../../lib/notify';
 import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
+import DocumentViewButton from '../../components/ui/DocumentViewButton';
+import { paymentDocument } from '../../lib/wmsDocuments';
 import FxRateField from '../../components/pickers/FxRateField';
 
 type Payment = {
@@ -231,7 +233,7 @@ export default function Payments(): JSX.Element {
                   <td style={{ fontWeight: 700 }}>{p.amountUsd > 0 ? `${money(p.amountUsd)} $` : `${money(p.amountSyp)} ل.س`}</td>
                   <td>{p.unallocatedUsd > 0 ? `${money(p.unallocatedUsd)} $` : p.unallocatedSyp > 0 ? `${money(p.unallocatedSyp)} ل.س` : '—'}</td>
                   <td>{p.isReversed ? <span className="badge badge--danger">معكوسة</span> : <span className="badge badge--success">فعّالة</span>}</td>
-                  <td>{!p.isReversed ? <button type="button" className="btn-ghost" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => { setReverseId(p.id); setReverseReason(''); }}>↩ عكس</button> : null}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}><DocumentViewButton load={async () => paymentDocument(p, methodLabel(p.paymentMethod))} />{' '}{!p.isReversed ? <button type="button" className="btn-ghost" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => { setReverseId(p.id); setReverseReason(''); }}>↩ عكس</button> : null}</td>
                 </tr>
               ))}
             </tbody>

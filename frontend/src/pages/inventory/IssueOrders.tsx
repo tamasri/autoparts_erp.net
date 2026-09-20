@@ -9,6 +9,8 @@ import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import StatusBadge from '../../components/common/StatusBadge';
+import DocumentViewButton from '../../components/ui/DocumentViewButton';
+import { issueOrderDocument } from '../../lib/wmsDocuments';
 import LocationSelect from '../../components/pickers/LocationSelect';
 import WmsLinesEditor, { type WmsLine } from '../../components/wms/WmsLinesEditor';
 
@@ -133,7 +135,7 @@ export default function IssueOrders(): JSX.Element {
                     <td>{SOURCES.find((s) => s.value === o.sourceType)?.label ?? o.sourceType}</td>
                     <td>{names.label(o.warehouseId)}</td>
                     <td><StatusBadge status={o.status} type="invoice" /></td>
-                    <td><button type="button" className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12 }} onClick={() => toggle(o.id)}>{openId === o.id ? '▲ إخفاء' : '▼ التفاصيل والسحب'}</button></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><DocumentViewButton load={() => issueOrderDocument(o.id, names.label)} />{' '}<button type="button" className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12 }} onClick={() => toggle(o.id)}>{openId === o.id ? '▲ إخفاء' : '▼ التفاصيل والسحب'}</button></td>
                   </tr>
                   {openId === o.id ? (
                     <tr>

@@ -25,6 +25,12 @@ public sealed class TransfersModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/orders/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new AutoPartsERP.Application.Features.Wms.GetTransferOrderByIdQuery(id), cancellationToken);
+                return result.ToApiResult();
+            });
+
         group.MapPost("/orders", async Task<IResult> (CreateTransferOrderRequest request, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(new CreateTransferOrderCommand(request), cancellationToken);

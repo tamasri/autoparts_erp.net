@@ -21,6 +21,7 @@ export type CreateStockAdjustment = {
 export const stockAdjustmentsApi = {
   list: (page = 1, pageSize = 20) =>
     apiClient.get('/stock-adjustments', { params: { page, pageSize } }),
+  get: (id: string) => apiClient.get(`/stock-adjustments/${id}`),
   create: (body: CreateStockAdjustment) =>
     apiClient.post('/stock-adjustments', body),
   post: (id: string, operationDate?: string) =>

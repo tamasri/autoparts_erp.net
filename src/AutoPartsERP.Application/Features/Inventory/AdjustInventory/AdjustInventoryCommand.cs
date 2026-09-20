@@ -86,6 +86,10 @@ public sealed class AdjustInventoryCommandHandler : IRequestHandler<AdjustInvent
             transaction,
             cancellationToken: cancellationToken));
 
+        await InventoryMovementWriter.RecordAsync(
+            connection, transaction, request.SkuId, request.LocationId, request.BatchId, Math.Abs(request.QuantityDelta), request.QuantityDelta >= 0,
+            "ADJUSTMENT", "INVENTORY_ADJUSTMENT", movementId, _currentUser.UserId, request.Reason, cancellationToken);
+
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO batch_movements (

@@ -88,3 +88,75 @@ public sealed record ReceivingDocumentDetailDto(
     DateTimeOffset? PostedAt,
     string? Notes,
     IReadOnlyCollection<ReceivingLineViewDto> Lines);
+
+public sealed record StockMovementDto(
+    Guid Id,
+    DateTimeOffset CreatedAt,
+    Guid ItemId,
+    string ItemCode,
+    string ItemName,
+    Guid LocationId,
+    string LocationCode,
+    string MovementType,
+    string Direction,
+    decimal Qty,
+    decimal? BalanceAfter,
+    string? ReferenceType,
+    Guid? ReferenceId,
+    string? PerformedBy,
+    string? Notes);
+
+public sealed record LocationOverviewDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string Type,
+    Guid? ParentId,
+    bool IsActive,
+    int SkuCount,
+    decimal TotalQty,
+    decimal ValueUsd,
+    int ChildCount);
+
+public sealed record TransferLineViewDto(
+    Guid Id,
+    Guid ItemId,
+    string ItemCode,
+    string ItemName,
+    Guid? SourceLocationId,
+    Guid? DestinationLocationId,
+    decimal ShippedQty,
+    decimal ReceivedQty);
+
+public sealed record TransferOrderDetailDto(
+    Guid Id,
+    string TransferNo,
+    Guid SourceWarehouseId,
+    Guid DestinationWarehouseId,
+    string Status,
+    DateTimeOffset? ShippedAt,
+    DateTimeOffset? ReceivedAt,
+    DateTimeOffset CreatedAt,
+    IReadOnlyCollection<TransferLineViewDto> Lines);
+
+public sealed record StockAdjustmentLineViewDto(
+    Guid Id,
+    Guid ItemId,
+    string ItemCode,
+    string ItemName,
+    Guid LocationId,
+    decimal QtyDelta,
+    decimal SystemQtyBefore,
+    decimal SystemQtyAfter,
+    string? Notes);
+
+public sealed record StockAdjustmentDetailDto(
+    Guid Id,
+    string AdjustmentNo,
+    string AdjustmentType,
+    Guid WarehouseId,
+    string ReasonCode,
+    string Status,
+    DateTimeOffset? PostedAt,
+    DateTimeOffset CreatedAt,
+    IReadOnlyCollection<StockAdjustmentLineViewDto> Lines);

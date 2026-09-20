@@ -100,6 +100,14 @@ public sealed class TransferStockCommandHandler : IRequestHandler<TransferStockC
             cancellationToken: cancellationToken));
 
         var transferId = Guid.NewGuid();
+        await InventoryMovementWriter.RecordAsync(
+            connection, transaction, request.SkuId, request.FromLocationId, request.BatchId, request.Quantity, false,
+            "TRANSFER_OUT", "TRANSFER", transferId, _currentUser.UserId, request.Notes, cancellationToken);
+        await InventoryMovementWriter.RecordAsync(
+            connection, transaction, request.SkuId, request.ToLocationId, request.BatchId, request.Quantity, true,
+            "TRANSFER_IN", "TRANSFER", transferId, _currentUser.UserId, request.Notes, cancellationToken);
+        if (request.BatchId.HasValue)
+        {
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO batch_movements (
@@ -124,6 +132,7 @@ public sealed class TransferStockCommandHandler : IRequestHandler<TransferStockC
             },
             transaction,
             cancellationToken: cancellationToken));
+        }
 
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(transferId);

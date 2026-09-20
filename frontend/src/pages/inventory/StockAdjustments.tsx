@@ -9,6 +9,8 @@ import ErrorBanner from '../../components/common/ErrorBanner';
 import StatusBadge from '../../components/common/StatusBadge';
 import LocationSelect from '../../components/pickers/LocationSelect';
 import ReasonCodeSelect from '../../components/pickers/ReasonCodeSelect';
+import DocumentViewButton from '../../components/ui/DocumentViewButton';
+import { adjustmentDocument } from '../../lib/wmsDocuments';
 import WmsLinesEditor, { type WmsLine } from '../../components/wms/WmsLinesEditor';
 
 type StockAdjustment = {
@@ -156,7 +158,8 @@ export default function StockAdjustments(): JSX.Element {
                     <td>{names.label(a.warehouseId)}</td>
                     <td style={{ color: 'var(--txt-secondary)' }}>{a.reasonCode}</td>
                     <td><StatusBadge status={a.status} type="invoice" /></td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <DocumentViewButton load={() => adjustmentDocument(a.id, names.label)} />{' '}
                       {a.status !== 'POSTED' ? (
                         <button type="button" disabled={busy === a.id} onClick={() => void post(a.id)} className="btn-success" style={{ padding: '5px 14px', fontSize: 12 }}>✓ ترحيل</button>
                       ) : <span className="badge badge--success">مرحّل</span>}
