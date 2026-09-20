@@ -1,153 +1,75 @@
-import { useMemo } from 'react';
+/** Current stock: one row per item per location (any number of warehouses), filterable by location and search. */
+import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import { Alert, Autocomplete, Button, Chip, Stack, TextField } from '@mui/material';
 import { inventoryApi } from '../../api/endpoints/inventory';
+import { warehouseApi, type LocationOverview } from '../../api/endpoints/warehouse';
+import { unwrapList } from '../../api/apiData';
 import { usePagedList } from '../../hooks/usePagedList';
-import Pagination from '../../components/common/Pagination';
-import ErrorBanner from '../../components/common/ErrorBanner';
+import { num, type ExportDocument } from '../../lib/exportClient';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable, { type Column } from '../../components/ui/DataTable';
+import ExportMenu from '../../components/ui/ExportMenu';
 
 type StockRow = {
-  id: string;
-  skuCode?: string;
-  code?: string;
-  skuName?: string;
-  name?: string;
-  quantityOnHand?: number;
-  totalStock?: number;
-  stockMain?: number;
-  stockWh2?: number;
-  stockVan1?: number;
-  isStopShip?: boolean;
+  id: string; skuId: string; skuCode: string; skuName: string; locationId: string; locationCode: string;
+  quantityOnHand: number; quantityReserved: number; quantityAvailable: number; lowStockFlag: boolean;
 };
 
+const fmt = (v: number): string => Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 4 });
+
 export default function Inventory(): JSX.Element {
+  const [locations, setLocations] = useState<LocationOverview[]>([]);
+  const [locationId, setLocationId] = useState('');
+  useEffect(() => { warehouseApi.overview(false).then((r) => setLocations(unwrapList<LocationOverview>(r.data))).catch(() => undefined); }, []);
+
   const list = usePagedList<StockRow>({
     errorMessage: 'تعذر تحميل المخزون',
     pageSize: 25,
-    fetcher: ({ page, pageSize, search }) => inventoryApi.getStock({ page, pageSize, searchTerm: search || undefined }),
+    deps: [locationId],
+    fetcher: ({ page, pageSize, search }) => inventoryApi.getStock({ page, pageSize, searchTerm: search || undefined, locationId: locationId || undefined }),
   });
-  const { items: activeRows, error, loading } = list;
-  const query = list.searchInput;
 
-  const lowCount = useMemo(() => activeRows.filter((r) => Number(r.totalStock ?? r.quantityOnHand ?? 0) <= 0).length, [activeRows]);
-  const stopShipCount = useMemo(() => activeRows.filter((r) => r.isStopShip).length, [activeRows]);
+  const buildExport = async (): Promise<ExportDocument> => {
+    const res = await inventoryApi.getStock({ page: 1, pageSize: 200, searchTerm: list.searchInput.trim() || undefined, locationId: locationId || undefined });
+    const rows = unwrapList<StockRow>(res.data);
+    return {
+      title: 'المخزون الحالي', subtitle: locations.find((l) => l.id === locationId)?.name ?? 'كل المواقع', fileName: 'stock', fields: [],
+      tables: [{
+        columns: ['الرمز', 'الصنف', 'الموقع', 'الموجود', 'المحجوز', 'المتاح'],
+        rows: rows.map((r) => [r.skuCode, r.skuName, r.locationCode, num(r.quantityOnHand), num(r.quantityReserved), num(r.quantityAvailable)]),
+        numericColumns: [3, 4, 5],
+      }],
+    };
+  };
+
+  const columns: Column<StockRow>[] = [
+    { header: 'الرمز', render: (r) => <Chip size="small" variant="outlined" label={r.skuCode} sx={{ fontFamily: 'monospace', fontWeight: 700 }} /> },
+    { header: 'الصنف', render: (r) => r.skuName },
+    { header: 'الموقع', render: (r) => r.locationCode },
+    { header: 'الموجود', numeric: true, render: (r) => <strong>{fmt(r.quantityOnHand)}</strong> },
+    { header: 'المحجوز', numeric: true, render: (r) => fmt(r.quantityReserved) },
+    { header: 'المتاح', numeric: true, render: (r) => <strong style={{ color: r.quantityAvailable > 0 ? undefined : 'crimson' }}>{fmt(r.quantityAvailable)}</strong> },
+    { header: 'الحالة', render: (r) => (r.quantityAvailable <= 0 ? <Chip size="small" color="error" label="نافد" /> : r.lowStockFlag ? <Chip size="small" color="warning" label="منخفض" /> : <Chip size="small" color="success" variant="outlined" label="متوفر" />) },
+    { header: '', render: (r) => <Button size="small" component={RouterLink} to={`/inventory/movements?locationId=${r.locationId}`}>الحركة</Button> },
+  ];
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      {/* Page Header */}
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">المخزون</h1>
-          <div className="vex-page-header__breadcrumb">استعلام عن مستويات المخزون الحالية</div>
-        </div>
-        {/* KPI pills */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          {lowCount > 0 && (
-            <div style={{
-              background: '#fef2f2', color: 'var(--clr-danger)',
-              border: '1px solid #fecaca', borderRadius: 'var(--radius-pill)',
-              padding: '6px 14px', fontSize: 13, fontWeight: 700,
-            }}>
-              ⚠ نافد (بالصفحة): {lowCount}
-            </div>
-          )}
-          {stopShipCount > 0 && (
-            <div style={{
-              background: '#fefce8', color: '#92400e',
-              border: '1px solid #fde68a', borderRadius: 'var(--radius-pill)',
-              padding: '6px 14px', fontSize: 13, fontWeight: 700,
-            }}>
-              🚫 موقوف (بالصفحة): {stopShipCount}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
-
-      {/* Search */}
-      <div style={{ position: 'relative', marginBottom: 16 }}>
-        <span style={{
-          position: 'absolute', top: '50%', right: 14,
-          transform: 'translateY(-50%)', color: 'var(--txt-muted)',
-          pointerEvents: 'none', fontSize: 18,
-        }}>🔍</span>
-        <input
-          value={query}
-          onChange={(e) => list.setSearchInput(e.target.value)}
-          placeholder="ابحث عن قطعة غيار... مثال: A 169 540 16 17"
-          className="vex-input"
-          style={{ paddingRight: 44, fontSize: 15 }}
+    <>
+      <PageHeader title="المخزون" subtitle="الكميات الحالية لكل صنف في كل موقع" actions={<ExportMenu build={buildExport} />} />
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
+      <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mb: 2 }}>
+        <TextField size="small" placeholder="ابحث برمز الصنف أو اسمه..." value={list.searchInput} onChange={(e) => list.setSearchInput(e.target.value)} sx={{ width: 320 }} />
+        <Autocomplete
+          size="small" sx={{ width: 260 }} options={locations} value={locations.find((l) => l.id === locationId) ?? null}
+          onChange={(_, v) => setLocationId(v?.id ?? '')} getOptionLabel={(o) => `${o.code} — ${o.name}`} isOptionEqualToValue={(a, b) => a.id === b.id}
+          renderInput={(p) => <TextField {...p} label="الموقع" />}
         />
-      </div>
-
-      {/* Stock Table */}
-      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead>
-              <tr>
-                <th>رقم القطعة</th>
-                <th>الاسم</th>
-                <th>المستودع الرئيسي</th>
-                <th>مستودع الفرع</th>
-                <th>الفان</th>
-                <th>الحالة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '36px 0' }}>
-                    {query ? 'لا توجد نتائج مطابقة' : 'لا توجد بيانات مخزون'}
-                  </td>
-                </tr>
-              ) : activeRows.map((item) => {
-                const main = Number(item.stockMain ?? item.quantityOnHand ?? 0);
-                const wh2 = Number(item.stockWh2 ?? 0);
-                const van = Number(item.stockVan1 ?? 0);
-                const total = Number(item.totalStock ?? main + wh2 + van);
-                const out = total <= 0;
-                const stop = Boolean(item.isStopShip);
-                return (
-                  <tr
-                    key={item.id}
-                    style={{
-                      background: out ? '#fef2f2' : stop ? '#fefce8' : undefined,
-                    }}
-                  >
-                    <td>
-                      <span style={{
-                        background: 'var(--clr-primary-light)', color: 'var(--clr-primary-dark)',
-                        padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 700,
-                        fontFamily: 'monospace',
-                      }}>
-                        {item.skuCode ?? item.code ?? item.id.slice(0, 8)}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 500, color: 'var(--txt-primary)' }}>{item.skuName ?? item.name ?? '-'}</td>
-                    <td>
-                      <span style={{ fontWeight: 700, color: main > 0 ? '#22c55e' : 'var(--clr-danger)' }}>{main}</span>
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 700, color: wh2 > 0 ? '#22c55e' : 'var(--clr-danger)' }}>{wh2}</span>
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 700, color: van > 0 ? '#22c55e' : 'var(--clr-danger)' }}>{van}</span>
-                    </td>
-                    <td>
-                      {stop
-                        ? <span className="badge badge--warning">موقوف</span>
-                        : out
-                          ? <span className="badge badge--danger">نافد</span>
-                          : <span className="badge badge--success">متوفر</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
-    </div>
+      </Stack>
+      <DataTable
+        columns={columns} rows={list.items} getKey={(r) => r.id} loading={list.loading} empty="لا توجد أرصدة"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+      />
+    </>
   );
 }

@@ -1,131 +1,57 @@
+import { Alert, Avatar, Box, Chip, Stack, TextField } from '@mui/material';
 import { usersApi } from '../../api/endpoints/users';
 import { usePagedList } from '../../hooks/usePagedList';
-import Pagination from '../../components/common/Pagination';
-import ErrorBanner from '../../components/common/ErrorBanner';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable, { type Column } from '../../components/ui/DataTable';
+import StatusChip from '../../components/ui/StatusChip';
 
-type User = {
+type UserRow = {
   id: string;
   userName?: string;
-  username?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
-  /** The API returns role objects ({ roleId, code, name }); older payloads used plain codes. */
+  /** The API returns role objects ({ roleId, code, name }). */
   roles?: Array<string | { roleId?: string; code?: string; name?: string }>;
   isActive?: boolean;
   isLockedOut?: boolean;
   lastLoginAtUtc?: string;
 };
 
-const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-  ADMIN:        { bg: '#f3e8ff', color: '#6b21a8' },
-  SALES_MANAGER: { bg: '#dbeafe', color: '#1d4ed8' },
-  CASHIER:      { bg: '#dcfce7', color: '#15803d' },
-  ACCOUNTANT:   { bg: '#fef9c3', color: '#854d0e' },
-  WAREHOUSE:    { bg: '#fef3c7', color: '#92400e' },
-};
+const roleCodes = (u: UserRow): string[] => (u.roles ?? []).map((r) => (typeof r === 'string' ? r : (r.code ?? r.name ?? ''))).filter(Boolean);
+
+const COLUMNS: Column<UserRow>[] = [
+  {
+    header: 'المستخدم',
+    render: (u) => (
+      <Stack direction="row" gap={1.5} alignItems="center">
+        <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 13 }}>{(u.userName ?? '?')[0].toUpperCase()}</Avatar>
+        <Box><Box sx={{ fontWeight: 700 }}>{u.userName ?? '—'}</Box><Box sx={{ fontSize: 12, color: 'text.secondary' }}>{u.email}</Box></Box>
+      </Stack>
+    ),
+  },
+  { header: 'الاسم الكامل', render: (u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || '—' },
+  { header: 'الأدوار', render: (u) => <Stack direction="row" gap={0.5} flexWrap="wrap">{roleCodes(u).map((c) => <Chip key={c} size="small" variant="outlined" color="primary" label={c} />)}</Stack> },
+  { header: 'الحالة', render: (u) => (u.isLockedOut ? <StatusChip status="LOCKED" /> : <StatusChip status={u.isActive === false ? 'INACTIVE' : 'ACTIVE'} />) },
+  { header: 'آخر دخول', nowrap: true, render: (u) => (u.lastLoginAtUtc ? new Date(u.lastLoginAtUtc).toLocaleString('ar') : '—') },
+];
 
 export default function Users(): JSX.Element {
-  const list = usePagedList<User>({
-    errorMessage: 'تعذر تحميل المستخدمين',
-    fetcher: ({ page, pageSize, search }) => usersApi.getUsers(page, pageSize, search),
-  });
-  const { items: rows, error, loading } = list;
-
-  const activeCount = rows.filter((r) => r.isActive ?? true).length;
+  const list = usePagedList<UserRow>({ errorMessage: 'تعذر تحميل المستخدمين', fetcher: ({ page, pageSize, search }) => usersApi.getUsers(page, pageSize, search) });
+  const active = list.items.filter((u) => u.isActive ?? true).length;
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">إدارة المستخدمين</h1>
-          <div className="vex-page-header__breadcrumb">عرض وإدارة حسابات المستخدمين وصلاحياتهم</div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-            ✓ نشط: {activeCount}
-          </div>
-          <div style={{ background: 'var(--clr-surface-2)', color: 'var(--txt-muted)', border: '1px solid var(--clr-border)', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-            إجمالي: {list.totalCount}
-          </div>
-        </div>
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
-
-      <input
-        value={list.searchInput}
-        onChange={(e) => list.setSearchInput(e.target.value)}
-        placeholder="ابحث باسم المستخدم أو الاسم الكامل..."
-        className="vex-input"
-        style={{ marginBottom: 16, maxWidth: 420 }}
+    <>
+      <PageHeader
+        title="المستخدمون" subtitle="حسابات الدخول إلى النظام وأدوارها"
+        actions={<><Chip color="success" variant="outlined" label={`نشط: ${active}`} /><Chip variant="outlined" label={`الإجمالي: ${list.totalCount}`} /></>}
       />
-
-      <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead>
-              <tr>
-                <th>المستخدم</th>
-                <th>الاسم الكامل</th>
-                <th>الأدوار</th>
-                <th>الحالة</th>
-                <th>آخر دخول</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const username = row.userName ?? row.username ?? '-';
-                const roles = (row.roles ?? []).map((r) => (typeof r === 'string' ? r : (r.code ?? r.name ?? ''))).filter(Boolean);
-                const fullName = [row.firstName, row.lastName].filter(Boolean).join(' ') || '-';
-                const isActive = row.isActive ?? true;
-                return (
-                  <tr key={row.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{
-                          width: 36, height: 36, borderRadius: '50%',
-                          background: 'linear-gradient(135deg, var(--clr-primary), var(--clr-primary-mid))',
-                          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 13, fontWeight: 700, flexShrink: 0,
-                        }}>
-                          {username[0]?.toUpperCase() ?? '?'}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>{username}</div>
-                          <div style={{ fontSize: 11, color: 'var(--txt-muted)' }}>{row.id.slice(0, 8)}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{fullName}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {roles.length > 0 ? roles.map((r) => {
-                          const s = ROLE_COLORS[r] ?? { bg: 'var(--clr-surface-2)', color: 'var(--txt-muted)' };
-                          return (
-                            <span key={`${row.id}-${r}`} style={{ background: s.bg, color: s.color, borderRadius: 'var(--radius-pill)', padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
-                              {r}
-                            </span>
-                          );
-                        }) : <span style={{ color: 'var(--txt-muted)', fontSize: 12 }}>—</span>}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${isActive ? 'badge--success' : 'badge--danger'}`}>
-                        {isActive ? 'نشط' : 'غير نشط'}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--txt-secondary)', fontSize: 12 }}>
-                      {row.lastLoginAtUtc ? new Date(row.lastLoginAtUtc).toLocaleString('ar') : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
-    </div>
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
+      <TextField size="small" placeholder="ابحث باسم المستخدم أو الاسم..." value={list.searchInput} onChange={(e) => list.setSearchInput(e.target.value)} sx={{ mb: 2, width: 340 }} />
+      <DataTable
+        columns={COLUMNS} rows={list.items} getKey={(u) => u.id} loading={list.loading} empty="لا يوجد مستخدمون"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+      />
+    </>
   );
 }

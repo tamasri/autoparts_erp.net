@@ -1,124 +1,74 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Alert, Button, Chip, Stack } from '@mui/material';
 import { approvalsApi } from '../../api/endpoints/approvals';
+import { usersApi } from '../../api/endpoints/users';
+import { unwrapPaged } from '../../api/apiData';
 import { usePagedList } from '../../hooks/usePagedList';
-import Pagination from '../../components/common/Pagination';
-import { toast, extractApiError } from '../../lib/toast';
-import EmptyState from '../../components/common/EmptyState';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import StatusBadge from '../../components/common/StatusBadge';
+import { extractApiError, toast } from '../../lib/toast';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable, { type Column } from '../../components/ui/DataTable';
+import ReasonDialog from '../../components/ui/ReasonDialog';
+import StatusChip from '../../components/ui/StatusChip';
 
 type Approval = {
-  id: string;
-  requestType?: string;
-  requesterUsername?: string;
-  requesterName?: string;
-  createdAt?: string;
-  expiresAt?: string;
-  status?: string;
+  id: string; entityType?: string; actionCode?: string; reason?: string; status?: string; requestedByUserId?: string;
+  requiredApprovals?: number; currentApprovals?: number; requestedAtUtc?: string; completedAtUtc?: string | null;
 };
 
-export default function Approvals(): JSX.Element {
-  const list = usePagedList<Approval>({
-    errorMessage: 'تعذر تحميل الطلبات',
-    fetcher: ({ page, pageSize }) => approvalsApi.getPending(page, pageSize),
-  });
-  const { items: rows, error, loading } = list;
-  const [busy, setBusy] = useState('');
+const when = (v?: string): string => (v ? new Date(v).toLocaleString('ar') : '—');
 
-  const load = async (): Promise<void> => { list.reload(); };
+export default function Approvals(): JSX.Element {
+  const list = usePagedList<Approval>({ errorMessage: 'تعذر تحميل الطلبات', fetcher: ({ page, pageSize }) => approvalsApi.getPending(page, pageSize) });
+  const [busy, setBusy] = useState('');
+  const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    usersApi.getUsers(1, 100)
+      .then((r) => setNames(Object.fromEntries(unwrapPaged<{ id: string; userName?: string }>(r.data).items.map((u) => [u.id, u.userName ?? '']))))
+      .catch(() => undefined);
+  }, []);
+  const [rejecting, setRejecting] = useState<Approval | null>(null);
 
   async function approve(id: string): Promise<void> {
     setBusy(id);
-    try { await approvalsApi.approve(id); toast.success('تمت الموافقة بنجاح'); await load(); }
+    try { await approvalsApi.approve(id); toast.success('تمت الموافقة'); list.reload(); }
     catch (e: unknown) { toast.error(extractApiError(e, 'تعذر الموافقة على الطلب')); }
     finally { setBusy(''); }
   }
 
-  async function reject(id: string): Promise<void> {
-    const reason = window.prompt('سبب الرفض') ?? '';
-    if (!reason.trim()) return;
-    setBusy(id);
-    try { await approvalsApi.reject(id, reason.trim()); toast.success('تم رفض الطلب'); await load(); }
+  async function reject(reason: string): Promise<void> {
+    if (!rejecting) return;
+    try { await approvalsApi.reject(rejecting.id, reason); toast.success('تم رفض الطلب'); setRejecting(null); list.reload(); }
     catch (e: unknown) { toast.error(extractApiError(e, 'تعذر رفض الطلب')); }
-    finally { setBusy(''); }
   }
 
+  const columns: Column<Approval>[] = [
+    { header: 'الإجراء', render: (r) => <Chip size="small" variant="outlined" label={(r.actionCode ?? '—').replace(/Command$/, '')} /> },
+    { header: 'الكيان', render: (r) => r.entityType ?? '—' },
+    { header: 'الطالب', render: (r) => names[r.requestedByUserId ?? ''] || '—' },
+    { header: 'السبب', render: (r) => r.reason || '—' },
+    { header: 'الموافقات', numeric: true, render: (r) => `${r.currentApprovals ?? 0} / ${r.requiredApprovals ?? 1}` },
+    { header: 'تاريخ الطلب', render: (r) => when(r.requestedAtUtc), nowrap: true },
+    { header: 'الحالة', render: (r) => <StatusChip status={r.status ?? 'PENDING'} /> },
+    {
+      header: '', nowrap: true,
+      render: (r) => (r.status ?? 'PENDING') !== 'PENDING' ? null : (
+        <Stack direction="row" gap={1}>
+          <Button size="small" variant="contained" color="success" disabled={busy === r.id} onClick={() => void approve(r.id)}>✓ موافقة</Button>
+          <Button size="small" variant="outlined" color="error" disabled={busy === r.id} onClick={() => setRejecting(r)}>✕ رفض</Button>
+        </Stack>
+      ),
+    },
+  ];
+
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">طلبات الموافقة</h1>
-          <div className="vex-page-header__breadcrumb">مراجعة والبت في الطلبات المعلّقة</div>
-        </div>
-        {rows.length > 0 && (
-          <div style={{ background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-            ⏳ معلّق: {list.totalCount}
-          </div>
-        )}
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
-
-      {rows.length === 0 && !loading ? (
-        <div className="vex-card" style={{ textAlign: 'center', padding: '48px 0' }}>
-          <EmptyState icon="✅" message="لا توجد طلبات موافقة معلقة" />
-        </div>
-      ) : (
-        <div className="vex-card vex-card--no-pad" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="vex-table">
-              <thead>
-                <tr>
-                  <th>نوع الطلب</th>
-                  <th>الطالب</th>
-                  <th>تاريخ الطلب</th>
-                  <th>ينتهي في</th>
-                  <th>الحالة</th>
-                  <th>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <span style={{ fontSize: 12, color: 'var(--txt-muted)', background: 'var(--clr-surface-2)', padding: '2px 10px', borderRadius: 'var(--radius-sm)', fontWeight: 600 }}>
-                        {row.requestType ?? '-'}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
-                      {row.requesterName ?? row.requesterUsername ?? '-'}
-                    </td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{row.createdAt ?? '-'}</td>
-                    <td style={{ color: 'var(--clr-danger)', fontWeight: 600, fontSize: 13 }}>{row.expiresAt ?? '-'}</td>
-                    <td><StatusBadge status={row.status ?? 'PENDING'} type="approval" /></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        type="button"
-                        disabled={busy === row.id}
-                        onClick={() => void approve(row.id)}
-                        className="btn-success"
-                        style={{ padding: '5px 14px', fontSize: 12, marginLeft: 8 }}
-                      >
-                        {busy === row.id ? '...' : '✓ موافقة'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy === row.id}
-                        onClick={() => void reject(row.id)}
-                        className="btn-danger"
-                        style={{ padding: '5px 14px', fontSize: 12 }}
-                      >
-                        {busy === row.id ? '...' : '✕ رفض'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-        </div>
-      )}
-    </div>
+    <>
+      <PageHeader title="طلبات الموافقة" subtitle="مراجعة والبت في الطلبات المعلّقة" actions={list.totalCount > 0 ? <Chip color="warning" label={`معلّق: ${list.totalCount}`} /> : undefined} />
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
+      <DataTable
+        columns={columns} rows={list.items} getKey={(r) => r.id} loading={list.loading} empty="لا توجد طلبات موافقة معلّقة"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+      />
+      <ReasonDialog open={rejecting !== null} title="رفض الطلب" confirmLabel="تأكيد الرفض" onClose={() => setRejecting(null)} onConfirm={reject} />
+    </>
   );
 }
