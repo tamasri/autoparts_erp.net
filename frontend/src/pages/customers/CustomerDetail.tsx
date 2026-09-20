@@ -71,7 +71,7 @@ export default function CustomerDetail(): JSX.Element {
       <PageHeader
         title={customer?.name ?? 'العميل'}
         subtitle={[customer?.code, customer?.phone, customer?.city].filter(Boolean).join(' · ')}
-        crumbs={[{ label: 'الحسابات', to: '/accounts?tab=customers' }, { label: customer?.code ?? '' }]}
+        crumbs={[{ label: 'الحسابات', to: '/accounts' }, { label: customer?.code ?? '' }]}
         actions={<><Button variant="outlined" size="small" onClick={() => setViewOpen(true)}>👁 عرض وطباعة</Button><ExportMenu build={async () => doc} /></>}
       />
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}

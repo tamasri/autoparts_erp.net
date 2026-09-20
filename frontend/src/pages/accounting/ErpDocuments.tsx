@@ -1,4 +1,5 @@
 /** Read-only browser of what ERPNext holds (invoices, payments, journal entries, ledger, master data), linked to our records. */
+import { ARABIC_PAGINATION } from '../../lib/tablePagination';
 import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Alert, Box, Chip, CircularProgress, Paper, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Tabs, TextField } from '@mui/material';
@@ -33,6 +34,7 @@ const COLUMN_LABEL: Record<string, string> = {
 
 const LOCAL_ROUTE: Record<string, (id: string) => string | null> = {
   Invoice: (id) => `/invoices/${id}`,
+  PurchaseInvoice: () => '/purchasing',
 };
 
 const cell = (v: unknown): string => (v === null || v === undefined ? '' : typeof v === 'number' ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : String(v));
@@ -110,7 +112,7 @@ export default function ErpDocuments(): JSX.Element {
           </TableBody>
         </Table>
         <TablePagination component="div" count={data?.totalCount ?? 0} page={page} rowsPerPage={pageSize} rowsPerPageOptions={[10, 20, 50, 100]}
-          onPageChange={(_, p) => setPage(p)} onRowsPerPageChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} labelRowsPerPage="عدد الصفوف" />
+          onPageChange={(_, p) => setPage(p)} onRowsPerPageChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} {...ARABIC_PAGINATION} />
       </TableContainer>
     </Box>
   );

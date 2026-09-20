@@ -8,7 +8,8 @@ public sealed record PartyListItemDto(
     bool IsActive,
     bool HasCombinedStatement,
     IReadOnlyCollection<string> ActiveTypeCodes,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? CustomerId = null);
 
 public sealed record PartyTypeAssignmentDto(
     Guid Id,

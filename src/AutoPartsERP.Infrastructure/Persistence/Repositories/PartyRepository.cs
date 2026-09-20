@@ -63,7 +63,8 @@ public sealed class PartyRepository : IPartyRepository
                     )
                 ) AS HasCombinedStatement,
                 COALESCE(array_agg(a.type_code) FILTER (WHERE a.type_code IS NOT NULL), ARRAY[]::text[]) AS ActiveTypeCodes,
-                p.created_at AS CreatedAt
+                p.created_at AS CreatedAt,
+                (SELECT c.id FROM customers c WHERE c.party_id = p.id ORDER BY c.created_at LIMIT 1) AS CustomerId
             FROM parties p
             LEFT JOIN party_type_assignments a
                 ON a.party_id = p.id AND a.is_active = TRUE
@@ -157,7 +158,8 @@ public sealed class PartyRepository : IPartyRepository
             r.IsActive,
             r.HasCombinedStatement,
             r.ActiveTypeCodes,
-            r.CreatedAt)).ToArray();
+            r.CreatedAt,
+            r.CustomerId)).ToArray();
 
         return new PagedResult<PartyListItemDto>(items, page, pageSize, total);
     }
@@ -183,5 +185,6 @@ public sealed class PartyRepository : IPartyRepository
         public bool HasCombinedStatement { get; init; }
         public string[] ActiveTypeCodes { get; init; } = Array.Empty<string>();
         public DateTimeOffset CreatedAt { get; init; }
+        public Guid? CustomerId { get; init; }
     }
 }

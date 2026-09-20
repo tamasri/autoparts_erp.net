@@ -11,7 +11,7 @@ const fmt = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
 const QUICK_ACTIONS = [
   { to: '/invoices/new', label: 'فاتورة جديدة', icon: '🧾', gradient: 'linear-gradient(135deg, var(--clr-primary), var(--clr-primary-mid))' },
   { to: '/invoices', label: 'الفواتير والمستحقات', icon: '💳', gradient: 'linear-gradient(135deg, #22c55e, #4ade80)' },
-  { to: '/accounts?tab=customers', label: 'العملاء', icon: '👤', gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)' },
+  { to: '/accounts', label: 'العملاء', icon: '👤', gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)' },
   { to: '/inventory/receiving', label: 'استلام بضاعة', icon: '📦', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
 ];
 

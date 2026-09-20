@@ -33,6 +33,7 @@ const Transfers        = lazy(() => import('./pages/inventory/Transfers'));
 const CycleCounts      = lazy(() => import('./pages/inventory/CycleCounts'));
 const StockAdjustments = lazy(() => import('./pages/inventory/StockAdjustments'));
 const IssueOrders      = lazy(() => import('./pages/inventory/IssueOrders'));
+const Purchasing       = lazy(() => import('./pages/purchasing/Purchasing'));
 const Warehouses       = lazy(() => import('./pages/inventory/Warehouses'));
 const Movements        = lazy(() => import('./pages/inventory/Movements'));
 const InventoryAlerts  = lazy(() => import('./pages/inventory/InventoryAlerts'));
@@ -109,7 +110,7 @@ export default function App(): JSX.Element {
         <Route path="dashboard"               element={<RouteWrapper><Dashboard /></RouteWrapper>} />
         <Route path="kpi"                     element={<RouteWrapper><KpiDashboard /></RouteWrapper>} />
         <Route path="accounts"                element={<RouteWrapper><Accounts /></RouteWrapper>} />
-        <Route path="customers"               element={<Navigate to="/accounts?tab=customers" replace />} />
+        <Route path="customers"               element={<Navigate to="/accounts" replace />} />
         <Route path="customers/:id"           element={<RouteWrapper><CustomerDetail /></RouteWrapper>} />
         <Route path="invoices"                element={<RouteWrapper><Invoices /></RouteWrapper>} />
         <Route path="payments"                element={<RouteWrapper><Payments /></RouteWrapper>} />
@@ -122,6 +123,7 @@ export default function App(): JSX.Element {
         <Route path="inventory/cycle-counts"  element={<RouteWrapper><CycleCounts /></RouteWrapper>} />
         <Route path="inventory/adjustments"   element={<RouteWrapper><StockAdjustments /></RouteWrapper>} />
         <Route path="inventory/issue-orders"  element={<RouteWrapper><IssueOrders /></RouteWrapper>} />
+        <Route path="purchasing"              element={<RouteWrapper><Purchasing /></RouteWrapper>} />
         <Route path="inventory/warehouses"    element={<RouteWrapper><Warehouses /></RouteWrapper>} />
 
         <Route path="inventory/movements"      element={<RouteWrapper><Movements /></RouteWrapper>} />

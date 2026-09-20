@@ -1,4 +1,5 @@
 /** Detailed item movements: every stock change from every module, filterable, with a running balance when one item is selected. */
+import { ARABIC_PAGINATION } from '../../lib/tablePagination';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
@@ -13,13 +14,13 @@ import ExportMenu from '../../components/ui/ExportMenu';
 
 export const MOVEMENT_LABEL: Record<string, string> = {
   RECEIPT: 'استلام', STATUS_CHANGE: 'تخزين / تغيير حالة', TRANSFER_OUT: 'تحويل صادر', TRANSFER_IN: 'تحويل وارد',
-  ADJUSTMENT: 'تسوية', SALE: 'بيع', SALE_RETURN: 'مرتجع مبيعات', ISSUE: 'صرف',
+  ADJUSTMENT: 'تسوية', SALE: 'بيع', SALE_RETURN: 'مرتجع مبيعات', ISSUE: 'صرف', PURCHASE: 'شراء', PURCHASE_VOID: 'إلغاء شراء',
 };
 const TYPES = Object.entries(MOVEMENT_LABEL);
-const REF_ROUTE: Record<string, (id: string) => string> = { INVOICE: (id) => `/invoices/${id}` };
+const REF_ROUTE: Record<string, (id: string) => string> = { INVOICE: (id) => `/invoices/${id}`, PURCHASE_INVOICE: () => '/purchasing' };
 const REF_LABEL: Record<string, string> = {
   INVOICE: 'فاتورة', RECEIVING: 'مستند استلام', PUTAWAY: 'تخزين', TRANSFER: 'تحويل', ADJUSTMENT: 'تسوية', INVENTORY_ADJUSTMENT: 'تسوية مباشرة',
-  BATCH_RECEIPT: 'استلام دفعة', ISSUE_ORDER: 'أمر صرف',
+  BATCH_RECEIPT: 'استلام دفعة', ISSUE_ORDER: 'أمر صرف', PURCHASE_INVOICE: 'فاتورة شراء',
 };
 
 const fmt = (v: number | null | undefined): string => (v === null || v === undefined ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: 4 }));
@@ -134,7 +135,7 @@ export default function Movements(): JSX.Element {
           </TableBody>
         </Table>
         <TablePagination component="div" count={total} page={page} rowsPerPage={pageSize} rowsPerPageOptions={[25, 50, 100, 200]}
-          onPageChange={(_, p) => setPage(p)} onRowsPerPageChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} labelRowsPerPage="عدد الصفوف" />
+          onPageChange={(_, p) => setPage(p)} onRowsPerPageChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} {...ARABIC_PAGINATION} />
       </TableContainer>
     </Box>
   );
