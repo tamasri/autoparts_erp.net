@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.StockAdjustments;
 
 public sealed record GetStockAdjustmentsQuery(int PageNumber = 1, int PageSize = 20)
@@ -234,6 +235,16 @@ public sealed class PostStockAdjustmentCommandHandler : IRequestHandler<PostStoc
 
         foreach (var line in lines)
         {
+            if (line.Status == "AVAILABLE")
+            {
+                var sellable = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, line.LocationId, line.QtyDelta, cancellationToken);
+                if (sellable.IsFailure)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return Result<Guid>.Failure(sellable.Error);
+                }
+            }
+
             if (line.QtyDelta >= 0)
             {
                 await connection.ExecuteAsync(new CommandDefinition(

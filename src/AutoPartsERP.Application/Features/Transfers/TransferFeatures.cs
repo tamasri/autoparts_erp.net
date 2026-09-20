@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.Transfers;
 
 public sealed record GetTransferRequestsQuery(int PageNumber = 1, int PageSize = 20)
@@ -403,6 +404,13 @@ public sealed class ShipTransferOrderCommandHandler : IRequestHandler<ShipTransf
                 return Result<Guid>.Failure(new Error("Stock.InsufficientQuantity", "Insufficient available stock for shipping."));
             }
 
+            var leaving = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, locationId, -line.ShippedQty, cancellationToken);
+            if (leaving.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(leaving.Error);
+            }
+
             await connection.ExecuteAsync(new CommandDefinition(
                 """
                 INSERT INTO inventory_balances (id, item_id, location_id, batch_id, status, qty, updated_at)
@@ -601,6 +609,13 @@ public sealed class ReceiveTransferOrderCommandHandler : IRequestHandler<Receive
                 },
                 transaction,
                 cancellationToken: cancellationToken));
+
+            var arriving = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, destinationLocation, line.ShippedQty, cancellationToken);
+            if (arriving.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(arriving.Error);
+            }
 
             await connection.ExecuteAsync(new CommandDefinition(
                 """

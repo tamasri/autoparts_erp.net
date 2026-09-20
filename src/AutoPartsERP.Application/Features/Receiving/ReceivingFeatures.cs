@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.Receiving;
 
 public sealed record GetReceivingDocumentsQuery(int PageNumber = 1, int PageSize = 20)
@@ -522,6 +523,13 @@ public sealed class CompletePutawayTaskCommandHandler : IRequestHandler<Complete
             },
             transaction,
             cancellationToken: cancellationToken));
+
+        var sellable = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, toLocation, qty, cancellationToken);
+        if (sellable.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return sellable;
+        }
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
