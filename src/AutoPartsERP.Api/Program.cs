@@ -172,6 +172,7 @@ builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
 // behaviour - no call site needs to change.
 builder.Services.AddScoped<SalesInvoiceErpNextSyncer>();
 builder.Services.AddScoped<PaymentErpNextSyncer>();
+builder.Services.AddScoped<PurchaseErpNextSyncer>();
 builder.Services.Configure<ErpNextOptions>(builder.Configuration.GetSection(ErpNextOptions.SectionName));
 var erpNextEnabled = builder.Configuration.GetValue<bool>($"{ErpNextOptions.SectionName}:Enabled");
 if (erpNextEnabled)
@@ -234,6 +235,10 @@ builder.Services.AddScoped<IOutboxEventHandler, InvoicePostedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, PaymentAllocatedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, PaymentReversedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, InvoiceVoidedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, PurchaseInvoicePostedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, PurchaseInvoiceVoidedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, SupplierPaymentCreatedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, SupplierPaymentReversedOutboxHandler>();
 
 // Audit configuration
 AuditConfiguration.Configure(builder.Configuration);

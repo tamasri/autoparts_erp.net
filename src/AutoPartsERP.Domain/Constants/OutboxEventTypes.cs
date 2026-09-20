@@ -12,4 +12,8 @@ public static class OutboxEventTypes
     public const string WarrantyProcessed = "WarrantyProcessed";
     public const string PartyTypeActivated = "PartyTypeActivated";
     public const string TransferShipped = "TransferShipped";
+    public const string PurchaseInvoicePosted = "PurchaseInvoicePosted";
+    public const string PurchaseInvoiceVoided = "PurchaseInvoiceVoided";
+    public const string SupplierPaymentCreated = "SupplierPaymentCreated";
+    public const string SupplierPaymentReversed = "SupplierPaymentReversed";
 }

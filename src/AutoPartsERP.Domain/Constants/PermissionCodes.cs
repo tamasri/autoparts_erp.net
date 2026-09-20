@@ -62,6 +62,21 @@ public static class PermissionCodes
         public const string WriteOff = "payments:write_off";
     }
 
+    public static class Purchases
+    {
+        public const string Read = "purchases:read";
+        public const string Create = "purchases:create";
+        public const string Post = "purchases:post";
+        public const string Void = "purchases:void";
+    }
+
+    public static class SupplierPayments
+    {
+        public const string Read = "supplier_payments:read";
+        public const string Create = "supplier_payments:create";
+        public const string Reverse = "supplier_payments:reverse";
+    }
+
     public static class FxRates
     {
         public const string Read = "fx_rates:read";
@@ -219,6 +234,13 @@ public static class PermissionCodes
         Payments.Create,
         Payments.Allocate,
         Payments.WriteOff,
+        Purchases.Read,
+        Purchases.Create,
+        Purchases.Post,
+        Purchases.Void,
+        SupplierPayments.Read,
+        SupplierPayments.Create,
+        SupplierPayments.Reverse,
         FxRates.Read,
         FxRates.Manage,
         Warranty.Read,

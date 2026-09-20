@@ -87,7 +87,22 @@ public sealed class GetPartyCombinedStatementQueryHandler : IRequestHandler<GetP
             arLines.Sum(x => x.CreditUsd),
             arLines.Sum(x => x.DebitUsd) - arLines.Sum(x => x.CreditUsd));
 
-        var apBalance = new CombinedStatementBalanceDto(0m, 0m, 0m, 0m, 0m, 0m);
+        // What we owe the supplier: bills are credits, payments to the supplier are debits (the supplier's own view of us).
+        var apLines = (await connection.QueryAsync<ArLine>(new CommandDefinition(
+            """
+            SELECT b.bill_date AS Date, 'BILL' AS EntryType, b.bill_number AS ReferenceNumber, COALESCE(b.supplier_ref, 'Purchase invoice') AS Description,
+                   0::numeric AS DebitSyp, 0::numeric AS CreditSyp, 0::numeric AS DebitUsd, b.total_usd AS CreditUsd
+            FROM purchase_invoices b WHERE b.supplier_party_id = @PartyId AND b.status IN ('POSTED', 'VOID')
+            UNION ALL
+            SELECT p.payment_date, 'SUPPLIER_PAYMENT', p.payment_number, 'Supplier payment', 0::numeric, 0::numeric, p.amount_usd, 0::numeric
+            FROM supplier_payments p WHERE p.supplier_party_id = @PartyId AND NOT p.is_reversed
+            ORDER BY Date;
+            """,
+            new { request.PartyId }, cancellationToken: cancellationToken))).ToArray();
+
+        var apBalance = new CombinedStatementBalanceDto(
+            0m, 0m, 0m,
+            apLines.Sum(x => x.DebitUsd), apLines.Sum(x => x.CreditUsd), apLines.Sum(x => x.CreditUsd) - apLines.Sum(x => x.DebitUsd));
         var netPosition = new CombinedStatementBalanceDto(
             arBalance.TotalDebitSyp - apBalance.TotalDebitSyp,
             arBalance.TotalCreditSyp - apBalance.TotalCreditSyp,
@@ -107,7 +122,7 @@ public sealed class GetPartyCombinedStatementQueryHandler : IRequestHandler<GetP
                 x.CreditSyp,
                 x.DebitUsd,
                 x.CreditUsd)).ToArray(),
-            Array.Empty<CombinedStatementLineDto>(),
+            apLines.Select(x => new CombinedStatementLineDto(x.Date, x.EntryType, x.ReferenceNumber, x.Description, x.DebitSyp, x.CreditSyp, x.DebitUsd, x.CreditUsd)).ToArray(),
             arBalance,
             apBalance,
             netPosition);

@@ -57,3 +57,7 @@ public sealed record PartyTypeActivatedPayload(
 public sealed record TransferShippedPayload(
     Guid TransferOrderId,
     decimal TotalShippedQty);
+
+public sealed record PurchaseInvoiceEventPayload(Guid PurchaseInvoiceId);
+
+public sealed record SupplierPaymentEventPayload(Guid SupplierPaymentId);

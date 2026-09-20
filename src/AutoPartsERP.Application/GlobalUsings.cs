@@ -23,6 +23,7 @@ global using AutoPartsERP.Contracts.Items;
 global using AutoPartsERP.Contracts.Invoices;
 global using AutoPartsERP.Contracts.Kpi;
 global using AutoPartsERP.Contracts.Payments;
+global using AutoPartsERP.Contracts.Purchasing;
 global using AutoPartsERP.Contracts.Parties;
 global using AutoPartsERP.Contracts.Periods;
 global using AutoPartsERP.Contracts.ReasonCodes;
