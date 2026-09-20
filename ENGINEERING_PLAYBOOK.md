@@ -126,12 +126,17 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 ### 2.3b Stock and movements
 - **Every code path that changes stock must write the item ledger** (`inventory_movements`): use `InventoryMovementWriter` (SKU-keyed paths) or insert with the WMS item id (item-keyed paths). A stock change with no ledger row is a bug.
 - `performed_by` has a foreign key to users: never pass `Guid.Empty`.
-- Two stock tables exist until D15 is done: `inventory_stock` (by SKU) and `inventory_balances` (by item). Say which one a change touches.
+- Two stock tables exist: `inventory_stock` (by SKU, what invoices sell) and `inventory_balances` (by item and status, what warehouse documents work on). **Any code that changes the AVAILABLE quantity of an item at a location must also call `StockLevelWriter.ApplyAvailableAsync` in the same transaction** (putaway, transfers, adjustments, purchase bills do). A change that touches only one table makes goods unsellable or sellable by mistake.
+- `inventory_balances` is unique with `NULLS NOT DISTINCT` (migration 16), so `ON CONFLICT (item_id, location_id, batch_id, status)` works for "no batch" rows. Never insert such rows without it.
 
 ### 2.3c Printing and exporting
 - Screens never build PDF/Excel themselves: describe the document as an `ExportDocument` and use `DocumentViewButton` / `DocumentDialog` / `ExportMenu` (`lib/exportClient.ts`). Document builders live in `lib/wmsDocuments.ts`.
 - Numeric columns must be listed in `numericColumns`; text beginning with = + - @ is neutralised by the renderer (spreadsheet formula injection).
 - Fonts are embedded resources (`Infrastructure/Exports/Fonts`); never rely on system fonts in the container.
+
+### 2.3d ERPNext master data
+- ERPNext does **not** refuse a second Customer/Supplier with the same name; it creates "X - 1". Always look a party up by name first (`UpsertPartyAsync`) and update it. Items are unique by `item_code`, so create-then-update-on-duplicate is fine for them.
+- Anything that changes the value of stock must reach the ledger: sales (COGS), purchases (Purchase Invoice), adjustments (Journal Entry). Add the matching outbox event when you add a new stock-changing flow.
 
 ### 2.4 AI rules
 - All AI features go through one provider abstraction over an **OpenAI-compatible** endpoint (Groq / DeepSeek);

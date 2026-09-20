@@ -46,7 +46,7 @@
 | API host | ASP.NET Core Minimal APIs + **Carter** modules (~28) | `Api/Modules/*` |
 | CQRS | **MediatR 12** behaviors: Validation → Authorization → Idempotency → PeriodLock → MakerChecker | `Program.cs` |
 | Validation / mapping | FluentValidation 11, Mapster | |
-| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (16) | `Persistence/Migrations` |
+| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (18) | `Persistence/Migrations` |
 | Reads | **Dapper 2** on snake_case tables + `DapperTypeHandlers` (`DateOnly`, `DateTimeOffset`) | |
 | Database | **PostgreSQL 16** (`ltree`, `pg_trgm`, `uuid-ossp`; `pgvector` for embeddings) | On the VPS it runs on the host |
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
@@ -115,6 +115,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | Inventory stock | stock/batches/trace/receive/adjust/transfer | `Inventory.tsx` (paged) | ✅ (no batch screens) |
 | Warehouses & locations | create / edit / deactivate (blocked while stock exists, no cycles), per-location stock overview | `Warehouses.tsx` (`/inventory/warehouses`) | ✅ |
 | **Item movements (ledger)** | `GET /inventory/movements` over `inventory_movements`, written by receiving, putaway, transfers, adjustments, invoices (sale/return/void), direct receive/adjust/transfer and issue orders; running balance per item | `Movements.tsx` (`/inventory/movements`) | ✅ |
+| **Purchasing** | purchase invoices (draft → post = stock in + cost + ERPNext; void), supplier payments with multi-bill allocation and reversal | `Purchasing.tsx` (`/purchasing`) | ✅ |
 | Receiving / Putaway | full | `Receiving.tsx` | ✅ (paged, pickers, view/print) |
 | Transfers | requests/orders/ship/receive | `Transfers.tsx` | ✅ (unpaged) |
 | Cycle counts | plan/record/approve variance | `CycleCounts.tsx` | ✅ (unpaged) |
@@ -195,8 +196,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       ids typed by hand). Use `LocationSelect`, `ItemPickerModal mode="warehouse"` and `EntityPicker`. Their list endpoints for
       issue orders/transfers also read `dynamic` rows and need the same typed-record fix.
 - [x] **D14 — DONE: rename propagates via rename_doc.** Was: renaming a customer is not propagated to ERPNext (it identifies customers by name).
-- [ ] **D15 — Two stock models.** WMS documents (receiving, putaway, transfer orders, adjustments) change `inventory_balances`; invoices, direct receive/adjust/transfer and (now) issue orders change `inventory_stock`. A periodic job copies stock → balances only, so goods received through a WMS document are **not** sellable until D9 is done. The item-movement ledger is complete for both sides.
-- [ ] **D16 — Old-style screens.** Only Customers, the chart of accounts, ERPNext documents, statements, warehouses and movements use MUI; the shell (sidebar/top bar) and ~20 other screens still use the Vex CSS classes. Migrate by screen with the shared kit in `components/ui`.
+- [x] **D15 — DONE (2026-09-20): stock and warehouse balances are kept in step.** Was: **Two stock models.** WMS documents (receiving, putaway, transfer orders, adjustments) change `inventory_balances`; invoices, direct receive/adjust/transfer and (now) issue orders change `inventory_stock`. A periodic job copies stock → balances only, so goods received through a WMS document are **not** sellable until D9 is done. The item-movement ledger is complete for both sides.
+- [ ] **D16 — Old-style screens.** MUI now covers the shell (menu + top bar), accounts, customer profile/statements, purchasing, chart of accounts, ERPNext documents, warehouses and movements. Still on the Vex CSS classes: dashboard, KPI, invoices (list, workspace, detail), payments, FX rates, items and item card, inventory, receiving, transfers, issue orders, cycle counts, adjustments, alerts, approvals, audit, periods, users, roles, accounting sync. Migrate by screen with the shared kit in `components/ui`.
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
@@ -233,8 +234,9 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] Item import from Excel/CSV with template and dry run.
 - [x] One "الحسابات" menu entry (all accounts + customers tabs; `party` stays in code), combined statement only for customer+vendor accounts, customer statement rebuilt.
 - [x] ERPNext customer/supplier sync is now update-in-place (it used to create "X - N" duplicates on every run).
-- [ ] Unify the two stock models (D15/D9) — next.
-- [ ] Purchase invoices + supplier payments + ERPNext sync (client methods exist; screens, migration and syncers do not).
+- [x] Unify the two stock models (D15): putaway, transfers and adjustments move sellable stock in the same transaction; duplicate "no batch" balance rows merged.
+- [x] Purchase invoices + supplier payments + ERPNext sync (Purchase Invoice, Payment Entry Pay, cancels); posting receives the goods and sets a weighted-average cost.
+- [x] Stock adjustments are booked in ERPNext (Dr COGS / Cr Inventory at cost).
 - [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
 - [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 

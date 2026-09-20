@@ -71,7 +71,7 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~28 Carter modules; 16 raw-SQL migrations (later ones use ids `202401010000NN`); 60+ tables.
+- ~28 Carter modules; 18 raw-SQL migrations (later ones use ids `202401010000NN`); 60+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
@@ -258,3 +258,9 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - Test helpers used: mock ERPNext extended for Account list, `get_balance_on`, `get_count`, document lists (scratchpad, not committed).
 - **One menu entry "الحسابات"** (`/accounts`, tabs: all accounts / customers) replaces the two entries "العملاء" and "Accounts". The UI word is Arabic; `party`/`parties` stay in code and routes (`/parties/:id/statement`); `/customers` and `/parties` redirect.
 - **ERPNext duplicates:** ERPNext does not refuse a second Customer/Supplier with the same name, it names it "X - 1", "X - 2". Every sync run therefore created new customers (the sync screen showed "…- 61"). `UpsertPartyAsync` now looks the party up by name and updates it. **Existing duplicates on the server must be merged/deleted once in ERPNext** (they are not touched automatically).
+- **Stock unification (D15):** `StockLevelWriter` moves `inventory_stock` when warehouse documents change AVAILABLE quantities; migration 15 stops the stock→balances copy double-counting batches; migration 16 merges duplicate "no batch" balance rows (Postgres NULL semantics) and adds `NULLS NOT DISTINCT`. Verified receive → putaway → sync → transfer ship/receive: both tables equal at every step.
+- **Purchasing:** migration 17 (bills, lines, supplier payments, allocations), permissions `purchases:*` / `supplier_payments:*` (SYSTEM_ADMIN only until roles are assigned), posting a bill = stock in + ledger + weighted-average cost + outbox → `PurchaseErpNextSyncer`; payments allocate at creation; void blocked while payments exist. Not period-locked at bill creation for drafts; posting/void/reverse check the period.
+- **Migration 18:** party code sequence lagged behind the seeded codes, so creating any new account failed with a duplicate key.
+- **Stock adjustments reach ERPNext** as a Journal Entry (Dr COGS / Cr Inventory at the item's current cost) via `StockAdjustmentErpNextSyncer`.
+- **UI:** shell rewritten in MUI (`components/layout/AppLayout.tsx`, menu data in `navigation.ts`); one `Accounts` screen replaces Customers + Parties (list, roles, statement, customer profile, new account); purchasing screens in `features/purchasing` and `pages/purchasing`.
+- **Known gaps:** vendor-only accounts have no statement page yet (the combined one needs both roles); the ~20 screens listed in D16 are still old-style; role bundles for purchasing (buyer, accountant) are not defined yet.
