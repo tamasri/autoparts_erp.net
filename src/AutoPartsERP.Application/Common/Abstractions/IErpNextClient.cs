@@ -36,7 +36,22 @@ public interface IErpNextClient
 
     /// <summary>Cancels a submitted ERPNext document (Sales Invoice, Payment Entry, ...) by its ERPNext name.</summary>
     Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>The company's chart of accounts as ERPNext holds it; balances are read per account and only when asked for.</summary>
+    Task<Result<IReadOnlyList<ErpNextAccount>>> GetChartOfAccountsAsync(bool includeBalances, CancellationToken cancellationToken = default);
+
+    /// <summary>Which ERPNext account each application event posts to (receivable, cash, COGS, inventory, ...).</summary>
+    Task<Result<IReadOnlyList<ErpNextAccountMapping>>> GetAccountMappingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Read-only page of an ERPNext document type from a fixed allow-list (invoices, payments, journal entries, ledger, ...).</summary>
+    Task<Result<ErpNextDocumentPage>> ListDocumentsAsync(string doctype, int page, int pageSize, string? search, CancellationToken cancellationToken = default);
 }
+
+public sealed record ErpNextAccount(string Name, string AccountName, string? ParentAccount, bool IsGroup, string? RootType, string? AccountType, string? Currency, decimal? Balance);
+
+public sealed record ErpNextAccountMapping(string Purpose, string Description, string? Account);
+
+public sealed record ErpNextDocumentPage(IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyDictionary<string, System.Text.Json.JsonElement>> Rows, long TotalCount);
 
 public sealed record ErpNextItemSync(Guid LocalItemId, string Code, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice);
 

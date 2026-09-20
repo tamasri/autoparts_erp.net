@@ -83,8 +83,8 @@ public sealed class GetCustomerAccountStatementQueryHandler : IRequestHandler<Ge
             SELECT
                 COALESCE((SELECT SUM(total_syp) FROM invoices WHERE customer_id = @Id AND status = 'POSTED'), 0) AS total_invoiced_syp,
                 COALESCE((SELECT SUM(total_usd) FROM invoices WHERE customer_id = @Id AND status = 'POSTED'), 0) AS total_invoiced_usd,
-                COALESCE((SELECT SUM(amount_syp) FROM payments WHERE customer_id = @Id AND is_reversed = FALSE), 0) AS total_paid_syp,
-                COALESCE((SELECT SUM(amount_usd) FROM payments WHERE customer_id = @Id AND is_reversed = FALSE), 0) AS total_paid_usd
+                COALESCE((SELECT SUM(CASE WHEN payment_type = 'REFUND' THEN -amount_syp ELSE amount_syp END) FROM payments WHERE customer_id = @Id AND is_reversed = FALSE), 0) AS total_paid_syp,
+                COALESCE((SELECT SUM(CASE WHEN payment_type = 'REFUND' THEN -amount_usd ELSE amount_usd END) FROM payments WHERE customer_id = @Id AND is_reversed = FALSE), 0) AS total_paid_usd
             ;
             """;
         AddParameter(command, "Id", customerId);
@@ -102,57 +102,43 @@ public sealed class GetCustomerAccountStatementQueryHandler : IRequestHandler<Ge
     private static async Task<IReadOnlyCollection<CustomerStatementTransactionDto>> GetTransactionsAsync(DbConnection connection, Guid customerId, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
+        // A real account statement: one row per ledger movement (posted invoices, returns, receipts, refunds) with a running
+        // balance in both currencies. Payment allocations are not ledger movements (the receipt already credited the account).
         command.CommandText = """
-            SELECT id, transaction_type, occurred_at, due_date, debit_syp, credit_syp, debit_usd, credit_usd, balance_syp, balance_usd
+            SELECT id, transaction_type, occurred_at, due_date, debit_syp, credit_syp, debit_usd, credit_usd,
+                   SUM(debit_syp - credit_syp) OVER (ORDER BY occurred_at, created_at, id) AS balance_syp,
+                   SUM(debit_usd - credit_usd) OVER (ORDER BY occurred_at, created_at, id) AS balance_usd,
+                   reference
             FROM (
-                SELECT
-                    id,
-                    'INVOICE' AS transaction_type,
-                    invoice_date::timestamp without time zone AS occurred_at,
-                    due_date::timestamp without time zone AS due_date,
-                    total_syp AS debit_syp,
-                    0::numeric(18,4) AS credit_syp,
-                    total_usd AS debit_usd,
-                    0::numeric(18,4) AS credit_usd,
-                    balance_syp,
-                    balance_usd
-                FROM invoices
-                WHERE customer_id = @Id AND status = 'POSTED'
+                SELECT i.id,
+                       CASE WHEN i.invoice_type = 'RETURN' THEN 'RETURN' ELSE 'INVOICE' END AS transaction_type,
+                       i.invoice_date::timestamp without time zone AS occurred_at,
+                       i.created_at AS created_at,
+                       i.due_date::timestamp without time zone AS due_date,
+                       GREATEST(i.total_syp, 0)::numeric(18,4) AS debit_syp,
+                       GREATEST(-i.total_syp, 0)::numeric(18,4) AS credit_syp,
+                       GREATEST(i.total_usd, 0)::numeric(18,4) AS debit_usd,
+                       GREATEST(-i.total_usd, 0)::numeric(18,4) AS credit_usd,
+                       COALESCE(i.invoice_number, '') AS reference
+                FROM invoices i
+                WHERE i.customer_id = @Id AND i.status = 'POSTED'
 
                 UNION ALL
 
-                SELECT
-                    id,
-                    'PAYMENT' AS transaction_type,
-                    payment_date::timestamp without time zone AS occurred_at,
-                    NULL AS due_date,
-                    0::numeric(18,4) AS debit_syp,
-                    amount_syp AS credit_syp,
-                    0::numeric(18,4) AS debit_usd,
-                    amount_usd AS credit_usd,
-                    amount_syp - allocated_syp AS balance_syp,
-                    amount_usd - allocated_usd AS balance_usd
-                FROM payments
-                WHERE customer_id = @Id AND is_reversed = FALSE
-
-                UNION ALL
-
-                SELECT
-                    pa.id,
-                    'ALLOCATION' AS transaction_type,
-                    pa.allocation_date::timestamp without time zone AS occurred_at,
-                    NULL AS due_date,
-                    0::numeric(18,4) AS debit_syp,
-                    pa.allocated_syp AS credit_syp,
-                    0::numeric(18,4) AS debit_usd,
-                    pa.allocated_usd AS credit_usd,
-                    0::numeric(18,4) AS balance_syp,
-                    0::numeric(18,4) AS balance_usd
-                FROM payment_allocations pa
-                INNER JOIN payments p ON p.id = pa.payment_id
-                WHERE p.customer_id = @Id
+                SELECT p.id,
+                       CASE WHEN p.payment_type = 'REFUND' THEN 'REFUND' ELSE 'PAYMENT' END AS transaction_type,
+                       p.payment_date::timestamp without time zone AS occurred_at,
+                       p.created_at AS created_at,
+                       NULL::timestamp without time zone AS due_date,
+                       CASE WHEN p.payment_type = 'REFUND' THEN p.amount_syp ELSE 0 END::numeric(18,4) AS debit_syp,
+                       CASE WHEN p.payment_type = 'REFUND' THEN 0 ELSE p.amount_syp END::numeric(18,4) AS credit_syp,
+                       CASE WHEN p.payment_type = 'REFUND' THEN p.amount_usd ELSE 0 END::numeric(18,4) AS debit_usd,
+                       CASE WHEN p.payment_type = 'REFUND' THEN 0 ELSE p.amount_usd END::numeric(18,4) AS credit_usd,
+                       COALESCE(p.payment_number, '') AS reference
+                FROM payments p
+                WHERE p.customer_id = @Id AND p.is_reversed = FALSE
             ) AS transactions
-            ORDER BY occurred_at, transaction_type;
+            ORDER BY occurred_at, created_at, id;
             """;
         AddParameter(command, "Id", customerId);
 
@@ -179,7 +165,8 @@ public sealed class GetCustomerAccountStatementQueryHandler : IRequestHandler<Ge
                     ? (DateOnly.FromDateTime(dueDate.Value) < DateOnly.FromDateTime(DateTime.UtcNow)
                         ? $"متأخر {(DateTime.UtcNow - dueDate.Value).HumanizeAr()}"
                         : new DateTimeOffset(dueDate.Value, TimeSpan.Zero).HumanizeAr())
-                    : string.Empty));
+                    : string.Empty,
+                reader.GetString(reader.GetOrdinal("reference"))));
         }
 
         return items;

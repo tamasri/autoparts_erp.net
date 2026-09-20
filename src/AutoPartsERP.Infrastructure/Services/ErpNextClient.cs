@@ -23,7 +23,7 @@ namespace AutoPartsERP.Infrastructure.Services;
 /// sync attempt will surface Frappe's exact validation error in erpnext_sync_log rather than
 /// failing silently - fix from that real error, not from a guess.
 /// </summary>
-public sealed class ErpNextClient : IErpNextClient
+public sealed partial class ErpNextClient : IErpNextClient
 {
     private readonly HttpClient _httpClient;
     private readonly ErpNextOptions _options;
@@ -162,14 +162,23 @@ public sealed class ErpNextClient : IErpNextClient
                 $"Company '{c.Name}' has no default receivable/{(isCash ? "cash" : "bank")} account in ERPNext; set it in the chart of accounts."));
         }
 
+        // ERPNext refuses a reference larger than what it still considers outstanding (currency rounding, an earlier partial
+        // payment). Clamp each allocation to the invoice's real outstanding; the remainder stays on the payment as an advance.
         var references = new JsonArray();
         foreach (var r in payment.References)
         {
+            var outstanding = await GetOutstandingAsync("Sales Invoice", r.DocumentName, cancellationToken);
+            var allocated = outstanding.HasValue ? Math.Min(r.AllocatedAmount, outstanding.Value) : r.AllocatedAmount;
+            if (allocated <= 0)
+            {
+                continue;
+            }
+
             references.Add(new JsonObject
             {
                 ["reference_doctype"] = "Sales Invoice",
                 ["reference_name"] = r.DocumentName,
-                ["allocated_amount"] = r.AllocatedAmount
+                ["allocated_amount"] = allocated
             });
         }
 
@@ -317,7 +326,12 @@ public sealed class ErpNextClient : IErpNextClient
         var references = new JsonArray();
         foreach (var r in payment.References)
         {
-            references.Add(new JsonObject { ["reference_doctype"] = "Purchase Invoice", ["reference_name"] = r.DocumentName, ["allocated_amount"] = r.AllocatedAmount });
+            var outstanding = await GetOutstandingAsync("Purchase Invoice", r.DocumentName, cancellationToken);
+            var allocated = outstanding.HasValue ? Math.Min(r.AllocatedAmount, outstanding.Value) : r.AllocatedAmount;
+            if (allocated > 0)
+            {
+                references.Add(new JsonObject { ["reference_doctype"] = "Purchase Invoice", ["reference_name"] = r.DocumentName, ["allocated_amount"] = allocated });
+            }
         }
 
         var date = payment.PaymentDate.ToString("yyyy-MM-dd");
@@ -378,7 +392,7 @@ public sealed class ErpNextClient : IErpNextClient
             {
                 ["account_name"] = "AutoPartsERP Inventory",
                 ["company"] = company.Name,
-                ["parent_account"] = $"Current Assets - {company.Abbr}",
+                ["parent_account"] = await FindInventoryParentAccountAsync(company, cancellationToken),
                 ["is_group"] = 0,
                 ["root_type"] = "Asset",
                 ["report_type"] = "Balance Sheet"
@@ -392,6 +406,72 @@ public sealed class ErpNextClient : IErpNextClient
 
         var body = await created.Content.ReadAsStringAsync(cancellationToken);
         return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"Could not create the inventory account '{name}': {created.StatusCode}: {Truncate(body)}"));
+    }
+
+    /// <summary>
+    /// The group account under which the inventory account is created. ERPNext charts differ ("Current Assets - ABBR" is not
+    /// guaranteed), so ask ERPNext for the company's asset groups and prefer Current Assets / Stock Assets.
+    /// </summary>
+    private async Task<string> FindInventoryParentAccountAsync(CompanyInfo company, CancellationToken cancellationToken)
+    {
+        var fallback = $"Current Assets - {company.Abbr}";
+        try
+        {
+            var filters = Uri.EscapeDataString(JsonSerializer.Serialize(new object[]
+            {
+                new object[] { "company", "=", company.Name },
+                new object[] { "is_group", "=", 1 },
+                new object[] { "root_type", "=", "Asset" }
+            }));
+            var fields = Uri.EscapeDataString("[\"name\",\"account_name\",\"parent_account\"]");
+            var response = await _httpClient.GetAsync($"api/resource/Account?filters={filters}&fields={fields}&limit_page_length=200", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return fallback;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
+            var rows = document!.RootElement.GetProperty("data").EnumerateArray()
+                .Select(e => (Name: e.GetProperty("name").GetString() ?? string.Empty,
+                              Account: e.TryGetProperty("account_name", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null,
+                              Parent: e.TryGetProperty("parent_account", out var pa) && pa.ValueKind == JsonValueKind.String ? pa.GetString() : null))
+                .Where(r => r.Name.Length > 0)
+                .ToList();
+
+            return rows.FirstOrDefault(r => string.Equals(r.Account, "Current Assets", StringComparison.OrdinalIgnoreCase)).Name
+                ?? rows.FirstOrDefault(r => string.Equals(r.Account, "Stock Assets", StringComparison.OrdinalIgnoreCase)).Name
+                ?? rows.FirstOrDefault(r => !string.IsNullOrEmpty(r.Parent)).Name
+                ?? rows.FirstOrDefault().Name
+                ?? fallback;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not list ERPNext asset groups; using the default parent account.");
+            return fallback;
+        }
+    }
+
+    /// <summary>What ERPNext still considers unpaid on a Sales/Purchase Invoice (null when it cannot be read).</summary>
+    private async Task<decimal?> GetOutstandingAsync(string doctype, string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"api/resource/{Uri.EscapeDataString(doctype)}/{Uri.EscapeDataString(name)}", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
+            var data = document!.RootElement.GetProperty("data");
+            return data.TryGetProperty("outstanding_amount", out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDecimal() : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public async Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default)
@@ -411,7 +491,7 @@ public sealed class ErpNextClient : IErpNextClient
         return Result<string>.Failure(new Error("ErpNext.CancelFailed", $"{response.StatusCode}: {Truncate(body)}"));
     }
 
-    private sealed record CompanyInfo(string Name, string Abbr, string? ReceivableAccount, string? PayableAccount, string? CashAccount, string? BankAccount, string? CogsAccount);
+    private sealed record CompanyInfo(string Name, string Abbr, string? ReceivableAccount, string? PayableAccount, string? CashAccount, string? BankAccount, string? CogsAccount, string? IncomeAccount = null);
 
     private CompanyInfo? _company;
 
@@ -423,7 +503,7 @@ public sealed class ErpNextClient : IErpNextClient
             return Result<CompanyInfo>.Success(_company);
         }
 
-        var fields = Uri.EscapeDataString("[\"name\",\"abbr\",\"default_receivable_account\",\"default_payable_account\",\"default_cash_account\",\"default_bank_account\",\"default_expense_account\"]");
+        var fields = Uri.EscapeDataString("[\"name\",\"abbr\",\"default_receivable_account\",\"default_payable_account\",\"default_cash_account\",\"default_bank_account\",\"default_expense_account\",\"default_income_account\"]");
         var response = await _httpClient.GetAsync($"api/resource/Company?fields={fields}&limit_page_length=1", cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -437,7 +517,7 @@ public sealed class ErpNextClient : IErpNextClient
             var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
             var first = document!.RootElement.GetProperty("data").EnumerateArray().First();
             string? Read(string key) => first.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-            _company = new CompanyInfo(Read("name")!, Read("abbr") ?? string.Empty, Read("default_receivable_account"), Read("default_payable_account"), Read("default_cash_account"), Read("default_bank_account"), Read("default_expense_account"));
+            _company = new CompanyInfo(Read("name")!, Read("abbr") ?? string.Empty, Read("default_receivable_account"), Read("default_payable_account"), Read("default_cash_account"), Read("default_bank_account"), Read("default_expense_account"), Read("default_income_account"));
             return Result<CompanyInfo>.Success(_company);
         }
         catch (Exception ex)

@@ -10,7 +10,7 @@
  * feat(frontend): React.lazy + ErrorBoundary on all routes (phase6)
  */
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuthStore } from './stores/authStore';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -69,8 +69,10 @@ function PrivateRoute({ children }: { children: JSX.Element }): JSX.Element {
 
 // ── Route wrapper: ErrorBoundary + Suspense ───────────────────────────────────
 function RouteWrapper({ children }: { children: JSX.Element }): JSX.Element {
+  // Keyed by the URL so a crash on one screen does not stick to the next one the user opens.
+  const { pathname } = useLocation();
   return (
-    <ErrorBoundary>
+    <ErrorBoundary key={pathname}>
       <Suspense fallback={<PageLoader />}>
         {children}
       </Suspense>

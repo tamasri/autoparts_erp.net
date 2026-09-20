@@ -7,11 +7,14 @@ type User = {
   id: string;
   userName?: string;
   username?: string;
-  fullName?: string;
-  roleCodes?: string[];
-  roles?: string[];
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  /** The API returns role objects ({ roleId, code, name }); older payloads used plain codes. */
+  roles?: Array<string | { roleId?: string; code?: string; name?: string }>;
   isActive?: boolean;
-  lastLoginAt?: string;
+  isLockedOut?: boolean;
+  lastLoginAtUtc?: string;
 };
 
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -73,7 +76,8 @@ export default function Users(): JSX.Element {
             <tbody>
               {rows.map((row) => {
                 const username = row.userName ?? row.username ?? '-';
-                const roles = row.roleCodes ?? row.roles ?? [];
+                const roles = (row.roles ?? []).map((r) => (typeof r === 'string' ? r : (r.code ?? r.name ?? ''))).filter(Boolean);
+                const fullName = [row.firstName, row.lastName].filter(Boolean).join(' ') || '-';
                 const isActive = row.isActive ?? true;
                 return (
                   <tr key={row.id}>
@@ -93,7 +97,7 @@ export default function Users(): JSX.Element {
                         </div>
                       </div>
                     </td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{row.fullName ?? '-'}</td>
+                    <td style={{ color: 'var(--txt-secondary)' }}>{fullName}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {roles.length > 0 ? roles.map((r) => {
@@ -112,7 +116,7 @@ export default function Users(): JSX.Element {
                       </span>
                     </td>
                     <td style={{ color: 'var(--txt-secondary)', fontSize: 12 }}>
-                      {row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString('ar') : '—'}
+                      {row.lastLoginAtUtc ? new Date(row.lastLoginAtUtc).toLocaleString('ar') : '—'}
                     </td>
                   </tr>
                 );

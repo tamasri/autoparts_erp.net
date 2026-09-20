@@ -27,7 +27,8 @@ public sealed record CustomerStatementTransactionDto(
     decimal CreditUsd,
     decimal BalanceSyp,
     decimal BalanceUsd,
-    string DueDateDisplay);
+    string DueDateDisplay,
+    string Reference = "");
 
 public sealed record CustomerAccountStatementDto(
     Guid CustomerId,

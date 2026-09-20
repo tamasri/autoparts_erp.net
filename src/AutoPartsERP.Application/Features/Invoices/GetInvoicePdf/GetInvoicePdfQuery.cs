@@ -1,3 +1,6 @@
+using System.Globalization;
+using AutoPartsERP.Application.Features.Invoices.GetInvoiceById;
+
 namespace AutoPartsERP.Application.Features.Invoices.GetInvoicePdf;
 
 public sealed record GetInvoicePdfQuery(Guid InvoiceId)
@@ -6,32 +9,55 @@ public sealed record GetInvoicePdfQuery(Guid InvoiceId)
     public string RequiredPermission => PermissionCodes.Invoices.Read;
 }
 
+/// <summary>Renders the invoice through the shared document engine (real PDF, embedded Arabic font, RTL).</summary>
 public sealed class GetInvoicePdfQueryHandler : IRequestHandler<GetInvoicePdfQuery, Result<byte[]>>
 {
-    private readonly IDbConnectionFactory _dbConnectionFactory;
+    private readonly ISender _sender;
+    private readonly IDocumentRenderer _renderer;
 
-    public GetInvoicePdfQueryHandler(IDbConnectionFactory dbConnectionFactory)
+    public GetInvoicePdfQueryHandler(ISender sender, IDocumentRenderer renderer)
     {
-        _dbConnectionFactory = dbConnectionFactory;
+        _sender = sender;
+        _renderer = renderer;
     }
 
     public async Task<Result<byte[]>> Handle(GetInvoicePdfQuery request, CancellationToken cancellationToken)
     {
-        await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
-        var invoice = await connection.QueryFirstOrDefaultAsync<(string InvoiceNumber, DateTime InvoiceDate, decimal TotalSyp)>(
-            """
-            SELECT invoice_number AS InvoiceNumber, invoice_date AS InvoiceDate, total_syp AS TotalSyp
-            FROM invoices
-            WHERE id = @Id
-            """,
-            new { Id = request.InvoiceId });
-
-        if (string.IsNullOrWhiteSpace(invoice.InvoiceNumber))
+        var loaded = await _sender.Send(new GetInvoiceByIdQuery(request.InvoiceId), cancellationToken);
+        if (loaded.IsFailure)
         {
-            return Result<byte[]>.Failure(new Error("Invoices.NotFound", "Invoice was not found."));
+            return Result<byte[]>.Failure(loaded.Error);
         }
 
-        var content = $"Invoice {invoice.InvoiceNumber}\nDate: {invoice.InvoiceDate:yyyy-MM-dd}\nTotal SYP: {invoice.TotalSyp:0.0000}";
-        return Result<byte[]>.Success(Encoding.UTF8.GetBytes(content));
+        var invoice = loaded.Value!;
+        string N(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+
+        var document = new ExportDocument(
+            $"فاتورة {invoice.InvoiceNumber}",
+            $"{invoice.TypeDisplay} · {invoice.StatusDisplay}",
+            [
+                new ExportField("العميل", $"{invoice.CustomerName} ({invoice.CustomerCode})"),
+                new ExportField("تاريخ الفاتورة", invoice.InvoiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                new ExportField("تاريخ الاستحقاق", invoice.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                new ExportField("الإجمالي (ل.س)", N(invoice.TotalSyp)),
+                new ExportField("الإجمالي ($)", N(invoice.TotalUsd)),
+                new ExportField("المتبقي ($)", N(invoice.BalanceUsd))
+            ],
+            [
+                new ExportTable(
+                    "بنود الفاتورة",
+                    ["#", "الرمز", "الصنف", "الكمية", "السعر (ل.س)", "السعر ($)", "الخصم %", "الإجمالي (ل.س)", "الإجمالي ($)"],
+                    invoice.Lines.Select(l => (IReadOnlyList<string?>)new List<string?>
+                    {
+                        l.LineNumber.ToString(CultureInfo.InvariantCulture), l.SkuCode, l.SkuName, N(l.Quantity), N(l.UnitPriceSyp), N(l.UnitPriceUsd),
+                        N(l.DiscountPct), N(l.LineTotalSyp), N(l.LineTotalUsd)
+                    }).ToList(),
+                    ["", "", "الإجمالي", "", "", "", "", N(invoice.TotalSyp), N(invoice.TotalUsd)],
+                    [3, 4, 5, 6, 7, 8])
+            ],
+            string.IsNullOrWhiteSpace(invoice.TotalUsdInWords) ? null : $"المبلغ كتابةً: {invoice.TotalUsdInWords}",
+            $"invoice-{invoice.InvoiceNumber}");
+
+        return Result<byte[]>.Success(_renderer.ToPdf(document));
     }
 }

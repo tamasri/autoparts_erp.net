@@ -43,6 +43,15 @@ public sealed class NullErpNextClient : IErpNextClient
     public Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default) =>
         Skip(nameof(CancelDocumentAsync), Guid.Empty);
 
+    public Task<Result<IReadOnlyList<ErpNextAccount>>> GetChartOfAccountsAsync(bool includeBalances, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Result<IReadOnlyList<ErpNextAccount>>.Failure(new Error("ErpNext.Disabled", "ERPNext integration is disabled.")));
+
+    public Task<Result<IReadOnlyList<ErpNextAccountMapping>>> GetAccountMappingAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(Result<IReadOnlyList<ErpNextAccountMapping>>.Failure(new Error("ErpNext.Disabled", "ERPNext integration is disabled.")));
+
+    public Task<Result<ErpNextDocumentPage>> ListDocumentsAsync(string doctype, int page, int pageSize, string? search, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Result<ErpNextDocumentPage>.Failure(new Error("ErpNext.Disabled", "ERPNext integration is disabled.")));
+
     private Task<Result<string>> Skip(string operation, Guid localId)
     {
         _logger.LogDebug("ERPNext sync skipped (not configured): {Operation} for {LocalId}", operation, localId);

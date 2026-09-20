@@ -109,6 +109,7 @@ global using AutoPartsERP.Contracts.Barcodes;
 global using AutoPartsERP.Contracts.Catalog;
 global using AutoPartsERP.Contracts.CycleCounts;
 global using AutoPartsERP.Contracts.Customers;
+global using AutoPartsERP.Contracts.Exports;
 global using AutoPartsERP.Contracts.FxRates;
 global using AutoPartsERP.Contracts.Inventory;
 global using AutoPartsERP.Contracts.InventoryAlerts;

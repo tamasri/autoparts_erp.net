@@ -17,6 +17,7 @@
     "@microsoft/signalr": "^9.0.0",
     "@mui/material": "^6.0.0",
     "@mui/x-data-grid": "^7.0.0",
+    "@mui/x-tree-view": "^7.29.10",
     "@tanstack/react-query": "^5.0.0",
     "@tanstack/react-table": "^8.0.0",
     "@zxing/browser": "^0.1.5",

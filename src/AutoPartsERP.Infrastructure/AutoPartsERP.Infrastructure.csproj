@@ -60,6 +60,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Exports/Fonts/*.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AutoPartsERP.Domain\AutoPartsERP.Domain.csproj" />
     <ProjectReference Include="..\AutoPartsERP.Application\AutoPartsERP.Application.csproj" />
   </ItemGroup>

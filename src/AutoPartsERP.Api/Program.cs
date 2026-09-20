@@ -189,6 +189,7 @@ builder.Services.AddScoped<IGovernanceService, GovernanceService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.AddSingleton<IHumanizerService, HumanizerService>();
+builder.Services.AddSingleton<IDocumentRenderer, AutoPartsERP.Infrastructure.Exports.DocumentRenderer>();
 builder.Services.AddSingleton<IPartNumberService, PartNumberService>();
 builder.Services.AddScoped<IItemSearchService, ItemSearchService>();
 builder.Services.AddScoped<IAiService, AiService>();
