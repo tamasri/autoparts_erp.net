@@ -1,150 +1,118 @@
+/**
+ * Account statement for an account (party). Only an account that is BOTH a customer and a vendor gets the combined statement
+ * (receivable side, payable side, net position); a customer-only account gets its customer statement, a vendor-only account its
+ * vendor statement.
+ */
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
 import { partiesApi } from '../../api/endpoints/parties';
-import { unwrapList, unwrapNode } from '../../api/apiData';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { unwrapNode } from '../../api/apiData';
+import { extractApiError } from '../../lib/toast';
+import PageHeader from '../../components/ui/PageHeader';
+import ExportMenu from '../../components/ui/ExportMenu';
+import DocumentDialog from '../../components/ui/DocumentDialog';
+import StatementTable, { statementDocument, withRunning, type StatementLine } from '../../components/accounts/StatementTable';
 
-type PartyNode = { id: string; code?: string; displayName?: string; city?: string };
-type StatementRow = { date?: string; entryDate?: string; type?: string; reference?: string; side?: string; debitSyp?: number; creditSyp?: number; balanceSyp?: number };
+type Party = { id: string; code?: string; displayName?: string; displayNameAr?: string; hasCombinedStatement: boolean; showArTab: boolean; showApTab: boolean };
+type Line = { date: string; entryType: string; referenceNumber: string; description: string; debitSyp: number; creditSyp: number; debitUsd: number; creditUsd: number };
+type Balance = { outstandingSyp: number; outstandingUsd: number };
+type Combined = { arLines: Line[]; apLines: Line[]; arBalance: Balance; apBalance: Balance; netPosition: Balance };
+type ArStatement = { transactions: Array<{ id: string; type: string; date: string; reference?: string; debitSyp: number; creditSyp: number; debitUsd: number; creditUsd: number; balanceSyp: number; balanceUsd: number }> };
 
-function extractError(e: unknown, fallback: string): string {
-  const r = e as { response?: { data?: { detail?: string; message?: string } } };
-  return r.response?.data?.detail ?? r.response?.data?.message ?? fallback;
+const money = (v?: number): string => Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const toLines = (rows: Line[]): StatementLine[] => withRunning(rows.map((r) => ({ date: r.date, type: r.entryType, reference: r.referenceNumber, description: r.description, debitSyp: r.debitSyp, creditSyp: r.creditSyp, debitUsd: r.debitUsd, creditUsd: r.creditUsd })));
+
+function Stat({ label, syp, usd }: { label: string; syp: number; usd: number }): JSX.Element {
+  return (
+    <Card variant="outlined" sx={{ borderRadius: 3, flex: 1, minWidth: 220 }}>
+      <CardContent>
+        <Typography variant="caption" color="text.secondary">{label}</Typography>
+        <Typography variant="h6" fontWeight={800}>{money(syp)} ل.س</Typography>
+        <Typography variant="body2" color="text.secondary">{money(usd)} $</Typography>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function CombinedStatement(): JSX.Element {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const [party, setParty] = useState<Party | null>(null);
+  const [combined, setCombined] = useState<Combined | null>(null);
+  const [ar, setAr] = useState<StatementLine[]>([]);
   const [error, setError] = useState('');
-  const [party, setParty] = useState<PartyNode | null>(null);
-  const [rows, setRows] = useState<StatementRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewOpen, setViewOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    let mounted = true;
-    async function load(): Promise<void> {
-      if (!id) return;
+    let live = true;
+    (async () => {
       setLoading(true); setError('');
       try {
-        const [partyRes, stRes] = await Promise.all([partiesApi.getPartyById(id), partiesApi.getCombinedStatement(id)]);
-        if (!mounted) return;
-        setParty(unwrapNode<PartyNode>(partyRes.data));
-        setRows(unwrapList<StatementRow>(stRes.data));
-      } catch (e: unknown) { if (mounted) setError(extractError(e, 'تعذر تحميل كشف الحساب المدمج')); }
-      finally { if (mounted) setLoading(false); }
-    }
-    void load();
-    return () => { mounted = false; };
+        const p = unwrapNode<Party>((await partiesApi.getPartyById(id)).data);
+        if (!live || !p) return;
+        setParty(p);
+        if (p.hasCombinedStatement) {
+          setCombined(unwrapNode<Combined>((await partiesApi.getCombinedStatement(id)).data));
+        } else if (p.showArTab) {
+          const s = unwrapNode<ArStatement>((await partiesApi.getArStatement(id)).data);
+          setAr(withRunning((s?.transactions ?? []).map((t) => ({ ...t }))));
+        }
+      } catch (e: unknown) {
+        if (live) setError(extractApiError(e, 'تعذر تحميل كشف الحساب'));
+      } finally {
+        if (live) setLoading(false);
+      }
+    })();
+    return () => { live = false; };
   }, [id]);
 
-  const balance = useMemo(() => (rows.length > 0 ? Number(rows[rows.length - 1].balanceSyp ?? 0) : 0), [rows]);
+  const arLines = useMemo(() => (combined ? toLines(combined.arLines) : ar), [combined, ar]);
+  const apLines = useMemo(() => (combined ? toLines(combined.apLines) : []), [combined]);
+  const name = party?.displayNameAr || party?.displayName || '';
+  const doc = useMemo(() => {
+    const d = statementDocument(`كشف حساب ${name}`, party?.hasCombinedStatement ? 'كشف مدمج (عميل + مورد)' : 'كشف حساب العميل', [{ label: 'الحساب', value: name }, { label: 'الكود', value: party?.code ?? '' }], arLines, party?.hasCombinedStatement ? 'جانب العميل (مدين علينا)' : 'كشف الحساب');
+    if (combined) d.tables.push(...statementDocument('', '', [], apLines, 'جانب المورد (دائن لنا)').tables);
+    return d;
+  }, [name, party, combined, arLines, apLines]);
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '50vh' }}><CircularProgress /></Box>;
+
+  const vendorOnly = party && !party.showArTab && !party.hasCombinedStatement;
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">{party?.displayName ?? 'كشف الحساب المدمج'}</h1>
-          <div className="vex-page-header__breadcrumb">
-            <span
-              onClick={() => navigate('/parties')}
-              style={{ color: 'var(--clr-primary)', cursor: 'pointer', textDecoration: 'none' }}
-            >الأطراف</span>
-            {' / '} كشف الحساب المدمج (عميل + مورد)
-          </div>
-        </div>
-        <button type="button" onClick={() => navigate('/parties')} className="btn-ghost">
-          ← رجوع
-        </button>
-      </div>
+    <Box>
+      <PageHeader
+        title={name || 'كشف الحساب'}
+        subtitle={party?.hasCombinedStatement ? 'كشف مدمج: الحساب عميل ومورد في آن واحد' : party?.code}
+        crumbs={[{ label: 'Accounts', to: '/parties' }, { label: 'كشف الحساب' }]}
+        actions={<><Button variant="outlined" size="small" onClick={() => setViewOpen(true)} disabled={vendorOnly === true}>👁 عرض وطباعة</Button><ExportMenu build={async () => doc} disabled={vendorOnly === true} /></>}
+      />
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {vendorOnly ? <Alert severity="info">هذا حساب مورد فقط، ولا توجد فواتير شراء مسجّلة له بعد. سيظهر كشف المورد هنا بعد إضافة فواتير الشراء.</Alert> : null}
 
-      {error ? <ErrorBanner message={error} /> : null}
+      {combined ? (
+        <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mb: 3 }}>
+          <Stat label="مستحق علينا من الحساب (عميل)" syp={combined.arBalance.outstandingSyp} usd={combined.arBalance.outstandingUsd} />
+          <Stat label="مستحق للحساب علينا (مورد)" syp={combined.apBalance.outstandingSyp} usd={combined.apBalance.outstandingUsd} />
+          <Stat label="صافي المركز" syp={combined.netPosition.outstandingSyp} usd={combined.netPosition.outstandingUsd} />
+        </Stack>
+      ) : null}
 
-      {/* Summary Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <div className="vex-card" style={{ gridColumn: 'span 2' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
-            {[
-              { label: 'الكود', value: party?.code ?? '-' },
-              { label: 'الاسم', value: party?.displayName ?? '-' },
-              { label: 'المدينة', value: party?.city ?? '-' },
-              { label: 'عدد الحركات', value: rows.length.toString() },
-            ].map((item) => (
-              <div key={item.label}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-muted)', textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt-primary)' }}>{item.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="vex-card" style={{
-          background: balance >= 0 ? 'linear-gradient(135deg,#f0fdf4,#fff)' : 'linear-gradient(135deg,#fef2f2,#fff)',
-          borderRight: `4px solid ${balance >= 0 ? '#22c55e' : 'var(--clr-danger)'}`,
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-muted)', textTransform: 'uppercase', marginBottom: 8 }}>الرصيد الصافي</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: balance >= 0 ? '#22c55e' : 'var(--clr-danger)' }}>
-            {balance.toLocaleString('en-US')}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--txt-muted)', marginTop: 4 }}>ليرة سورية</div>
-        </div>
-      </div>
-
-      {/* Statement Table */}
-      <div className="vex-card vex-card--no-pad">
-        <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--clr-border)' }}>
-          <h2 className="vex-section-title" style={{ margin: 0 }}>سجل الحركات</h2>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>الجهة</th>
-                <th>النوع</th>
-                <th>المرجع</th>
-                <th>مدين</th>
-                <th>دائن</th>
-                <th>الرصيد</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد حركات</td></tr>
-              ) : rows.map((row, idx) => {
-                const debit = Number(row.debitSyp ?? 0);
-                const credit = Number(row.creditSyp ?? 0);
-                return (
-                  <tr key={`${row.reference ?? 'row'}-${idx}`}>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{row.date ?? row.entryDate ?? '-'}</td>
-                    <td>
-                      {row.side ? <span className="badge badge--draft" style={{ fontSize: 11 }}>{row.side}</span> : '-'}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, color: 'var(--txt-muted)', background: 'var(--clr-surface-2)', padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>
-                        {row.type ?? '-'}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{row.reference ?? '-'}</td>
-                    <td style={{ fontWeight: 600, color: debit > 0 ? 'var(--clr-danger)' : 'var(--txt-muted)' }}>
-                      {debit > 0 ? debit.toLocaleString('en-US') : '—'}
-                    </td>
-                    <td style={{ fontWeight: 600, color: credit > 0 ? '#22c55e' : 'var(--txt-muted)' }}>
-                      {credit > 0 ? credit.toLocaleString('en-US') : '—'}
-                    </td>
-                    <td style={{ fontWeight: 700, color: Number(row.balanceSyp ?? 0) >= 0 ? 'var(--txt-primary)' : 'var(--clr-danger)' }}>
-                      {Number(row.balanceSyp ?? 0).toLocaleString('en-US')}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+      {!vendorOnly ? (
+        <>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>{combined ? 'جانب العميل' : 'كشف الحساب'}</Typography>
+          <StatementTable lines={arLines} />
+        </>
+      ) : null}
+      {combined ? (
+        <>
+          <Typography variant="h6" fontWeight={700} sx={{ mt: 3, mb: 1 }}>جانب المورد</Typography>
+          <StatementTable lines={apLines} />
+        </>
+      ) : null}
+      <DocumentDialog open={viewOpen} onClose={() => setViewOpen(false)} document={doc} />
+    </Box>
   );
 }

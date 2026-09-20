@@ -22,7 +22,9 @@ const navGroups: NavGroup[] = [
       { to: '/invoices', label: 'الفواتير', icon: '☰' },
       { to: '/payments', label: 'الدفعات والقبض', icon: '＄' },
       { to: '/fx-rates', label: 'أسعار الصرف', icon: '⇄' },
-      { to: '/parties', label: 'الأطراف', icon: '⊂' },
+      { to: '/accounting/chart', label: 'شجرة الحسابات', icon: '⌥' },
+      { to: '/accounting/erp-documents', label: 'مستندات ERPNext', icon: '▤' },
+      { to: '/parties', label: 'Accounts', icon: '⊂' },
     ],
   },
   {
@@ -82,7 +84,7 @@ const megaMenuSections = [
       { label: 'الأدوار', to: '/roles' },
       { label: 'إقفال الفترات', to: '/periods' },
       { label: 'أسعار الصرف', to: '/fx-rates' },
-      { label: 'الأطراف', to: '/parties' },
+      { label: 'Accounts', to: '/parties' },
     ],
   },
 ];

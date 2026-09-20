@@ -81,8 +81,8 @@ public sealed class GetCustomerAccountStatementQueryHandler : IRequestHandler<Ge
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT
-                COALESCE((SELECT SUM(total_syp) FROM invoices WHERE customer_id = @Id AND status = 'POSTED'), 0) AS total_invoiced_syp,
-                COALESCE((SELECT SUM(total_usd) FROM invoices WHERE customer_id = @Id AND status = 'POSTED'), 0) AS total_invoiced_usd,
+                COALESCE((SELECT SUM(total_syp) FROM invoices WHERE customer_id = @Id AND status IN ('POSTED', 'VOID')), 0) AS total_invoiced_syp,
+                COALESCE((SELECT SUM(total_usd) FROM invoices WHERE customer_id = @Id AND status IN ('POSTED', 'VOID')), 0) AS total_invoiced_usd,
                 COALESCE((SELECT SUM(CASE WHEN payment_type = 'REFUND' THEN -amount_syp ELSE amount_syp END) FROM payments WHERE customer_id = @Id AND is_reversed = FALSE), 0) AS total_paid_syp,
                 COALESCE((SELECT SUM(CASE WHEN payment_type = 'REFUND' THEN -amount_usd ELSE amount_usd END) FROM payments WHERE customer_id = @Id AND is_reversed = FALSE), 0) AS total_paid_usd
             ;
@@ -111,7 +111,10 @@ public sealed class GetCustomerAccountStatementQueryHandler : IRequestHandler<Ge
                    reference
             FROM (
                 SELECT i.id,
-                       CASE WHEN i.invoice_type = 'RETURN' THEN 'RETURN' ELSE 'INVOICE' END AS transaction_type,
+                       CASE WHEN i.invoice_type = 'RETURN' THEN 'RETURN'
+                            WHEN i.invoice_type = 'CREDIT_NOTE' THEN 'CREDIT_NOTE'
+                            WHEN i.status = 'VOID' THEN 'VOIDED'
+                            ELSE 'INVOICE' END AS transaction_type,
                        i.invoice_date::timestamp without time zone AS occurred_at,
                        i.created_at AS created_at,
                        i.due_date::timestamp without time zone AS due_date,
@@ -121,7 +124,8 @@ public sealed class GetCustomerAccountStatementQueryHandler : IRequestHandler<Ge
                        GREATEST(-i.total_usd, 0)::numeric(18,4) AS credit_usd,
                        COALESCE(i.invoice_number, '') AS reference
                 FROM invoices i
-                WHERE i.customer_id = @Id AND i.status = 'POSTED'
+                -- A voided invoice stays as a debit and its credit note as the offsetting credit, so the pair nets to zero.
+                WHERE i.customer_id = @Id AND i.status IN ('POSTED', 'VOID')
 
                 UNION ALL
 

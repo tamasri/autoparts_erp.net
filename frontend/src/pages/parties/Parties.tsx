@@ -7,7 +7,7 @@ import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
 
 type PartyType = { typeCode?: string; code?: string; isActive?: boolean };
-type Party = { id: string; code?: string; displayName?: string; city?: string; isActive?: boolean; typeAssignments?: PartyType[]; types?: PartyType[] };
+type Party = { id: string; code?: string; displayName?: string; displayNameAr?: string; city?: string; isActive?: boolean; hasCombinedStatement?: boolean; activeTypeCodes?: string[]; typeAssignments?: PartyType[]; types?: PartyType[] };
 
 const TYPE_OPTIONS = ['CUSTOMER', 'VENDOR', 'SALES_REP', 'CARRIER'];
 
@@ -21,7 +21,7 @@ const TYPE_BADGE: Record<string, { bg: string; color: string }> = {
 export default function Parties(): JSX.Element {
   const navigate = useNavigate();
   const list = usePagedList<Party>({
-    errorMessage: 'تعذر تحميل الأطراف',
+    errorMessage: 'تعذر تحميل Accounts',
     fetcher: ({ page, pageSize, search }) => partiesApi.getParties({ page, pageSize, searchTerm: search || undefined }),
   });
   const { items: rows, error: listError, loading } = list;
@@ -47,8 +47,8 @@ export default function Parties(): JSX.Element {
     try {
       await partiesApi.createParty({ displayName: displayName.trim(), displayNameAr: displayNameAr.trim(), taxNumber: taxNumber.trim() || undefined, notes: notes.trim() || undefined, initialTypeCodes: selectedTypes.length > 0 ? selectedTypes : undefined });
       setDisplayName(''); setDisplayNameAr(''); setTaxNumber(''); setNotes(''); setSelectedTypes(['CUSTOMER']); setShowForm(false);
-      toast.success('تم إنشاء الطرف بنجاح'); await load();
-    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر إنشاء الطرف')); setError(extractApiError(e, 'تعذر إنشاء الطرف')); }
+      toast.success('تم إنشاء الـ Account بنجاح'); await load();
+    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر إنشاء الـ Account')); setError(extractApiError(e, 'تعذر إنشاء الـ Account')); }
     finally { setBusy(false); }
   }
 
@@ -56,11 +56,11 @@ export default function Parties(): JSX.Element {
     <div style={{ direction: 'rtl' }}>
       <div className="vex-page-header">
         <div>
-          <h1 className="vex-page-header__title">الأطراف</h1>
+          <h1 className="vex-page-header__title">Accounts</h1>
           <div className="vex-page-header__breadcrumb">إدارة العملاء والموردين ومندوبي المبيعات والناقلين</div>
         </div>
         <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ طرف جديد'}
+          {showForm ? '✕ إلغاء' : '＋ New Account'}
         </button>
       </div>
 
@@ -76,7 +76,7 @@ export default function Parties(): JSX.Element {
 
       {showForm ? (
         <div className="vex-card" style={{ marginBottom: 20 }}>
-          <h2 className="vex-section-title">إضافة طرف جديد</h2>
+          <h2 className="vex-section-title">Add new Account</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
             <label className="vex-label">
               الاسم (EN) *
@@ -128,7 +128,7 @@ export default function Parties(): JSX.Element {
           </div>
 
           <button type="button" disabled={busy} onClick={() => void create()} className="btn-primary">
-            💾 حفظ الطرف
+            💾 Save Account
           </button>
         </div>
       ) : null}
@@ -148,8 +148,9 @@ export default function Parties(): JSX.Element {
             </thead>
             <tbody>
               {rows.map((row) => {
-                const typeList = (row.typeAssignments ?? row.types ?? []).map((t) => (t.typeCode ?? t.code ?? '').toUpperCase()).filter(Boolean);
-                const dual = typeList.includes('CUSTOMER') && typeList.includes('VENDOR');
+                const typeList = (row.activeTypeCodes ?? (row.typeAssignments ?? row.types ?? []).map((t) => t.typeCode ?? t.code ?? '')).map((t) => t.toUpperCase()).filter(Boolean);
+                // The combined statement exists only for an account that is both a customer and a vendor.
+                const dual = row.hasCombinedStatement === true || (typeList.includes('CUSTOMER') && typeList.includes('VENDOR'));
                 return (
                   <tr key={row.id}>
                     <td>
@@ -157,7 +158,7 @@ export default function Parties(): JSX.Element {
                         {row.code ?? '-'}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>{row.displayName ?? '-'}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>{row.displayNameAr || row.displayName || '-'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {typeList.map((type) => {
@@ -179,7 +180,7 @@ export default function Parties(): JSX.Element {
                     </td>
                     <td>
                       <button type="button" onClick={() => navigate(`/parties/${row.id}/statement`)} className="btn-secondary" style={{ padding: '5px 14px', fontSize: 12 }}>
-                        📄 كشف مدمج
+                        📄 {dual ? 'كشف مدمج' : 'كشف الحساب'}
                       </button>
                     </td>
                   </tr>

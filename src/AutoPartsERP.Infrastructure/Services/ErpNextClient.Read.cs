@@ -128,13 +128,13 @@ public sealed partial class ErpNextClient
 
         IReadOnlyList<ErpNextAccountMapping> map =
         [
-            new("RECEIVABLE", "Customer invoices and receipts (Sales Invoice debit, Payment Entry credit)", c.ReceivableAccount),
-            new("PAYABLE", "Supplier bills and payments (Purchase Invoice credit, Payment Entry debit)", c.PayableAccount),
-            new("CASH", "Cash and USD-cash receipts / payments", c.CashAccount),
-            new("BANK", "Bank transfer and cheque receipts / payments", c.BankAccount),
-            new("INCOME", "Revenue posted by Sales Invoices", c.IncomeAccount),
-            new("COGS", "Cost of goods sold, debited when an invoice is posted", c.CogsAccount),
-            new("INVENTORY", "Inventory value (this application owns stock; ERPNext items are non-stock)", inventoryExists ? inventory : null)
+            new("RECEIVABLE", "فواتير العملاء وسندات القبض (فاتورة المبيعات مدين، سند القبض دائن)", c.ReceivableAccount),
+            new("PAYABLE", "فواتير الموردين والدفعات لهم (فاتورة الشراء دائن، سند الدفع مدين)", c.PayableAccount),
+            new("CASH", "القبض والدفع النقدي بالليرة وبالدولار", c.CashAccount),
+            new("BANK", "القبض والدفع بالحوالة المصرفية والشيك", c.BankAccount),
+            new("INCOME", "الإيراد الذي تُرحّله فواتير المبيعات", c.IncomeAccount),
+            new("COGS", "تكلفة البضاعة المباعة، تُقيَّد مدينة عند ترحيل الفاتورة", c.CogsAccount),
+            new("INVENTORY", "قيمة المخزون (المخزون يُدار في هذا النظام وأصناف ERPNext غير مخزنية)", inventoryExists ? inventory : null)
         ];
         return Result<IReadOnlyList<ErpNextAccountMapping>>.Success(map);
     }
