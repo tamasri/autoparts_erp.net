@@ -141,7 +141,6 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 | A write returns 500 but the row was created | the idempotency layer failed after commit (`response_code` was `varchar(100)`) | fixed by migration 11; keep response columns `text` |
 | Approvals list empty / posting an invoice or stop-ship never completes | maker-checker: requester cannot review own request | log in as a second approver, or set `GOVERNANCE_ALLOW_SELF_APPROVAL=true` temporarily |
 | `/auth/me` says user not found; audit rows show an all-zero user id | JWT `sub` remapped, `UserId` = `Guid.Empty` | `MapInboundClaims = false` (fixed) |
-
 | PDF shows boxes or is missing Arabic | fonts not embedded | fonts are embedded resources under `Infrastructure/Exports/Fonts`; rebuild the image, never rely on OS fonts |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
