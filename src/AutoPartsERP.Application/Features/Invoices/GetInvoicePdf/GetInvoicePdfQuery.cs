@@ -36,7 +36,7 @@ public sealed class GetInvoicePdfQueryHandler : IRequestHandler<GetInvoicePdfQue
             $"فاتورة {invoice.InvoiceNumber}",
             $"{invoice.TypeDisplay} · {invoice.StatusDisplay}",
             [
-                new ExportField("العميل", $"{invoice.CustomerName} ({invoice.CustomerCode})"),
+                new ExportField("الزبون", $"{invoice.CustomerName} ({invoice.CustomerCode})"),
                 new ExportField("تاريخ الفاتورة", invoice.InvoiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
                 new ExportField("تاريخ الاستحقاق", invoice.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
                 new ExportField("الإجمالي (ل.س)", N(invoice.TotalSyp)),

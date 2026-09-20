@@ -78,7 +78,7 @@ export default function Payments(): JSX.Element {
     return {
       title: 'الدفعات والقبض', subtitle: `${data.totalCount} سند${data.totalCount > 200 ? ' (أول 200)' : ''}`, fileName: 'payments', fields: [],
       tables: [{
-        columns: ['رقم السند', 'العميل', 'التاريخ', 'الطريقة', 'المبلغ (ل.س)', 'المبلغ ($)', 'غير الموزّع (ل.س)', 'غير الموزّع ($)', 'الحالة'],
+        columns: ['رقم السند', 'الزبون', 'التاريخ', 'الطريقة', 'المبلغ (ل.س)', 'المبلغ ($)', 'غير الموزّع (ل.س)', 'غير الموزّع ($)', 'الحالة'],
         rows: data.items.map((p) => [p.paymentNumber, p.customerName, ymd(p.paymentDate), methodLabel(p.paymentMethod), num(p.amountSyp), num(p.amountUsd), num(p.unallocatedSyp), num(p.unallocatedUsd), p.isReversed ? 'معكوسة' : 'فعّالة']),
         numericColumns: [4, 5, 6, 7],
       }],
@@ -107,7 +107,7 @@ export default function Payments(): JSX.Element {
   const invName = (id: string): string => openInvoices.find((i) => i.id === id)?.invoiceNumber ?? id.slice(0, 8);
 
   async function create(): Promise<void> {
-    if (!customer) { setFormError('اختر العميل'); return; }
+    if (!customer) { setFormError('اختر الزبون'); return; }
     if (!(amount > 0)) { setFormError('أدخل مبلغاً أكبر من صفر'); return; }
     if (!fxRateId) { setFormError('لا يوجد سعر صرف — أضفه من شاشة أسعار الصرف'); return; }
     if (method === 'CHEQUE' && !chequeNumber.trim()) { setFormError('رقم الشيك مطلوب'); return; }
@@ -147,7 +147,7 @@ export default function Payments(): JSX.Element {
       <div className="vex-page-header">
         <div>
           <h1 className="vex-page-header__title">الدفعات والقبض</h1>
-          <div className="vex-page-header__breadcrumb">سندات قبض العملاء وتوزيعها على الفواتير المفتوحة</div>
+          <div className="vex-page-header__breadcrumb">سندات قبض الزبائن وتوزيعها على الفواتير المفتوحة</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <ExportMenu build={buildExport} />
@@ -164,7 +164,7 @@ export default function Payments(): JSX.Element {
           <h2 className="vex-section-title">سند قبض جديد</h2>
           {formError ? <ErrorBanner message={formError} /> : null}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, marginBottom: 16 }}>
-            <label className="vex-label">العميل *<EntityPicker value={customer} onChange={(c) => void pickCustomer(c)} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." /></label>
+            <label className="vex-label">الزبون *<EntityPicker value={customer} onChange={(c) => void pickCustomer(c)} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." /></label>
             <label className="vex-label">طريقة الدفع
               <select value={method} onChange={(e) => setMethod(e.target.value)} className="vex-select">{METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</select>
             </label>
@@ -202,7 +202,7 @@ export default function Payments(): JSX.Element {
                 توزيع تلقائي على الفواتير المفتوحة (الأقدم استحقاقاً أولاً)
               </label>
               {openInvoices.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--txt-muted)' }}>لا توجد فواتير مرحّلة بأرصدة مفتوحة لهذا العميل — ستُسجَّل الدفعة كرصيد دائن غير موزّع.</div>
+                <div style={{ fontSize: 13, color: 'var(--txt-muted)' }}>لا توجد فواتير مرحّلة بأرصدة مفتوحة لهذا الزبون — ستُسجَّل الدفعة كرصيد دائن غير موزّع.</div>
               ) : (
                 <table className="vex-table">
                   <thead><tr><th>الفاتورة</th><th>الاستحقاق</th><th>الرصيد (ل.س)</th><th>الرصيد ($)</th><th>سيُسدَّد</th></tr></thead>
@@ -228,7 +228,7 @@ export default function Payments(): JSX.Element {
       ) : null}
 
       <div className="vex-card" style={{ marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <label className="vex-label" style={{ minWidth: 260 }}>العميل<EntityPicker value={filterCustomer} onChange={setFilterCustomer} search={searchCustomers} placeholder="كل العملاء" /></label>
+        <label className="vex-label" style={{ minWidth: 260 }}>الزبون<EntityPicker value={filterCustomer} onChange={setFilterCustomer} search={searchCustomers} placeholder="كل الزبائن" /></label>
         <label className="vex-label">الطريقة
           <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} className="vex-select"><option value="">الكل</option>{METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</select>
         </label>
@@ -237,7 +237,7 @@ export default function Payments(): JSX.Element {
       <div className="vex-card vex-card--no-pad" style={{ opacity: list.loading ? 0.6 : 1 }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="vex-table">
-            <thead><tr><th>رقم السند</th><th>العميل</th><th>التاريخ</th><th>الطريقة</th><th>المبلغ</th><th>غير الموزّع</th><th>الحالة</th><th /></tr></thead>
+            <thead><tr><th>رقم السند</th><th>الزبون</th><th>التاريخ</th><th>الطريقة</th><th>المبلغ</th><th>غير الموزّع</th><th>الحالة</th><th /></tr></thead>
             <tbody>
               {list.items.length === 0 ? (
                 <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد دفعات</td></tr>

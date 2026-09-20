@@ -11,7 +11,7 @@ const fmt = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
 const QUICK_ACTIONS = [
   { to: '/invoices/new', label: 'فاتورة جديدة', icon: '🧾', gradient: 'linear-gradient(135deg, var(--clr-primary), var(--clr-primary-mid))' },
   { to: '/invoices', label: 'الفواتير والمستحقات', icon: '💳', gradient: 'linear-gradient(135deg, #22c55e, #4ade80)' },
-  { to: '/accounts', label: 'العملاء', icon: '👤', gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)' },
+  { to: '/accounts', label: 'الزبائن', icon: '👤', gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)' },
   { to: '/inventory/receiving', label: 'استلام بضاعة', icon: '📦', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
 ];
 
@@ -45,7 +45,7 @@ export default function Dashboard(): JSX.Element {
             <KpiCard title="الذمم المدينة" value={`$${fmt(data.receivablesUsd)}`} icon="💰" colorVariant="warning" trend={`${fmt(data.receivablesSyp)} ل.س`} />
             <KpiCard title="فواتير متأخرة" value={data.overdueInvoices} icon="⏰" colorVariant={data.overdueInvoices > 0 ? 'danger' : 'success'} trend={`${fmt(data.overdueSyp)} ل.س متأخرة`} />
             <KpiCard title="فواتير مرحّلة" value={data.postedInvoices} icon="🧾" colorVariant="primary" />
-            <KpiCard title="العملاء النشطون" value={data.activeCustomers} icon="👥" colorVariant="success" />
+            <KpiCard title="الزبائن النشطون" value={data.activeCustomers} icon="👥" colorVariant="success" />
             <KpiCard title="أصناف نافدة" value={data.skusOutOfStock} icon="📦" colorVariant={data.skusOutOfStock > 0 ? 'danger' : 'success'} trend={`${data.skusLowStock} تحت حد الطلب · ${data.skusInStock} متوفرة`} />
             <KpiCard title="تنبيهات المخزون" value={data.openAlerts} icon="🚨" colorVariant={data.openAlerts > 0 ? 'danger' : 'success'} trend="تنبيهات غير مغلقة" />
           </div>
@@ -63,7 +63,7 @@ export default function Dashboard(): JSX.Element {
             <div style={{ overflowX: 'auto' }}>
               <table className="vex-table">
                 <thead>
-                  <tr><th>رقم الفاتورة</th><th>العميل</th><th>التاريخ</th><th>الإجمالي (ل.س)</th><th>الإجمالي ($)</th><th>الحالة</th></tr>
+                  <tr><th>رقم الفاتورة</th><th>الزبون</th><th>التاريخ</th><th>الإجمالي (ل.س)</th><th>الإجمالي ($)</th><th>الحالة</th></tr>
                 </thead>
                 <tbody>
                   {data.recentInvoices.length === 0 ? (
@@ -85,7 +85,7 @@ export default function Dashboard(): JSX.Element {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 20 }}>
             <div className="vex-card">
-              <h2 className="vex-section-title">أفضل العملاء هذا الشهر</h2>
+              <h2 className="vex-section-title">أفضل الزبائن هذا الشهر</h2>
               {data.topCustomers.length === 0 ? (
                 <p style={{ color: 'var(--txt-muted)', fontSize: 13 }}>لا توجد مبيعات هذا الشهر</p>
               ) : (

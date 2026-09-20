@@ -25,7 +25,7 @@ export const customerSchema = z.object({
     .max(200, 'الاسم طويل جداً'),
 
   type: z.enum(['RETAIL', 'WORKSHOP', 'WHOLESALE'], {
-    errorMap: () => ({ message: 'يرجى اختيار نوع العميل' }),
+    errorMap: () => ({ message: 'يرجى اختيار نوع الزبون' }),
   }),
 
   phone: z
@@ -43,10 +43,8 @@ export const customerSchema = z.object({
   address: z.string().max(500).optional().or(z.literal('')),
   city:    z.string().max(100).optional().or(z.literal('')),
 
-  creditLimitSyp: z.coerce
-    .number({ invalid_type_error: 'يجب أن يكون رقماً' })
-    .min(0, 'لا يمكن أن يكون سالباً')
-    .default(0),
+  /** Not entered any more (the limit is in dollars); kept at 0 so the API contract is unchanged. */
+  creditLimitSyp: z.coerce.number().default(0),
 
   creditLimitUsd: z.coerce
     .number({ invalid_type_error: 'يجب أن يكون رقماً' })

@@ -52,7 +52,7 @@ export default function Invoices(): JSX.Element {
     return {
       title: 'الفواتير', subtitle: `${tab} — ${data.totalCount} فاتورة${data.totalCount > 100 ? ' (أول 100)' : ''}`, fileName: 'invoices', fields: [],
       tables: [{
-        columns: ['رقم الفاتورة', 'العميل', 'التاريخ', 'الاستحقاق', 'الإجمالي (ل.س)', 'الإجمالي ($)', 'الحالة'],
+        columns: ['رقم الفاتورة', 'الزبون', 'التاريخ', 'الاستحقاق', 'الإجمالي (ل.س)', 'الإجمالي ($)', 'الحالة'],
         rows: data.items.map((i) => [i.invoiceNumber ?? '', i.customerName ?? '', ymd(i.invoiceDate), ymd(i.dueDate), num(i.totalSyp), num(i.totalUsd), i.status ?? '']),
         numericColumns: [4, 5],
       }],
@@ -80,7 +80,7 @@ export default function Invoices(): JSX.Element {
       <input
         value={list.searchInput}
         onChange={(e) => list.setSearchInput(e.target.value)}
-        placeholder="ابحث برقم الفاتورة أو اسم العميل..."
+        placeholder="ابحث برقم الفاتورة أو اسم الزبون..."
         className="vex-input"
         style={{ marginBottom: 16, maxWidth: 420 }}
       />
@@ -120,7 +120,7 @@ export default function Invoices(): JSX.Element {
             <thead>
               <tr>
                 <th>رقم الفاتورة</th>
-                <th>العميل</th>
+                <th>الزبون</th>
                 <th>التاريخ</th>
                 <th>تاريخ الاستحقاق</th>
                 <th>الإجمالي ل.س</th>

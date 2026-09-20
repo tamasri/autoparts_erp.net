@@ -4,6 +4,7 @@ import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typogra
 import { customersApi } from '../../api/endpoints/customers';
 import { unwrapNode } from '../../api/apiData';
 import { extractApiError } from '../../lib/toast';
+import { inLira, useFxMid } from '../../hooks/useFxMid';
 import PageHeader from '../../components/ui/PageHeader';
 import ExportMenu from '../../components/ui/ExportMenu';
 import DocumentDialog from '../../components/ui/DocumentDialog';
@@ -33,6 +34,7 @@ export default function CustomerDetail(): JSX.Element {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewOpen, setViewOpen] = useState(false);
+  const fxMid = useFxMid();
 
   useEffect(() => {
     if (!id) return;
@@ -40,7 +42,7 @@ export default function CustomerDetail(): JSX.Element {
     setLoading(true); setError('');
     Promise.all([customersApi.getCustomerById(id), customersApi.getCustomerStatement(id)])
       .then(([c, s]) => { if (live) { setCustomer(unwrapNode<Customer>(c.data)); setStatement(unwrapNode<Statement>(s.data)); } })
-      .catch((e: unknown) => { if (live) setError(extractApiError(e, 'تعذر تحميل بيانات العميل')); })
+      .catch((e: unknown) => { if (live) setError(extractApiError(e, 'تعذر تحميل بيانات الزبون')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [id]);
@@ -53,7 +55,7 @@ export default function CustomerDetail(): JSX.Element {
     () => statementDocument(
       `كشف حساب ${customer?.name ?? ''}`, `${customer?.code ?? ''}`,
       [
-        { label: 'العميل', value: customer?.name ?? '' }, { label: 'الكود', value: customer?.code ?? '' },
+        { label: 'الزبون', value: customer?.name ?? '' }, { label: 'الكود', value: customer?.code ?? '' },
         { label: 'المستحق (ل.س)', value: money(statement?.outstandingSyp) }, { label: 'المستحق ($)', value: money(statement?.outstandingUsd) },
       ],
       lines,
@@ -69,7 +71,7 @@ export default function CustomerDetail(): JSX.Element {
   return (
     <Box>
       <PageHeader
-        title={customer?.name ?? 'العميل'}
+        title={customer?.name ?? 'الزبون'}
         subtitle={[customer?.code, customer?.phone, customer?.city].filter(Boolean).join(' · ')}
         crumbs={[{ label: 'الحسابات', to: '/accounts' }, { label: customer?.code ?? '' }]}
         actions={<><Button variant="outlined" size="small" onClick={() => setViewOpen(true)}>👁 عرض وطباعة</Button><ExportMenu build={async () => doc} /></>}
@@ -81,7 +83,7 @@ export default function CustomerDetail(): JSX.Element {
         <Stat label="المستحق ($)" value={money(outUsd)} tone={outUsd > 0 ? 'error' : 'success'} />
         <Stat label="إجمالي الفواتير ($)" value={money(statement?.totalInvoicedUsd)} />
         <Stat label="إجمالي المقبوض ($)" value={money(statement?.totalPaidUsd)} tone="primary" />
-        <Stat label="الحد الائتماني ($)" value={money(customer?.creditLimitUsd)} />
+        <Stat label={`الحد الائتماني ${inLira(customer?.creditLimitUsd ?? 0, fxMid)}`.trim()} value={`${money(customer?.creditLimitUsd)}`} />
         <Stat label="شروط الدفع" value={`${customer?.paymentTermsDays ?? '-'} يوم`} />
       </Stack>
 

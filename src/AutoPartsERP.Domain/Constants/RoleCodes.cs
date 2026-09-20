@@ -8,6 +8,8 @@ public static class RoleCodes
     public const string Approver = "APPROVER";
     public const string Auditor = "AUDITOR";
     public const string StandardUser = "STANDARD_USER";
+    public const string Accountant = "ACCOUNTANT";
+    public const string Purchaser = "PURCHASER";
 
     public static readonly IReadOnlyCollection<string> All = new[]
     {
@@ -16,6 +18,8 @@ public static class RoleCodes
         ComplianceOfficer,
         Approver,
         Auditor,
-        StandardUser
+        StandardUser,
+        Accountant,
+        Purchaser
     };
 }

@@ -25,10 +25,10 @@ type Account = {
 };
 
 const ROLES: Record<string, { label: string; color: 'primary' | 'secondary' | 'success' | 'warning' }> = {
-  CUSTOMER: { label: 'عميل', color: 'primary' }, VENDOR: { label: 'مورّد', color: 'secondary' },
+  CUSTOMER: { label: 'زبون', color: 'primary' }, VENDOR: { label: 'مورّد', color: 'secondary' },
   SALES_REP: { label: 'مندوب مبيعات', color: 'success' }, CARRIER: { label: 'ناقل', color: 'warning' },
 };
-const FILTERS = [{ key: '', label: 'الكل' }, { key: 'CUSTOMER', label: 'العملاء' }, { key: 'VENDOR', label: 'الموردون' }, { key: 'SALES_REP', label: 'المندوبون' }, { key: 'CARRIER', label: 'الناقلون' }];
+const FILTERS = [{ key: '', label: 'الكل' }, { key: 'CUSTOMER', label: 'الزبائن' }, { key: 'VENDOR', label: 'الموردون' }, { key: 'SALES_REP', label: 'المندوبون' }, { key: 'CARRIER', label: 'الناقلون' }];
 const OTHER_ROLES = ['VENDOR', 'SALES_REP', 'CARRIER'];
 
 function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }): JSX.Element {
@@ -66,7 +66,7 @@ function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: 
                 onChange={(e) => setRoles((all) => (e.target.checked ? [...all, r] : all.filter((x) => x !== r)))} />} />
             ))}
           </Box>
-          <Alert severity="info">لإنشاء عميل بملفه الائتماني استخدم «＋ عميل جديد».</Alert>
+          <Alert severity="info">لإنشاء زبون بملفه الائتماني استخدم «＋ زبون جديد».</Alert>
         </Stack>
       </DialogContent>
       <DialogActions><Button onClick={onClose}>إلغاء</Button><Button variant="contained" disabled={saving} onClick={() => void save()}>حفظ</Button></DialogActions>
@@ -101,19 +101,19 @@ export default function Accounts(): JSX.Element {
 
   async function withCustomer(customerId: string, then: (c: Customer) => void): Promise<void> {
     try { const c = unwrapNode<Customer>((await customersApi.getCustomerById(customerId)).data); if (c) then(c); }
-    catch (e: unknown) { toast.error(extractApiError(e, 'تعذر تحميل ملف العميل')); }
+    catch (e: unknown) { toast.error(extractApiError(e, 'تعذر تحميل ملف الزبون')); }
   }
 
   return (
     <Box>
       <PageHeader
         title="الحسابات"
-        subtitle="العملاء والموردون والمندوبون والناقلون في مكان واحد — الحساب الواحد قد يكون عميلاً ومورّداً"
+        subtitle="الزبائن والموردون والمندوبون والناقلون في مكان واحد — الحساب الواحد قد يكون زبوناً ومورّداً"
         actions={(
           <>
             <Button variant="contained" size="small" onClick={(e) => setMenu(e.currentTarget)}>＋ حساب جديد</Button>
             <Menu anchorEl={menu} open={Boolean(menu)} onClose={() => setMenu(null)}>
-              <MenuItem onClick={() => { setMenu(null); setCustomerDialog({ open: true, edit: null }); }}>عميل (بملفه الائتماني)</MenuItem>
+              <MenuItem onClick={() => { setMenu(null); setCustomerDialog({ open: true, edit: null }); }}>زبون (بملفه الائتماني)</MenuItem>
               <MenuItem onClick={() => { setMenu(null); setNewOther(true); }}>مورّد / مندوب / ناقل</MenuItem>
             </Menu>
           </>
@@ -139,7 +139,7 @@ export default function Accounts(): JSX.Element {
                 <TableCell>
                   <Stack direction="row" gap={0.5} flexWrap="wrap">
                     {a.activeTypeCodes.map((t) => <Chip key={t} size="small" color={ROLES[t]?.color ?? 'default'} label={ROLES[t]?.label ?? t} />)}
-                    {a.hasCombinedStatement ? <Chip size="small" variant="outlined" label="عميل ومورّد" /> : null}
+                    {a.hasCombinedStatement ? <Chip size="small" variant="outlined" label="زبون ومورّد" /> : null}
                   </Stack>
                 </TableCell>
                 <TableCell><Chip size="small" variant="outlined" color={a.isActive ? 'success' : 'default'} label={a.isActive ? 'نشط' : 'غير نشط'} /></TableCell>
@@ -147,7 +147,7 @@ export default function Accounts(): JSX.Element {
                   <Button size="small" component={RouterLink} to={`/parties/${a.id}/statement`}>{a.hasCombinedStatement ? 'كشف مدمج' : 'كشف الحساب'}</Button>
                   {a.customerId ? (
                     <>
-                      <Button size="small" component={RouterLink} to={`/customers/${a.customerId}`}>ملف العميل</Button>
+                      <Button size="small" component={RouterLink} to={`/customers/${a.customerId}`}>ملف الزبون</Button>
                       <Button size="small" onClick={() => void withCustomer(a.customerId as string, (c) => setCustomerDialog({ open: true, edit: c }))}>تعديل</Button>
                       {a.isActive ? <Button size="small" color="error" onClick={() => void withCustomer(a.customerId as string, setDeactivating)}>إيقاف</Button> : null}
                     </>

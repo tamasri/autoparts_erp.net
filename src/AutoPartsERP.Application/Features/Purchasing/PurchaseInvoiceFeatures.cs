@@ -401,12 +401,28 @@ public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurc
         if (bill.Status == "POSTED")
         {
             // The goods leave again; if some were already sold or moved, the bill cannot be voided.
-            var lines = (await connection.QueryAsync<(Guid ItemId, Guid SkuId, decimal Qty)>(new CommandDefinition(
-                "SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty FROM purchase_invoice_lines l INNER JOIN items i ON i.id = l.item_id WHERE l.purchase_invoice_id = @Id;",
+            var lines = (await connection.QueryAsync<(Guid ItemId, Guid SkuId, decimal Qty, decimal NetCost)>(new CommandDefinition(
+                "SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty, l.unit_cost_usd * (1 - l.discount_pct / 100) AS NetCost FROM purchase_invoice_lines l INNER JOIN items i ON i.id = l.item_id WHERE l.purchase_invoice_id = @Id;",
                 new { request.Id }, transaction, cancellationToken: cancellationToken))).ToList();
 
             foreach (var line in lines)
             {
+                // Take this bill's goods out of the weighted-average cost as well, so the cost goes back to what it was without them.
+                var sku = await connection.QuerySingleAsync<(decimal OnHand, decimal Cost)>(new CommandDefinition(
+                    """
+                    SELECT COALESCE((SELECT SUM(quantity_on_hand) FROM inventory_stock WHERE sku_id = @SkuId), 0) AS OnHand,
+                           (SELECT cost_price_usd FROM skus WHERE id = @SkuId FOR UPDATE) AS Cost;
+                    """,
+                    new { line.SkuId }, transaction, cancellationToken: cancellationToken));
+                var remaining = sku.OnHand - line.Qty;
+                if (remaining > 0)
+                {
+                    var restored = Math.Max(Math.Round((sku.OnHand * sku.Cost - line.Qty * line.NetCost) / remaining, 4), 0m);
+                    await connection.ExecuteAsync(new CommandDefinition(
+                        "UPDATE skus SET cost_price_usd = @restored, updated_at = now(), updated_by = @By WHERE id = @SkuId;",
+                        new { line.SkuId, restored, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
+                }
+
                 var removed = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, bill.WarehouseId, -line.Qty, cancellationToken);
                 if (removed.IsFailure)
                 {

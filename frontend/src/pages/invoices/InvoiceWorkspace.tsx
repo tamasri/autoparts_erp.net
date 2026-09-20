@@ -17,7 +17,6 @@ type CustomerRecord = {
   paymentTermsDays?: number;
   creditLimitSyp?: number;
   creditLimitUsd?: number;
-  balanceSyp?: number;
   assignedSalesRep?: string | null;
 };
 
@@ -56,7 +55,7 @@ const addDays = (date: string, days: number): string => {
 };
 
 const STEPS = [
-  { label: 'بيانات الفاتورة', sublabel: 'العميل والتاريخ وسعر الصرف' },
+  { label: 'بيانات الفاتورة', sublabel: 'الزبون والتاريخ وسعر الصرف' },
   { label: 'الأسطر', sublabel: 'الأصناف والكميات' },
   { label: 'المراجعة', sublabel: 'التحقق والحفظ' },
 ];
@@ -216,12 +215,23 @@ export default function InvoiceWorkspace(): JSX.Element {
     return { syp: acc.syp + t.syp, usd: acc.usd + t.usd };
   }, { syp: Number(deliveryFeeSyp), usd: Number(deliveryFeeUsd) }), [lines, deliveryFeeSyp, deliveryFeeUsd]);
 
+  // The credit limit is kept in dollars; what the customer already owes comes from their statement.
+  const [owedUsd, setOwedUsd] = useState(0);
+  useEffect(() => {
+    if (!customerRecord?.id) { setOwedUsd(0); return; }
+    let live = true;
+    customersApi.getCustomerStatement(customerRecord.id)
+      .then((r) => { if (live) setOwedUsd(Number(unwrapNode<{ outstandingUsd?: number }>(r.data)?.outstandingUsd ?? 0)); })
+      .catch(() => { if (live) setOwedUsd(0); });
+    return () => { live = false; };
+  }, [customerRecord?.id]);
+
   const creditWarning = useMemo(() => {
-    const limit = Number(customerRecord?.creditLimitSyp ?? 0);
+    const limit = Number(customerRecord?.creditLimitUsd ?? 0);
     if (!customerRecord || limit <= 0 || isReturn) return '';
-    const projected = Number(customerRecord.balanceSyp ?? 0) + totals.syp;
-    return projected > limit ? `تجاوز الحد الائتماني: الرصيد بعد الفاتورة ${fmt(projected)} ل.س من أصل ${fmt(limit)}` : '';
-  }, [customerRecord, totals.syp, isReturn]);
+    const projected = owedUsd + totals.usd;
+    return projected > limit ? `تجاوز الحد الائتماني: الرصيد بعد الفاتورة ${fmt(projected)} من أصل ${fmt(limit)}` : '';
+  }, [customerRecord, owedUsd, totals.usd, isReturn]);
 
   function lineProblems(): string {
     if (lines.length === 0) return 'أضف صنفاً واحداً على الأقل';
@@ -237,7 +247,7 @@ export default function InvoiceWorkspace(): JSX.Element {
 
   function goNext(): void {
     if (currentStep === 0) {
-      if (!customer) { setError('اختر العميل'); return; }
+      if (!customer) { setError('اختر الزبون'); return; }
       if (!fxRateId) { setError('لا يوجد سعر صرف — أضف سعراً من الإعدادات'); return; }
     }
     if (currentStep === 1) {
@@ -249,7 +259,7 @@ export default function InvoiceWorkspace(): JSX.Element {
   }
 
   async function submit(): Promise<void> {
-    const problem = !customer ? 'اختر العميل' : !fxRateId ? 'لا يوجد سعر صرف' : lineProblems();
+    const problem = !customer ? 'اختر الزبون' : !fxRateId ? 'لا يوجد سعر صرف' : lineProblems();
     if (problem) { setError(problem); return; }
     setBusy(true);
     setError('');
@@ -311,7 +321,7 @@ export default function InvoiceWorkspace(): JSX.Element {
             <h2 className="vex-section-title" style={{ marginBottom: 24 }}>المعلومات الأساسية</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
               <label className="vex-label" style={{ gridColumn: 'span 2' }}>
-                العميل *
+                الزبون *
                 <EntityPicker id="invoice-customer" value={customer} onChange={setCustomer} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." />
               </label>
 
@@ -329,7 +339,7 @@ export default function InvoiceWorkspace(): JSX.Element {
               </label>
 
               <label className="vex-label">
-                تاريخ الاستحقاق {customerRecord?.paymentTermsDays ? <span style={{ color: 'var(--txt-muted)', fontWeight: 400 }}>(شروط العميل: {customerRecord.paymentTermsDays} يوم)</span> : null}
+                تاريخ الاستحقاق {customerRecord?.paymentTermsDays ? <span style={{ color: 'var(--txt-muted)', fontWeight: 400 }}>(شروط الزبون: {customerRecord.paymentTermsDays} يوم)</span> : null}
                 <input id="invoice-due-date" type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueTouched(true); }} className="vex-input" />
               </label>
 
@@ -457,7 +467,7 @@ export default function InvoiceWorkspace(): JSX.Element {
               <div style={{ background: 'var(--clr-surface-2)', border: '1px solid var(--clr-border)', borderRadius: 'var(--radius-md)', padding: '16px 20px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 10 }}>بيانات الفاتورة</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                  <Row label="العميل" value={customer?.label ?? '-'} />
+                  <Row label="الزبون" value={customer?.label ?? '-'} />
                   <Row label="النوع" value={isReturn ? 'مرتجع' : 'بيع'} />
                   <Row label="التاريخ" value={invoiceDate} />
                   <Row label="الاستحقاق" value={dueDate} />

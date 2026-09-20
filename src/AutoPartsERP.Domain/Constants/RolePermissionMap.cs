@@ -49,6 +49,45 @@ public static class RolePermissionMap
             // Read-only across the platform plus audit.
             [RoleCodes.Auditor] = BuildAuditorBundle(),
 
+            // Ledger and money: bills and supplier payments, customer receipts, FX rates and statements.
+            [RoleCodes.Accountant] = new[]
+            {
+                PermissionCodes.Purchases.Read,
+                PermissionCodes.Purchases.Post,
+                PermissionCodes.Purchases.Void,
+                PermissionCodes.SupplierPayments.Read,
+                PermissionCodes.SupplierPayments.Create,
+                PermissionCodes.SupplierPayments.Reverse,
+                PermissionCodes.Payments.Read,
+                PermissionCodes.Payments.Create,
+                PermissionCodes.Payments.Allocate,
+                PermissionCodes.Invoices.Read,
+                PermissionCodes.FxRates.Read,
+                PermissionCodes.FxRates.Manage,
+                PermissionCodes.Reports.AccountStatement,
+                PermissionCodes.Reports.ProfitLoss,
+                PermissionCodes.Customers.Read,
+                PermissionCodes.Party.Read,
+                PermissionCodes.Items.Read,
+                PermissionCodes.Inventory.Read,
+                PermissionCodes.PeriodLocksRead
+            },
+
+            // Buys goods: prepares and posts supplier bills, sees stock and suppliers; does not pay or void.
+            [RoleCodes.Purchaser] = new[]
+            {
+                PermissionCodes.Purchases.Read,
+                PermissionCodes.Purchases.Create,
+                PermissionCodes.Purchases.Post,
+                PermissionCodes.SupplierPayments.Read,
+                PermissionCodes.Party.Read,
+                PermissionCodes.Party.Create,
+                PermissionCodes.Items.Read,
+                PermissionCodes.Catalog.Read,
+                PermissionCodes.Inventory.Read,
+                PermissionCodes.Receiving.Read
+            },
+
             // Baseline authenticated user: assorted read access.
             [RoleCodes.StandardUser] = new[]
             {

@@ -19,7 +19,7 @@ export type StatementLine = {
 };
 
 export const TYPE_LABEL: Record<string, string> = {
-  INVOICE: 'فاتورة', VOIDED: 'فاتورة (ملغاة)', CREDIT_NOTE: 'إشعار دائن', RETURN: 'مرتجع', PAYMENT: 'سند قبض', REFUND: 'ردّ مبلغ',
+  INVOICE: 'فاتورة', VOIDED: 'فاتورة (ملغاة)', CREDIT_NOTE: 'إشعار دائن', RETURN: 'مرتجع', PAYMENT: 'سند قبض', REFUND: 'ردّ مبلغ', BILL: 'فاتورة شراء', SUPPLIER_PAYMENT: 'دفعة لمورّد',
 };
 
 const money = (v: number | undefined): string => (v === undefined || v === 0 ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: 2 }));

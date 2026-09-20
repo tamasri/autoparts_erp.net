@@ -17,7 +17,7 @@ type Node = ErpAccount & { children: Node[]; depth: number };
 
 const ROOT_LABEL: Record<string, string> = { Asset: 'أصول', Liability: 'التزامات', Equity: 'حقوق ملكية', Income: 'إيرادات', Expense: 'مصروفات' };
 const ROOT_COLOR: Record<string, 'primary' | 'warning' | 'secondary' | 'success' | 'error'> = { Asset: 'primary', Liability: 'warning', Equity: 'secondary', Income: 'success', Expense: 'error' };
-const PURPOSE_LABEL: Record<string, string> = { RECEIVABLE: 'ذمم العملاء', PAYABLE: 'ذمم الموردين', CASH: 'الصندوق (نقد)', BANK: 'المصرف', INCOME: 'الإيرادات', COGS: 'تكلفة البضاعة المباعة', INVENTORY: 'المخزون' };
+const PURPOSE_LABEL: Record<string, string> = { RECEIVABLE: 'ذمم الزبائن', PAYABLE: 'ذمم الموردين', CASH: 'الصندوق (نقد)', BANK: 'المصرف', INCOME: 'الإيرادات', COGS: 'تكلفة البضاعة المباعة', INVENTORY: 'المخزون' };
 
 const money = (v: number | null | undefined): string => (v === null || v === undefined ? '' : v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
 

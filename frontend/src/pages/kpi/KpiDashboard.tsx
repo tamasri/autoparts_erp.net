@@ -23,7 +23,7 @@ export default function KpiDashboard(): JSX.Element {
 
       {data ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-          <KpiCard title="العملاء النشطون" value={data.activeCustomers} icon="👥" colorVariant="success" trend="إجمالي العملاء المفعّلين" />
+          <KpiCard title="الزبائن النشطون" value={data.activeCustomers} icon="👥" colorVariant="success" trend="إجمالي الزبائن المفعّلين" />
           <KpiCard title="فواتير مرحّلة" value={data.postedInvoices} icon="🧾" colorVariant="primary" trend="الفواتير ذات الحالة POSTED" />
           <KpiCard title="الذمم المدينة" value={`$${fmt(data.receivablesUsd)}`} icon="💰" colorVariant="warning" trend={`${fmt(data.receivablesSyp)} ل.س — مجموع الأرصدة المستحقة`} />
           <KpiCard title="مستحقات متأخرة" value={data.overdueInvoices} icon="⏰" colorVariant={data.overdueInvoices > 0 ? 'danger' : 'success'} trend={`${fmt(data.overdueSyp)} ل.س تجاوزت تاريخ الاستحقاق`} />

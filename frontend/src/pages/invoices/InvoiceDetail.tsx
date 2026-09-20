@@ -262,7 +262,7 @@ export default function InvoiceDetail(): JSX.Element {
               {invoice?.customerName ?? 'غير محدد'}
             </div>
             <div style={{ fontSize: 13, color: 'var(--txt-secondary)', lineHeight: 1.7 }}>
-              <div>العميل</div>
+              <div>الزبون</div>
             </div>
           </div>
         </div>

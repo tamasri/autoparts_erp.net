@@ -117,7 +117,7 @@ export function paymentDocument(
 ): ExportDocument {
   return {
     title: `سند قبض ${p.paymentNumber}`, subtitle: p.isReversed ? 'معكوس' : 'فعّال', fileName: `receipt-${p.paymentNumber}`,
-    fields: [{ label: 'العميل', value: p.customerName }, { label: 'التاريخ', value: dt(p.paymentDate) }, { label: 'طريقة الدفع', value: methodLabel }],
+    fields: [{ label: 'الزبون', value: p.customerName }, { label: 'التاريخ', value: dt(p.paymentDate) }, { label: 'طريقة الدفع', value: methodLabel }],
     tables: [{
       columns: ['البند', 'ل.س', '$'],
       rows: [['المبلغ المقبوض', num(p.amountSyp), num(p.amountUsd)], ['غير الموزّع على الفواتير', num(p.unallocatedSyp), num(p.unallocatedUsd)]],

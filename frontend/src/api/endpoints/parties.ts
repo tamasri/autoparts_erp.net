@@ -39,4 +39,6 @@ export const partiesApi = {
   getCombinedStatement: (partyId: string) => apiClient.get(`/parties/${partyId}/statement/combined`),
 
   getArStatement: (partyId: string) => apiClient.get(`/parties/${partyId}/statement/ar`),
+
+  getApStatement: (partyId: string) => apiClient.get(`/parties/${partyId}/statement/ap`),
 };

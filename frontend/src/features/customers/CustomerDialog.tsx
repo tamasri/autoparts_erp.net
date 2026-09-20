@@ -26,6 +26,7 @@ import {
   Typography,
 } from '@mui/material';
 import { customerSchema, type CustomerForm } from './schema';
+import { inLira, useFxMid } from '../../hooks/useFxMid';
 import { useSaveCustomer, type Customer } from './queries';
 import { toast, extractApiError } from '../../lib/toast';
 
@@ -81,6 +82,7 @@ export default function CustomerDialog({ open, onClose, editId, initial }: Props
   // Always use the full customerSchema for the form — in edit mode we simply
   // omit `code` from the submitted payload in useSaveCustomer (which calls PUT).
   // This avoids an RHF Resolver<T> incompatibility between CustomerForm and UpdateCustomerForm.
+  const fxMid = useFxMid();
   const {
     control,
     handleSubmit,
@@ -103,17 +105,17 @@ export default function CustomerDialog({ open, onClose, editId, initial }: Props
   const onSubmit = handleSubmit(async (values) => {
     try {
       await save.mutateAsync(values);
-      toast.success(isEdit ? 'تم تحديث العميل بنجاح' : 'تم إنشاء العميل بنجاح');
+      toast.success(isEdit ? 'تم تحديث الزبون بنجاح' : 'تم إنشاء الزبون بنجاح');
       onClose();
     } catch (err: unknown) {
-      toast.error(extractApiError(err, 'تعذر حفظ العميل'));
+      toast.error(extractApiError(err, 'تعذر حفظ الزبون'));
     }
   });
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" dir="rtl">
       <DialogTitle>
-        {isEdit ? '✏️ تعديل عميل' : '＋ عميل جديد'}
+        {isEdit ? '✏️ تعديل زبون' : '＋ زبون جديد'}
       </DialogTitle>
 
       <DialogContent sx={{ pt: 2 }}>
@@ -222,24 +224,7 @@ export default function CustomerDialog({ open, onClose, editId, initial }: Props
             />
           </Grid>
 
-          {/* Credit limits */}
-          <Grid item xs={12} sm={6}>
-            <Controller
-              name="creditLimitSyp"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  type="number"
-                  label="الحد الائتماني ل.س"
-                  error={!!errors.creditLimitSyp}
-                  helperText={errors.creditLimitSyp?.message}
-                  inputProps={{ min: 0 }}
-                />
-              )}
-            />
-          </Grid>
-
+          {/* Credit limit: kept in dollars only; the lira value is derived from the saved exchange rate */}
           <Grid item xs={12} sm={6}>
             <Controller
               name="creditLimitUsd"
@@ -248,9 +233,9 @@ export default function CustomerDialog({ open, onClose, editId, initial }: Props
                 <TextField
                   {...field}
                   type="number"
-                  label="الحد الائتماني $"
+                  label="الحد الائتماني ($)"
                   error={!!errors.creditLimitUsd}
-                  helperText={errors.creditLimitUsd?.message}
+                  helperText={errors.creditLimitUsd?.message ?? (inLira(Number(field.value), fxMid) || 'يُعرض بالليرة حسب سعر الصرف المحفوظ')}
                   inputProps={{ min: 0 }}
                 />
               )}

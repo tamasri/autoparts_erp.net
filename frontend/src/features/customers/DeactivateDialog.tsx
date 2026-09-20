@@ -51,23 +51,23 @@ export default function DeactivateDialog({ open, customer, onClose }: Props): JS
     if (!customer) return;
     try {
       await deactivate.mutateAsync({ id: customer.id, reason });
-      toast.success('تم إلغاء تفعيل العميل');
+      toast.success('تم إلغاء تفعيل الزبون');
       onClose();
     } catch (err: unknown) {
-      toast.error(extractApiError(err, 'تعذر إلغاء تفعيل العميل'));
+      toast.error(extractApiError(err, 'تعذر إلغاء تفعيل الزبون'));
     }
   });
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" dir="rtl">
       <DialogTitle sx={{ color: 'error.main' }}>
-        ⚠️ إلغاء تفعيل عميل
+        ⚠️ إلغاء تفعيل زبون
       </DialogTitle>
 
       <DialogContent sx={{ pt: 2 }}>
         {customer && (
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            سيتم إلغاء تفعيل العميل <strong>{customer.name}</strong> ({customer.code}).
+            سيتم إلغاء تفعيل الزبون <strong>{customer.name}</strong> ({customer.code}).
             يرجى إدخال سبب واضح لأغراض التدقيق.
           </Typography>
         )}

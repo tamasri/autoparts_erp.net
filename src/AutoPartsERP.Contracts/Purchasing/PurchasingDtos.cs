@@ -1,3 +1,5 @@
+using AutoPartsERP.Contracts.Customers;
+
 namespace AutoPartsERP.Contracts.Purchasing;
 
 public sealed record PurchaseLineRequest(Guid ItemId, decimal Quantity, decimal UnitCostUsd, decimal DiscountPct);
@@ -71,3 +73,10 @@ public sealed record SupplierPaymentDto(
     decimal AmountUsd,
     decimal UnallocatedUsd,
     bool IsReversed);
+
+public sealed record SupplierStatementDto(
+    Guid PartyId,
+    decimal TotalBilledUsd,
+    decimal TotalPaidUsd,
+    decimal OutstandingUsd,
+    IReadOnlyCollection<CustomerStatementTransactionDto> Transactions);

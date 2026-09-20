@@ -19,13 +19,13 @@ const TABS: Array<{ doctype: string; label: string }> = [
   { doctype: 'Payment Entry', label: 'سندات الدفع/القبض' },
   { doctype: 'Journal Entry', label: 'قيود اليومية' },
   { doctype: 'GL Entry', label: 'دفتر الأستاذ' },
-  { doctype: 'Customer', label: 'العملاء' },
+  { doctype: 'Customer', label: 'الزبائن' },
   { doctype: 'Supplier', label: 'الموردون' },
   { doctype: 'Item', label: 'الأصناف' },
 ];
 
 const COLUMN_LABEL: Record<string, string> = {
-  name: 'الرقم', customer: 'العميل', supplier: 'المورد', party: 'الجهة', party_type: 'نوع الجهة', posting_date: 'التاريخ', due_date: 'الاستحقاق',
+  name: 'الرقم', customer: 'الزبون', supplier: 'المورد', party: 'الجهة', party_type: 'نوع الجهة', posting_date: 'التاريخ', due_date: 'الاستحقاق',
   currency: 'العملة', grand_total: 'الإجمالي', outstanding_amount: 'المتبقي', status: 'الحالة', is_return: 'مرتجع', payment_type: 'النوع', paid_amount: 'المبلغ',
   mode_of_payment: 'طريقة الدفع', voucher_type: 'نوع القيد', total_debit: 'مدين', total_credit: 'دائن', user_remark: 'ملاحظات', docstatus: 'docstatus', account: 'الحساب',
   debit: 'مدين', credit: 'دائن', voucher_no: 'المستند', remarks: 'ملاحظات', customer_name: 'الاسم', customer_group: 'المجموعة', territory: 'المنطقة', disabled: 'معطّل',

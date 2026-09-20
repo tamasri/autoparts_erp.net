@@ -128,7 +128,7 @@ public sealed partial class ErpNextClient
 
         IReadOnlyList<ErpNextAccountMapping> map =
         [
-            new("RECEIVABLE", "فواتير العملاء وسندات القبض (فاتورة المبيعات مدين، سند القبض دائن)", c.ReceivableAccount),
+            new("RECEIVABLE", "فواتير الزبائن وسندات القبض (فاتورة المبيعات مدين، سند القبض دائن)", c.ReceivableAccount),
             new("PAYABLE", "فواتير الموردين والدفعات لهم (فاتورة الشراء دائن، سند الدفع مدين)", c.PayableAccount),
             new("CASH", "القبض والدفع النقدي بالليرة وبالدولار", c.CashAccount),
             new("BANK", "القبض والدفع بالحوالة المصرفية والشيك", c.BankAccount),

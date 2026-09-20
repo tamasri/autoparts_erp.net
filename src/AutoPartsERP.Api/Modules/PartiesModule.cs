@@ -84,6 +84,9 @@ public sealed class PartiesModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/{id:guid}/statement/ap", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+                (await sender.Send(new AutoPartsERP.Application.Features.Purchasing.GetSupplierStatementQuery(id), cancellationToken)).ToApiResult());
+
         group.MapGet("/{id:guid}/statement/ar", async Task<IResult> (
                 Guid id,
                 IDbConnectionFactory dbConnectionFactory,

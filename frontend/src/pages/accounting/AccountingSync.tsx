@@ -18,7 +18,7 @@ type SyncRow = {
 
 const doctypeLabels: Record<string, string> = {
   Item: 'أصناف',
-  Customer: 'عملاء',
+  Customer: 'زبائن',
   Supplier: 'موردون',
   'Sales Invoice': 'فواتير مبيعات',
   'Payment Entry': 'مدفوعات',
@@ -98,7 +98,7 @@ export default function AccountingSync(): JSX.Element {
       <div className="vex-page-header">
         <div>
           <h1 className="vex-page-header__title">مزامنة المحاسبة</h1>
-          <div className="vex-page-header__breadcrumb">حالة ترحيل الأصناف والعملاء والفواتير إلى دفتر الأستاذ</div>
+          <div className="vex-page-header__breadcrumb">حالة ترحيل الأصناف والزبائن والفواتير إلى دفتر الأستاذ</div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn-ghost" onClick={refresh}>↺ تحديث</button>
