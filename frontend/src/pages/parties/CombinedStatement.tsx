@@ -86,7 +86,7 @@ export default function CombinedStatement(): JSX.Element {
       <PageHeader
         title={name || 'كشف الحساب'}
         subtitle={party?.hasCombinedStatement ? 'كشف مدمج: الحساب عميل ومورد في آن واحد' : party?.code}
-        crumbs={[{ label: 'Accounts', to: '/parties' }, { label: 'كشف الحساب' }]}
+        crumbs={[{ label: 'الحسابات', to: '/accounts' }, { label: 'كشف الحساب' }]}
         actions={<><Button variant="outlined" size="small" onClick={() => setViewOpen(true)} disabled={vendorOnly === true}>👁 عرض وطباعة</Button><ExportMenu build={async () => doc} disabled={vendorOnly === true} /></>}
       />
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}

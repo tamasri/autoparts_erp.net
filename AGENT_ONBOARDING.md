@@ -256,3 +256,5 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - **Issue orders** used to change status only; they now decrement stock and write the ledger.
 - New: warehouses screen, movements screen, chart of accounts, ERPNext documents, item import, view/print on all warehouse documents. UI label "Accounts" replaces "الأطراف" (code keeps `party`).
 - Test helpers used: mock ERPNext extended for Account list, `get_balance_on`, `get_count`, document lists (scratchpad, not committed).
+- **One menu entry "الحسابات"** (`/accounts`, tabs: all accounts / customers) replaces the two entries "العملاء" and "Accounts". The UI word is Arabic; `party`/`parties` stay in code and routes (`/parties/:id/statement`); `/customers` and `/parties` redirect.
+- **ERPNext duplicates:** ERPNext does not refuse a second Customer/Supplier with the same name, it names it "X - 1", "X - 2". Every sync run therefore created new customers (the sync screen showed "…- 61"). `UpsertPartyAsync` now looks the party up by name and updates it. **Existing duplicates on the server must be merged/deleted once in ERPNext** (they are not touched automatically).

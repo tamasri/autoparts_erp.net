@@ -20,7 +20,7 @@ const Login            = lazy(() => import('./pages/Login'));
 const AppLayout        = lazy(() => import('./components/layout/AppLayout'));
 const Dashboard        = lazy(() => import('./pages/Dashboard'));
 const KpiDashboard     = lazy(() => import('./pages/kpi/KpiDashboard'));
-const Customers        = lazy(() => import('./pages/customers/Customers'));
+const Accounts         = lazy(() => import('./pages/accounts/Accounts'));
 const CustomerDetail   = lazy(() => import('./pages/customers/CustomerDetail'));
 const Invoices         = lazy(() => import('./pages/invoices/Invoices'));
 const Payments         = lazy(() => import('./pages/sales/Payments'));
@@ -36,7 +36,6 @@ const IssueOrders      = lazy(() => import('./pages/inventory/IssueOrders'));
 const Warehouses       = lazy(() => import('./pages/inventory/Warehouses'));
 const Movements        = lazy(() => import('./pages/inventory/Movements'));
 const InventoryAlerts  = lazy(() => import('./pages/inventory/InventoryAlerts'));
-const Parties          = lazy(() => import('./pages/parties/Parties'));
 const CombinedStatement= lazy(() => import('./pages/parties/CombinedStatement'));
 const Users            = lazy(() => import('./pages/settings/Users'));
 const Roles            = lazy(() => import('./pages/settings/Roles'));
@@ -109,7 +108,8 @@ export default function App(): JSX.Element {
         <Route index                          element={<RouteWrapper><Dashboard /></RouteWrapper>} />
         <Route path="dashboard"               element={<RouteWrapper><Dashboard /></RouteWrapper>} />
         <Route path="kpi"                     element={<RouteWrapper><KpiDashboard /></RouteWrapper>} />
-        <Route path="customers"               element={<RouteWrapper><Customers /></RouteWrapper>} />
+        <Route path="accounts"                element={<RouteWrapper><Accounts /></RouteWrapper>} />
+        <Route path="customers"               element={<Navigate to="/accounts?tab=customers" replace />} />
         <Route path="customers/:id"           element={<RouteWrapper><CustomerDetail /></RouteWrapper>} />
         <Route path="invoices"                element={<RouteWrapper><Invoices /></RouteWrapper>} />
         <Route path="payments"                element={<RouteWrapper><Payments /></RouteWrapper>} />
@@ -129,7 +129,7 @@ export default function App(): JSX.Element {
         <Route path="inventory/alerts"        element={<RouteWrapper><InventoryAlerts /></RouteWrapper>} />
         <Route path="items"                   element={<RouteWrapper><Items /></RouteWrapper>} />
         <Route path="items/:id"               element={<RouteWrapper><ItemCard /></RouteWrapper>} />
-        <Route path="parties"                 element={<RouteWrapper><Parties /></RouteWrapper>} />
+        <Route path="parties"                 element={<Navigate to="/accounts" replace />} />
         <Route path="parties/:id/statement"   element={<RouteWrapper><CombinedStatement /></RouteWrapper>} />
         <Route path="approvals"               element={<RouteWrapper><Approvals /></RouteWrapper>} />
         <Route path="audit"                   element={<RouteWrapper><AuditLog /></RouteWrapper>} />

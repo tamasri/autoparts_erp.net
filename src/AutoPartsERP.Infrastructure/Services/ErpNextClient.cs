@@ -75,8 +75,9 @@ public sealed partial class ErpNextClient : IErpNextClient
 
         if (isCustomer)
         {
-            return UpsertAsync(
+            return UpsertPartyAsync(
                 "Customer",
+                "customer_name",
                 party.Name,
                 new JsonObject
                 {
@@ -89,8 +90,9 @@ public sealed partial class ErpNextClient : IErpNextClient
                 cancellationToken);
         }
 
-        return UpsertAsync(
+        return UpsertPartyAsync(
             "Supplier",
+            "supplier_name",
             party.Name,
             new JsonObject
             {
@@ -523,6 +525,53 @@ public sealed partial class ErpNextClient : IErpNextClient
         catch (Exception ex)
         {
             return Result<CompanyInfo>.Failure(new Error("ErpNext.CompanyLookupFailed", $"Unexpected company response: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Create-or-update for customers and suppliers. ERPNext does not refuse a second party with the same name: it silently names
+    /// it "X - 1", "X - 2", ... so the create-then-update-on-duplicate flow used for items would add a new record on every sync.
+    /// The party is therefore looked up by its name first and updated in place when it exists.
+    /// </summary>
+    private async Task<Result<string>> UpsertPartyAsync(string doctype, string nameField, string name, JsonObject payload, CancellationToken cancellationToken)
+    {
+        var existing = await FindNameByFieldAsync(doctype, nameField, name, cancellationToken);
+        if (existing is null)
+        {
+            return await UpsertAsync(doctype, name, payload, cancellationToken);
+        }
+
+        var response = await _httpClient.PutAsJsonAsync($"api/resource/{Uri.EscapeDataString(doctype)}/{Uri.EscapeDataString(existing)}", payload, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return Result<string>.Success(existing);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning("ERPNext update failed for {Doctype} {Name}: {Status} {Body}", doctype, existing, response.StatusCode, body);
+        return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{response.StatusCode}: {Truncate(body)}"));
+    }
+
+    /// <summary>The ERPNext document name whose <paramref name="field"/> equals <paramref name="value"/>, or null (also when the lookup itself fails).</summary>
+    private async Task<string?> FindNameByFieldAsync(string doctype, string field, string value, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var filters = Uri.EscapeDataString(JsonSerializer.Serialize(new object[] { new object[] { field, "=", value } }));
+            var response = await _httpClient.GetAsync($"api/resource/{Uri.EscapeDataString(doctype)}?filters={filters}&fields=%5B%22name%22%5D&limit_page_length=1", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
+            var rows = document!.RootElement.GetProperty("data");
+            return rows.GetArrayLength() > 0 ? rows[0].GetProperty("name").GetString() : null;
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or HttpRequestException)
+        {
+            return null;
         }
     }
 

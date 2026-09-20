@@ -231,7 +231,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] View / print / PDF / Excel / CSV for transfers, issue orders, cycle counts, adjustments, receiving, receipts, statements, movements; exports on the main lists.
 - [x] Real invoice PDF (it used to be a plain-text file served as PDF).
 - [x] Item import from Excel/CSV with template and dry run.
-- [x] Accounts label (UI only; `party` stays in code), combined statement only for customer+vendor accounts, customer statement rebuilt.
+- [x] One "الحسابات" menu entry (all accounts + customers tabs; `party` stays in code), combined statement only for customer+vendor accounts, customer statement rebuilt.
+- [x] ERPNext customer/supplier sync is now update-in-place (it used to create "X - N" duplicates on every run).
 - [ ] Unify the two stock models (D15/D9) — next.
 - [ ] Purchase invoices + supplier payments + ERPNext sync (client methods exist; screens, migration and syncers do not).
 - [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.

@@ -18,13 +18,12 @@ const navGroups: NavGroup[] = [
     title: 'المبيعات والمحاسبة',
     icon: '💰',
     items: [
-      { to: '/customers', label: 'العملاء', icon: '◎' },
+      { to: '/accounts', label: 'الحسابات', icon: '◎' },
       { to: '/invoices', label: 'الفواتير', icon: '☰' },
       { to: '/payments', label: 'الدفعات والقبض', icon: '＄' },
       { to: '/fx-rates', label: 'أسعار الصرف', icon: '⇄' },
       { to: '/accounting/chart', label: 'شجرة الحسابات', icon: '⌥' },
       { to: '/accounting/erp-documents', label: 'مستندات ERPNext', icon: '▤' },
-      { to: '/parties', label: 'Accounts', icon: '⊂' },
     ],
   },
   {
@@ -64,7 +63,7 @@ const megaMenuSections = [
     links: [
       { label: 'لوحة التحكم', to: '/' },
       { label: 'الفواتير', to: '/invoices' },
-      { label: 'العملاء', to: '/customers' },
+      { label: 'الحسابات', to: '/accounts' },
       { label: 'المخزون', to: '/inventory' },
       { label: 'التقارير', to: '/kpi' },
     ],
@@ -86,7 +85,6 @@ const megaMenuSections = [
       { label: 'الأدوار', to: '/roles' },
       { label: 'إقفال الفترات', to: '/periods' },
       { label: 'أسعار الصرف', to: '/fx-rates' },
-      { label: 'Accounts', to: '/parties' },
     ],
   },
 ];

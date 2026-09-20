@@ -21,7 +21,7 @@ const TYPE_BADGE: Record<string, { bg: string; color: string }> = {
 export default function Parties(): JSX.Element {
   const navigate = useNavigate();
   const list = usePagedList<Party>({
-    errorMessage: 'تعذر تحميل Accounts',
+    errorMessage: 'تعذر تحميل الحسابات',
     fetcher: ({ page, pageSize, search }) => partiesApi.getParties({ page, pageSize, searchTerm: search || undefined }),
   });
   const { items: rows, error: listError, loading } = list;
@@ -47,8 +47,8 @@ export default function Parties(): JSX.Element {
     try {
       await partiesApi.createParty({ displayName: displayName.trim(), displayNameAr: displayNameAr.trim(), taxNumber: taxNumber.trim() || undefined, notes: notes.trim() || undefined, initialTypeCodes: selectedTypes.length > 0 ? selectedTypes : undefined });
       setDisplayName(''); setDisplayNameAr(''); setTaxNumber(''); setNotes(''); setSelectedTypes(['CUSTOMER']); setShowForm(false);
-      toast.success('تم إنشاء الـ Account بنجاح'); await load();
-    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر إنشاء الـ Account')); setError(extractApiError(e, 'تعذر إنشاء الـ Account')); }
+      toast.success('تم إنشاء الحساب بنجاح'); await load();
+    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر إنشاء الحساب')); setError(extractApiError(e, 'تعذر إنشاء الحساب')); }
     finally { setBusy(false); }
   }
 
@@ -56,11 +56,11 @@ export default function Parties(): JSX.Element {
     <div style={{ direction: 'rtl' }}>
       <div className="vex-page-header">
         <div>
-          <h1 className="vex-page-header__title">Accounts</h1>
+          <h1 className="vex-page-header__title">الحسابات</h1>
           <div className="vex-page-header__breadcrumb">إدارة العملاء والموردين ومندوبي المبيعات والناقلين</div>
         </div>
         <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ New Account'}
+          {showForm ? '✕ إلغاء' : '＋ حساب جديد'}
         </button>
       </div>
 
@@ -76,7 +76,7 @@ export default function Parties(): JSX.Element {
 
       {showForm ? (
         <div className="vex-card" style={{ marginBottom: 20 }}>
-          <h2 className="vex-section-title">Add new Account</h2>
+          <h2 className="vex-section-title">إضافة حساب جديد</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
             <label className="vex-label">
               الاسم (EN) *
@@ -128,7 +128,7 @@ export default function Parties(): JSX.Element {
           </div>
 
           <button type="button" disabled={busy} onClick={() => void create()} className="btn-primary">
-            💾 Save Account
+            💾 حفظ الحساب
           </button>
         </div>
       ) : null}
