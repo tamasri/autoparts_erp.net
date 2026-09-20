@@ -174,6 +174,7 @@ builder.Services.AddScoped<SalesInvoiceErpNextSyncer>();
 builder.Services.AddScoped<PaymentErpNextSyncer>();
 builder.Services.AddScoped<PurchaseErpNextSyncer>();
 builder.Services.AddScoped<StockAdjustmentErpNextSyncer>();
+builder.Services.AddScoped<JournalEntryErpNextSyncer>();
 builder.Services.Configure<ErpNextOptions>(builder.Configuration.GetSection(ErpNextOptions.SectionName));
 var erpNextEnabled = builder.Configuration.GetValue<bool>($"{ErpNextOptions.SectionName}:Enabled");
 if (erpNextEnabled)
@@ -241,6 +242,8 @@ builder.Services.AddScoped<IOutboxEventHandler, PurchaseInvoiceVoidedOutboxHandl
 builder.Services.AddScoped<IOutboxEventHandler, SupplierPaymentCreatedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, SupplierPaymentReversedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, StockAdjustmentPostedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, JournalEntryPostedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, JournalEntryVoidedOutboxHandler>();
 
 // Audit configuration
 AuditConfiguration.Configure(builder.Configuration);

@@ -46,7 +46,10 @@ const Items            = lazy(() => import('./pages/items/Items'));
 const ItemCard         = lazy(() => import('./pages/items/ItemCard'));
 const AccountingSync   = lazy(() => import('./pages/accounting/AccountingSync'));
 const ChartOfAccounts  = lazy(() => import('./pages/accounting/ChartOfAccounts'));
-const ErpDocuments     = lazy(() => import('./pages/accounting/ErpDocuments'));
+const JournalEntries   = lazy(() => import('./pages/accounting/JournalEntries'));
+const Reconciliation   = lazy(() => import('./pages/accounting/Reconciliation'));
+const PartyBalances    = lazy(() => import('./pages/accounting/PartyBalances'));
+const FinancialReports = lazy(() => import('./pages/accounting/Reports'));
 const PeriodLocks      = lazy(() => import('./pages/periods/PeriodLocks'));
 
 // ── Page loading fallback ─────────────────────────────────────────────────────
@@ -139,7 +142,10 @@ export default function App(): JSX.Element {
 
         <Route path="accounting/chart"           element={<RouteWrapper><ChartOfAccounts /></RouteWrapper>} />
 
-        <Route path="accounting/erp-documents"   element={<RouteWrapper><ErpDocuments /></RouteWrapper>} />
+        <Route path="accounting/entries"         element={<RouteWrapper><JournalEntries /></RouteWrapper>} />
+        <Route path="accounting/reconciliation"  element={<RouteWrapper><Reconciliation /></RouteWrapper>} />
+        <Route path="accounting/balances"        element={<RouteWrapper><PartyBalances /></RouteWrapper>} />
+        <Route path="accounting/reports"         element={<RouteWrapper><FinancialReports /></RouteWrapper>} />
         <Route path="periods"                 element={<RouteWrapper><PeriodLocks /></RouteWrapper>} />
         <Route path="users"                   element={<RouteWrapper><Users /></RouteWrapper>} />
         <Route path="roles"                   element={<RouteWrapper><Roles /></RouteWrapper>} />

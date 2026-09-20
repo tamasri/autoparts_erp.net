@@ -37,21 +37,58 @@ public interface IErpNextClient
     /// <summary>Cancels a submitted ERPNext document (Sales Invoice, Payment Entry, ...) by its ERPNext name.</summary>
     Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default);
 
-    /// <summary>The company's chart of accounts as ERPNext holds it; balances are read per account and only when asked for.</summary>
-    Task<Result<IReadOnlyList<ErpNextAccount>>> GetChartOfAccountsAsync(bool includeBalances, CancellationToken cancellationToken = default);
+    /// <summary>The company's chart of accounts as ERPNext holds it, parents before children. Balances come from <see cref="GetGlBalancesAsync"/>.</summary>
+    Task<Result<IReadOnlyList<ErpNextAccount>>> GetChartOfAccountsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Which ERPNext account each application event posts to (receivable, cash, COGS, inventory, ...).</summary>
     Task<Result<IReadOnlyList<ErpNextAccountMapping>>> GetAccountMappingAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Read-only page of an ERPNext document type from a fixed allow-list (invoices, payments, journal entries, ledger, ...).</summary>
-    Task<Result<ErpNextDocumentPage>> ListDocumentsAsync(string doctype, int page, int pageSize, string? search, CancellationToken cancellationToken = default);
+    /// <summary>Creates a group or ledger account under an existing parent; returns the account's ERPNext name.</summary>
+    Task<Result<string>> CreateAccountAsync(ErpNextAccountCreate account, CancellationToken cancellationToken = default);
+
+    /// <summary>Renames an account, changes its type or disables it; returns its (possibly new) ERPNext name.</summary>
+    Task<Result<string>> UpdateAccountAsync(string name, ErpNextAccountUpdate update, CancellationToken cancellationToken = default);
+
+    /// <summary>Books a manual accounting entry as a submitted Journal Entry.</summary>
+    Task<Result<string>> SyncJournalEntryAsync(ErpNextJournalEntrySync entry, CancellationToken cancellationToken = default);
+
+    /// <summary>Debit and credit totals per account from the general ledger, for postings between the two dates (either may be open).</summary>
+    Task<Result<IReadOnlyList<ErpNextGlBalance>>> GetGlBalancesAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken = default);
+
+    /// <summary>Ledger lines in date order. At most <c>Limit</c> rows are returned; one extra tells the caller the result was cut.</summary>
+    Task<Result<IReadOnlyList<ErpNextGlEntry>>> GetGlEntriesAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default);
+
+    /// <summary>What each customer or supplier owes or is owed according to the ledger, up to a date.</summary>
+    Task<Result<IReadOnlyList<ErpNextPartyBalance>>> GetPartyBalancesAsync(string partyType, DateOnly asOf, CancellationToken cancellationToken = default);
+
+    /// <summary>Submitted sales or purchase invoices that still have an outstanding amount, for ageing.</summary>
+    Task<Result<IReadOnlyList<ErpNextOpenInvoice>>> GetOpenInvoicesAsync(string doctype, DateOnly asOf, CancellationToken cancellationToken = default);
 }
 
-public sealed record ErpNextAccount(string Name, string AccountName, string? ParentAccount, bool IsGroup, string? RootType, string? AccountType, string? Currency, decimal? Balance);
+public sealed record ErpNextAccount(string Name, string AccountName, string? ParentAccount, bool IsGroup, string? RootType, string? AccountType, string? Currency);
 
 public sealed record ErpNextAccountMapping(string Purpose, string Description, string? Account);
 
-public sealed record ErpNextDocumentPage(IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyDictionary<string, System.Text.Json.JsonElement>> Rows, long TotalCount);
+public sealed record ErpNextAccountCreate(string AccountName, string ParentAccount, bool IsGroup, string? AccountType, string? AccountNumber);
+
+public sealed record ErpNextAccountUpdate(string? AccountName, string? AccountType, bool? Disabled);
+
+public sealed record ErpNextJournalLine(string Account, string? PartyType, string? Party, decimal Debit, decimal Credit, string? Remark);
+
+/// <summary><c>VoucherType</c> is ERPNext's ("Journal Entry", "Bank Entry", "Contra Entry", ...); <c>EntryNumber</c> is our own number, kept as the entry's reference.</summary>
+public sealed record ErpNextJournalEntrySync(
+    Guid LocalId, string VoucherType, string EntryNumber, DateOnly Date, string? Narration, string? ReferenceNo, bool IsOpening, IReadOnlyList<ErpNextJournalLine> Lines);
+
+public sealed record ErpNextGlBalance(string Account, decimal Debit, decimal Credit);
+
+public sealed record ErpNextGlEntry(
+    string Name, DateOnly PostingDate, string Account, string? PartyType, string? Party, decimal Debit, decimal Credit, string? VoucherType, string? VoucherNo, string? Remarks);
+
+public sealed record ErpNextGlFilter(string? Account, string? PartyType, string? Party, DateOnly? From, DateOnly? To, int Limit);
+
+public sealed record ErpNextPartyBalance(string Party, decimal Debit, decimal Credit);
+
+public sealed record ErpNextOpenInvoice(string Name, string Party, DateOnly PostingDate, DateOnly? DueDate, decimal Outstanding);
 
 public sealed record ErpNextItemSync(Guid LocalItemId, string Code, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice);
 

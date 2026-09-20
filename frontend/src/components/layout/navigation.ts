@@ -1,5 +1,7 @@
 /** The application menu. One place to add, rename or move a screen. */
-export type NavItem = { to: string; label: string; icon: string; end?: boolean };
+export type NavTab = { to: string; label: string; end?: boolean };
+/** A menu entry. With `tabs` it stands for a whole section: the entry stays lit on any of its tabs and the tabs are shown above the page. */
+export type NavItem = { to: string; label: string; icon: string; end?: boolean; tabs?: NavTab[] };
 export type NavGroup = { title: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -11,14 +13,24 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: 'المبيعات والمحاسبة',
+    title: 'المبيعات',
     items: [
       { to: '/accounts', label: 'الحسابات', icon: '◎' },
-      { to: '/invoices', label: 'الفواتير', icon: '☰' },
-      { to: '/payments', label: 'الدفعات والقبض', icon: '＄' },
-      { to: '/fx-rates', label: 'أسعار الصرف', icon: '⇄' },
+      {
+        to: '/invoices', label: 'الفواتير والقبض', icon: '☰',
+        tabs: [{ to: '/invoices', label: 'فواتير المبيعات' }, { to: '/payments', label: 'الدفعات والقبض' }],
+      },
+    ],
+  },
+  {
+    title: 'المحاسبة',
+    items: [
       { to: '/accounting/chart', label: 'شجرة الحسابات', icon: '⌥' },
-      { to: '/accounting/erp-documents', label: 'مستندات ERPNext', icon: '▤' },
+      { to: '/accounting/entries', label: 'القيود', icon: '✎' },
+      { to: '/accounting/reconciliation', label: 'تسوية الحسابات', icon: '⇋' },
+      { to: '/accounting/balances', label: 'الذمم', icon: '⇵' },
+      { to: '/accounting/reports', label: 'التقارير المالية', icon: '▤' },
+      { to: '/fx-rates', label: 'أسعار الصرف', icon: '⇄' },
     ],
   },
   {
@@ -26,15 +38,20 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/purchasing', label: 'المشتريات', icon: '🛒' },
       { to: '/items', label: 'الأصناف', icon: '◧' },
-      { to: '/inventory', label: 'المخزون', icon: '▦', end: true },
-      { to: '/inventory/warehouses', label: 'المستودعات', icon: '⌂' },
-      { to: '/inventory/movements', label: 'حركة الأصناف', icon: '⇅' },
-      { to: '/inventory/receiving', label: 'الاستلام', icon: '↙' },
-      { to: '/inventory/transfers', label: 'التحويلات', icon: '⇌' },
-      { to: '/inventory/issue-orders', label: 'أوامر الصرف', icon: '↗' },
-      { to: '/inventory/cycle-counts', label: 'الجرد الدوري', icon: '↻' },
-      { to: '/inventory/adjustments', label: 'التسويات', icon: '⇔' },
-      { to: '/inventory/alerts', label: 'التنبيهات', icon: '◬' },
+      {
+        to: '/inventory', label: 'المخزون', icon: '▦',
+        tabs: [
+          { to: '/inventory', label: 'الأرصدة', end: true }, { to: '/inventory/movements', label: 'حركة الأصناف' },
+          { to: '/inventory/warehouses', label: 'المستودعات' }, { to: '/inventory/alerts', label: 'التنبيهات' },
+        ],
+      },
+      {
+        to: '/inventory/receiving', label: 'عمليات المستودع', icon: '⇌',
+        tabs: [
+          { to: '/inventory/receiving', label: 'الاستلام' }, { to: '/inventory/transfers', label: 'التحويلات' }, { to: '/inventory/issue-orders', label: 'أوامر الصرف' },
+          { to: '/inventory/cycle-counts', label: 'الجرد الدوري' }, { to: '/inventory/adjustments', label: 'التسويات' },
+        ],
+      },
     ],
   },
   {
@@ -42,10 +59,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/approvals', label: 'الموافقات', icon: '✓' },
       { to: '/audit', label: 'سجل التدقيق', icon: '◎' },
-      { to: '/accounting/sync', label: 'مزامنة المحاسبة', icon: '⇄' },
       { to: '/periods', label: 'إقفال الفترات', icon: '⊝' },
-      { to: '/users', label: 'المستخدمون', icon: '◉' },
-      { to: '/roles', label: 'الأدوار', icon: '◈' },
+      { to: '/accounting/sync', label: 'مزامنة ERPNext', icon: '⇄' },
+      { to: '/users', label: 'المستخدمون والأدوار', icon: '◉', tabs: [{ to: '/users', label: 'المستخدمون' }, { to: '/roles', label: 'الأدوار والصلاحيات' }] },
     ],
   },
 ];
@@ -54,6 +70,7 @@ export const NAV_GROUPS: NavGroup[] = [
 export const QUICK_ACTIONS: Array<{ to: string; label: string }> = [
   { to: '/invoices/new', label: 'فاتورة مبيعات' },
   { to: '/payments', label: 'سند قبض' },
+  { to: '/accounting/entries', label: 'قيد محاسبي' },
   { to: '/purchasing', label: 'فاتورة شراء' },
   { to: '/inventory/receiving', label: 'استلام بضاعة' },
   { to: '/inventory/transfers', label: 'تحويل مخزون' },

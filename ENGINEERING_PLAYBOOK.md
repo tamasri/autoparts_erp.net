@@ -138,6 +138,16 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - ERPNext does **not** refuse a second Customer/Supplier with the same name; it creates "X - 1". Always look a party up by name first (`UpsertPartyAsync`) and update it. Items are unique by `item_code`, so create-then-update-on-duplicate is fine for them.
 - Anything that changes the value of stock must reach the ledger: sales (COGS), purchases (Purchase Invoice), adjustments (Journal Entry). Add the matching outbox event when you add a new stock-changing flow.
 
+### 2.3e Accounting (ledger stays in ERPNext)
+- **One ledger.** Nothing is posted or summed twice: reports read ERPNext's GL Entry totals (`GetGlBalancesAsync`, a grouped query) and shape them in `FinancialReports` (pure, unit-tested). Never add a local copy of balances.
+- **Manual entries** live in `journal_entries` / `journal_entry_lines` (draft → POSTED → VOID). Posting writes an outbox event; `JournalEntryErpNextSyncer` books a submitted Journal Entry and records it in `erpnext_sync_log` (entity `JournalEntry`); void cancels it. A posted entry is never edited. The entry type's **kind** decides the ERPNext voucher type (`EntryKinds.ErpNextVoucherType`); users may add types (own name and number prefix) but not new kinds.
+- **Accounts are referenced by their ERPNext name** ("Cash - AB"). A receivable/payable account needs a customer/supplier on the line; every other account refuses one (`EntryLineRules`). Renaming an account changes its full name in ERPNext; posted entries follow, drafts must be re-picked.
+- **Reconciliation** stores only which GL lines were cleared (`ledger_reconciliation_items`, unique per line). Amounts are always re-read from ERPNext when completing; the statement balance must equal (previously cleared + ticked). Only the latest reconciliation of an account can be undone, and an entry with a reconciled line cannot be voided.
+- **Tags** attach to a manual entry (`JOURNAL_ENTRY`, id) or any ERPNext voucher (`ERPNEXT`, `"<voucher type>|<number>"`); `TagResolver` merges both views once an entry has been booked.
+- **Period locks:** module `ACCOUNTING` (create/edit through the pipeline, post and void through `IPeriodLockService`).
+- **Sections in the menu:** put related screens in one `NavItem` with `tabs` (`components/layout/navigation.ts`); do not add a menu entry per screen. Tabs inside a screen use `RoutedTabs` (`?tab=`).
+- Verify accounting changes with the stateful mock ledger approach: a fake ERPNext that really posts Journal Entries to an in-memory GL and answers grouped `GL Entry` queries, then check TB/BS/P&L totals by hand.
+
 ### 2.4 AI rules
 - All AI features go through one provider abstraction over an **OpenAI-compatible** endpoint (Groq / DeepSeek);
   base URL, model and key are configuration, the key never leaves the server.
@@ -165,7 +175,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **i18n:** `useTranslation()` from `react-i18next` on every screen. New translation keys added to both `ar.json` and `en.json` with a `// TODO: translate` comment in `en.json` if the English translation is unverified. Arabic is the primary language — the app is always shipped in Arabic; the EN switcher is additive.
 - **Notifications:** `toast` / `extractApiError` from `lib/toast`. POSTs guarded by `WithIdempotency()` must send an `Idempotency-Key` header (unchanged).
 - **Wording:** in Arabic UI text a customer is **الزبون / الزبائن** (never عميل). Money that has a company currency is stored and edited in USD; show the lira value from `useFxMid()` (`inLira`) instead of storing a second figure.
-- **UI kit for new screens:** `DataTable`, `ReasonDialog` (replaces window.prompt), `StatusChip`, `KpiTile`, `components/ui/PageHeader`, `DocumentDialog`, `DocumentViewButton`, `ExportMenu`, `components/accounts/StatementTable`; tree views via `@mui/x-tree-view`. A route-level `ErrorBoundary` is keyed by the URL so one crash does not stick to the next screen.
+- **UI kit for new screens:** `DataTable`, `ReasonDialog` (replaces window.prompt), `useConfirm` (replaces window.confirm), `ImportDialog` (every Excel/CSV import), `RoutedTabs`, `useLoad` (one load with filters), `useCan` (hide buttons the server would refuse), `StatusChip`, `KpiTile`, `components/ui/PageHeader`, `DocumentDialog`, `DocumentViewButton`, `ExportMenu`, `components/accounts/StatementTable`; tree views via `@mui/x-tree-view`. A route-level `ErrorBoundary` is keyed by the URL so one crash does not stick to the next screen.
 - **Pickers:** `LocationSelect`, `EntityPicker`, `ItemPickerModal`, `FxRateField` remain as-is; they will be progressively wrapped in MUI `Autocomplete` in Phase 5+.
 - **Code splitting:** `React.lazy` + `Suspense` on every route. Route-level `ErrorBoundary` from `components/common/ErrorBoundary.tsx`.
 - **Agent rule:** `frontend/src/features/<entity>/` is the canonical location for: `schema.ts` (Zod), `queries.ts` (TanStack), `<Entity>Dialog.tsx` (RHF form), keeping them co-located and importable by both the list page and detail page.

@@ -188,6 +188,15 @@ public static class PermissionCodes
         public const string ScheduledTasksWrite = "ai:scheduled_tasks:write";
     }
 
+    /// <summary>The ledger side of the business: chart of accounts, manual entries, reconciliation and the financial reports (ERPNext holds the ledger).</summary>
+    public static class Accounting
+    {
+        public const string Read = "accounting:read";
+        public const string ManageAccounts = "accounting:manage_accounts";
+        public const string PostEntries = "accounting:post_entries";
+        public const string Reconcile = "accounting:reconcile";
+    }
+
     public static class System
     {
         public const string ConfigRead = "system:config_read";
@@ -288,6 +297,10 @@ public static class PermissionCodes
         InventoryAlerts.Acknowledge,
         InventoryAlerts.Resolve,
         Barcodes.Scan,
+        Accounting.Read,
+        Accounting.ManageAccounts,
+        Accounting.PostEntries,
+        Accounting.Reconcile,
         Barcodes.Generate,
         Ai.Chat,
         Ai.SuggestionsRead,

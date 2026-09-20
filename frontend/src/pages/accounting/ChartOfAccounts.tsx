@@ -1,27 +1,31 @@
 /**
- * Chart of accounts, read live from ERPNext (the ledger's system of record) and shown inside our own UI, together with the
- * mapping of application events to ERPNext accounts. Read-only: accounts are managed in one place (ERPNext) and never edited here.
+ * شجرة الحسابات — the chart of accounts in ERPNext (groups and ledger accounts) with live balances. Accounts are created, renamed,
+ * retyped and disabled here (saved straight into ERPNext), loaded in bulk from Excel/CSV, and exported. Nothing is kept twice.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
-import { erpnextBrowseApi, type ErpAccount, type ErpMapping } from '../../api/endpoints/erpnextBrowse';
-import { unwrapList } from '../../api/apiData';
-import { extractApiError } from '../../lib/toast';
+import { accountingApi, type Account, type AccountImportResult, type AccountMapping } from '../../api/endpoints/accounting';
+import { unwrapList, unwrapNode } from '../../api/apiData';
+import { ACCOUNTING, useCan } from '../../hooks/useCan';
+import { useConfirm } from '../../hooks/useConfirm';
+import { extractApiError, toast } from '../../lib/toast';
+import { money } from '../../lib/money';
 import { num, type ExportDocument } from '../../lib/exportClient';
 import PageHeader from '../../components/ui/PageHeader';
 import ExportMenu from '../../components/ui/ExportMenu';
+import ImportDialog, { type ImportSummary } from '../../components/ui/ImportDialog';
+import AccountDialog, { type AccountDialogMode } from '../../features/accounting/AccountDialog';
+import { ROOT_COLOR, ROOT_LABEL, accountTypeLabel } from '../../features/accounting/labels';
 
-type Node = ErpAccount & { children: Node[]; depth: number };
+type Node = Account & { children: Node[]; depth: number };
 
-const ROOT_LABEL: Record<string, string> = { Asset: 'أصول', Liability: 'التزامات', Equity: 'حقوق ملكية', Income: 'إيرادات', Expense: 'مصروفات' };
-const ROOT_COLOR: Record<string, 'primary' | 'warning' | 'secondary' | 'success' | 'error'> = { Asset: 'primary', Liability: 'warning', Equity: 'secondary', Income: 'success', Expense: 'error' };
 const PURPOSE_LABEL: Record<string, string> = { RECEIVABLE: 'ذمم الزبائن', PAYABLE: 'ذمم الموردين', CASH: 'الصندوق (نقد)', BANK: 'المصرف', INCOME: 'الإيرادات', COGS: 'تكلفة البضاعة المباعة', INVENTORY: 'المخزون' };
+const IMPORT_STATUS = { CREATE: 'ok', CREATED: 'ok', EXISTS: 'skipped', ERROR: 'error' } as const;
 
-const money = (v: number | null | undefined): string => (v === null || v === undefined ? '' : v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
-
-function buildTree(flat: ErpAccount[]): Node[] {
+function buildTree(flat: Account[]): Node[] {
   const byName = new Map<string, Node>(flat.map((a) => [a.name, { ...a, children: [], depth: 0 }]));
   const roots: Node[] = [];
   for (const n of byName.values()) {
@@ -33,67 +37,55 @@ function buildTree(flat: ErpAccount[]): Node[] {
   return roots;
 }
 
-function flatten(nodes: Node[]): Node[] {
-  return nodes.flatMap((n) => [n, ...flatten(n.children)]);
-}
+const flatten = (nodes: Node[]): Node[] => nodes.flatMap((n) => [n, ...flatten(n.children)]);
 
-function renderNodes(nodes: Node[], showBalances: boolean, onPick: (n: Node) => void): JSX.Element[] {
+function renderNodes(nodes: Node[], onPick: (n: Node) => void): JSX.Element[] {
   return nodes.map((n) => (
     <TreeItem
-      key={n.name}
-      itemId={n.name}
-      onClick={(e) => { e.stopPropagation(); onPick(n); }}
+      key={n.name} itemId={n.name} onClick={(e) => { e.stopPropagation(); onPick(n); }}
       label={(
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.4, pr: 1 }}>
           <Typography variant="body2" fontWeight={n.isGroup ? 700 : 400}>{n.accountName}</Typography>
-          {showBalances ? <Typography variant="body2" color={n.balance ? 'text.primary' : 'text.disabled'} sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{money(n.balance) || '—'}</Typography> : null}
+          <Typography variant="body2" color={n.balance ? 'text.primary' : 'text.disabled'} sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{n.balance ? money(n.balance) : '—'}</Typography>
         </Stack>
       )}
     >
-      {n.children.length > 0 ? renderNodes(n.children, showBalances, onPick) : null}
+      {n.children.length > 0 ? renderNodes(n.children, onPick) : null}
     </TreeItem>
   ));
 }
 
+async function uploadAccounts(file: File, dryRun: boolean): Promise<ImportSummary> {
+  const r = unwrapNode<AccountImportResult>((await accountingApi.importAccounts(file, dryRun)).data) as AccountImportResult;
+  return { dryRun: r.dryRun, total: r.total, created: r.created, skipped: r.existing, failed: r.failed, rows: r.rows.map((x) => ({ rowNumber: x.rowNumber, label: x.accountName, status: IMPORT_STATUS[x.status], message: x.message })) };
+}
+
 export default function ChartOfAccounts(): JSX.Element {
-  const [accounts, setAccounts] = useState<ErpAccount[]>([]);
-  const [mapping, setMapping] = useState<ErpMapping[]>([]);
+  const canManage = useCan(ACCOUNTING.manageAccounts);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [mapping, setMapping] = useState<AccountMapping[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingBalances, setLoadingBalances] = useState(false);
-  const [hasBalances, setHasBalances] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<Node | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<AccountDialogMode | null>(null);
+  const [importing, setImporting] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const load = useCallback(async (): Promise<void> => {
-    setLoading(true); setError(''); setHasBalances(false);
+    setLoading(true); setError('');
     try {
-      const [tree, map] = await Promise.all([erpnextBrowseApi.accounts(false), erpnextBrowseApi.mapping().catch(() => null)]);
-      setAccounts(unwrapList<ErpAccount>(tree.data));
-      setMapping(map ? unwrapList<ErpMapping>(map.data) : []);
-    } catch (e: unknown) {
-      setError(extractApiError(e, 'تعذر قراءة شجرة الحسابات من ERPNext'));
-    } finally {
-      setLoading(false);
-    }
+      const [tree, map] = await Promise.all([accountingApi.accounts(true), accountingApi.mapping().catch(() => null)]);
+      setAccounts(unwrapList<Account>(tree.data));
+      setMapping(map ? unwrapList<AccountMapping>(map.data) : []);
+    } catch (e: unknown) { setError(extractApiError(e, 'تعذر قراءة شجرة الحسابات من ERPNext')); }
+    finally { setLoading(false); }
   }, []);
-
   useEffect(() => { void load(); }, [load]);
 
-  async function loadBalances(): Promise<void> {
-    setLoadingBalances(true);
-    try {
-      const res = await erpnextBrowseApi.accounts(true);
-      setAccounts(unwrapList<ErpAccount>(res.data));
-      setHasBalances(true);
-    } catch (e: unknown) {
-      setError(extractApiError(e, 'تعذر قراءة الأرصدة'));
-    } finally {
-      setLoadingBalances(false);
-    }
-  }
-
   const tree = useMemo(() => buildTree(accounts), [accounts]);
+  const all = useMemo(() => flatten(tree), [tree]);
+  const current = all.find((n) => n.name === selected) ?? null;
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return tree;
@@ -103,31 +95,35 @@ export default function ChartOfAccounts(): JSX.Element {
     };
     return tree.map(keep).filter((n): n is Node => n !== null);
   }, [tree, search]);
-  const expandedIds = useMemo(() => (search.trim() ? flatten(visible).map((n) => n.name) : undefined), [visible, search]);
+
+  async function disable(account: Account): Promise<void> {
+    if (!(await confirm(`تعطيل الحساب «${account.accountName}»؟ يختفي من الشجرة وتبقى قيوده السابقة في الدفتر.`, { confirmLabel: 'تعطيل' }))) return;
+    try { await accountingApi.updateAccount(account.name, { disabled: true }); toast.success('عُطّل الحساب'); setSelected(null); await load(); }
+    catch (e: unknown) { toast.error(extractApiError(e, 'تعذر تعطيل الحساب')); }
+  }
 
   const buildExport = async (): Promise<ExportDocument> => ({
     title: 'شجرة الحسابات', subtitle: 'من ERPNext', fileName: 'chart-of-accounts', fields: [],
     tables: [{
-      columns: ['الحساب', 'الاسم', 'المستوى', 'النوع', 'الفئة', 'العملة', 'الرصيد'],
-      rows: flatten(tree).map((n) => [n.name, `${'    '.repeat(n.depth)}${n.accountName}`, String(n.depth + 1), n.isGroup ? 'مجموعة' : 'حساب', ROOT_LABEL[n.rootType ?? ''] ?? n.rootType ?? '', n.currency ?? '', num(n.balance)]),
+      columns: ['اسم الحساب', 'الحساب الأب', 'مجموعة؟', 'نوع الحساب', 'الفئة', 'العملة', 'الرصيد'],
+      rows: all.map((n) => [`${'    '.repeat(n.depth)}${n.accountName}`, n.parentAccount ?? '', n.isGroup ? '1' : '0', n.accountType ?? '', ROOT_LABEL[n.rootType ?? ''] ?? n.rootType ?? '', n.currency ?? '', num(n.balance)]),
       numericColumns: [6],
     }],
   });
 
-  const mapped = new Set(mapping.map((m) => m.account).filter(Boolean));
+  const mappedTo = new Map<string, string[]>();
+  for (const m of mapping) if (m.account) mappedTo.set(m.account, [...(mappedTo.get(m.account) ?? []), PURPOSE_LABEL[m.purpose] ?? m.purpose]);
 
   return (
     <Box>
       <PageHeader
-        title="شجرة الحسابات"
-        subtitle="تُقرأ مباشرة من ERPNext — مصدر الحقيقة المحاسبي — للعرض والربط فقط"
+        title="شجرة الحسابات" subtitle="المجموعات وحسابات الحركة كما في دفتر الأستاذ (ERPNext) مع أرصدتها الحية"
         actions={(
           <>
             <Button variant="outlined" size="small" onClick={() => void load()}>↻ تحديث</Button>
-            <Button variant="contained" size="small" disabled={loadingBalances || loading} onClick={() => void loadBalances()}>
-              {loadingBalances ? 'جارٍ قراءة الأرصدة...' : hasBalances ? 'تحديث الأرصدة' : 'عرض الأرصدة'}
-            </Button>
             <ExportMenu build={buildExport} disabled={loading || accounts.length === 0} />
+            {canManage ? <Button variant="outlined" size="small" onClick={() => setImporting(true)}>⬆ استيراد Excel / CSV</Button> : null}
+            {canManage ? <Button variant="contained" size="small" onClick={() => setDialog({ kind: 'create', parent: current?.isGroup ? current.name : current?.parentAccount ?? null })}>＋ حساب جديد</Button> : null}
           </>
         )}
       />
@@ -140,8 +136,8 @@ export default function ChartOfAccounts(): JSX.Element {
             {loading ? <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}><CircularProgress /></Box> : accounts.length === 0 ? (
               <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>لا توجد حسابات (تحقق من تفعيل ERPNext)</Typography>
             ) : (
-              <SimpleTreeView key={search ? 'search' : 'all'} defaultExpandedItems={expandedIds ?? flatten(tree).filter((n) => n.isGroup).map((n) => n.name)} expansionTrigger="iconContainer">
-                {renderNodes(visible, hasBalances, setSelected)}
+              <SimpleTreeView key={search ? 'search' : 'all'} defaultExpandedItems={search.trim() ? flatten(visible).map((n) => n.name) : all.filter((n) => n.isGroup).map((n) => n.name)} expansionTrigger="iconContainer" selectedItems={selected}>
+                {renderNodes(visible, (n) => setSelected(n.name))}
               </SimpleTreeView>
             )}
           </CardContent>
@@ -151,18 +147,24 @@ export default function ChartOfAccounts(): JSX.Element {
           <Card variant="outlined" sx={{ borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>الحساب المحدد</Typography>
-              {selected ? (
-                <Stack spacing={0.8}>
-                  <Typography fontWeight={800}>{selected.accountName}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr', textAlign: 'right' }}>{selected.name}</Typography>
+              {current ? (
+                <Stack spacing={1}>
+                  <Typography fontWeight={800}>{current.accountName}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr', textAlign: 'right' }}>{current.name}</Typography>
                   <Stack direction="row" gap={1} flexWrap="wrap">
-                    {selected.rootType ? <Chip size="small" color={ROOT_COLOR[selected.rootType] ?? 'default'} label={ROOT_LABEL[selected.rootType] ?? selected.rootType} /> : null}
-                    <Chip size="small" variant="outlined" label={selected.isGroup ? 'مجموعة' : 'حساب حركة'} />
-                    {selected.accountType ? <Chip size="small" variant="outlined" label={selected.accountType} /> : null}
-                    {selected.currency ? <Chip size="small" variant="outlined" label={selected.currency} /> : null}
+                    {current.rootType ? <Chip size="small" color={ROOT_COLOR[current.rootType] ?? 'default'} label={ROOT_LABEL[current.rootType] ?? current.rootType} /> : null}
+                    <Chip size="small" variant="outlined" label={current.isGroup ? 'مجموعة' : 'حساب حركة'} />
+                    {current.accountType ? <Chip size="small" variant="outlined" label={accountTypeLabel(current.accountType)} /> : null}
+                    {current.currency ? <Chip size="small" variant="outlined" label={current.currency} /> : null}
                   </Stack>
-                  {selected.balance !== null ? <Typography variant="h5" fontWeight={800}>{money(selected.balance)} {selected.currency}</Typography> : null}
-                  {mapped.has(selected.name) ? <Alert severity="info" sx={{ mt: 1 }}>يستخدمه النظام: {mapping.filter((m) => m.account === selected.name).map((m) => PURPOSE_LABEL[m.purpose] ?? m.purpose).join('، ')}</Alert> : null}
+                  {current.balance !== null ? <Typography variant="h5" fontWeight={800} sx={{ direction: 'ltr', textAlign: 'right' }}>{money(current.balance)} {current.currency}</Typography> : null}
+                  {mappedTo.has(current.name) ? <Alert severity="info">يستخدمه النظام: {mappedTo.get(current.name)!.join('، ')}</Alert> : null}
+                  <Stack direction="row" gap={1} flexWrap="wrap" sx={{ pt: 1 }}>
+                    {!current.isGroup ? <Button size="small" variant="contained" component={RouterLink} to={`/accounting/reports?tab=ledger&account=${encodeURIComponent(current.name)}`}>كشف الحساب</Button> : null}
+                    {canManage && current.isGroup ? <Button size="small" variant="outlined" onClick={() => setDialog({ kind: 'create', parent: current.name })}>＋ حساب فرعي</Button> : null}
+                    {canManage ? <Button size="small" variant="outlined" onClick={() => setDialog({ kind: 'edit', account: current })}>تعديل</Button> : null}
+                    {canManage && !mappedTo.has(current.name) && current.parentAccount ? <Button size="small" color="error" onClick={() => void disable(current)}>تعطيل</Button> : null}
+                  </Stack>
                 </Stack>
               ) : <Typography color="text.secondary">اختر حساباً من الشجرة.</Typography>}
             </CardContent>
@@ -171,14 +173,14 @@ export default function ChartOfAccounts(): JSX.Element {
           <Card variant="outlined" sx={{ borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={700}>ربط النظام بالحسابات</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>أي حساب في ERPNext يُرحَّل إليه كل حدث في النظام.</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>أي حساب في ERPNext يُرحَّل إليه كل حدث في النظام (لا يُغيَّر من هنا حتى لا ينكسر الترحيل).</Typography>
               <Table size="small">
                 <TableHead><TableRow><TableCell>الحدث</TableCell><TableCell>حساب ERPNext</TableCell></TableRow></TableHead>
                 <TableBody>
                   {mapping.length === 0 ? <TableRow><TableCell colSpan={2} align="center" sx={{ color: 'text.secondary' }}>—</TableCell></TableRow> : mapping.map((m) => (
                     <TableRow key={m.purpose} hover>
                       <TableCell><Typography variant="body2" fontWeight={600}>{PURPOSE_LABEL[m.purpose] ?? m.purpose}</Typography><Typography variant="caption" color="text.secondary">{m.description}</Typography></TableCell>
-                      <TableCell>{m.account ? <Chip size="small" label={m.account} color="success" variant="outlined" /> : <Chip size="small" label="غير معرّف" color="warning" />}</TableCell>
+                      <TableCell>{m.account ? <Chip size="small" label={m.account} color="success" variant="outlined" onClick={() => setSelected(m.account)} /> : <Chip size="small" label="غير معرّف" color="warning" />}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -187,6 +189,14 @@ export default function ChartOfAccounts(): JSX.Element {
           </Card>
         </Stack>
       </Box>
+
+      <AccountDialog open={dialog !== null} mode={dialog} accounts={accounts} onClose={() => setDialog(null)} onSaved={(name) => { setSelected(name); void load(); }} />
+      <ImportDialog
+        open={importing} onClose={() => setImporting(false)} onImported={() => void load()} title="استيراد شجرة حسابات من Excel / CSV" noun="حساب" labelHeader="الحساب" templateFileName="accounts-template"
+        intro="حمّل القالب وعبّئ الحسابات (الاسم، الحساب الأب، مجموعة أم حساب حركة، النوع). ضع الأب قبل أبنائه. يُفحص الملف أولاً دون كتابة، والحسابات الموجودة تُتجاوز، ويمكنك استيراد ما صدّرته من هذه الشجرة نفسها."
+        downloadTemplate={async (format) => (await accountingApi.accountImportTemplate(format)).data as Blob} upload={uploadAccounts}
+      />
+      {confirmDialog}
     </Box>
   );
 }

@@ -114,7 +114,7 @@ If `git pull` complains about local changes on the server, look at them (`git di
 - **Change the default ERPNext `Administrator` password (`admin`)** — pending (H-4).
 
 ### 3.4a ERPNext read access (chart of accounts, documents)
-The API user needs read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item, and permission to call `erpnext.accounts.utils.get_balance_on`. If the chart of accounts screen shows an error, read the message: it is ERPNext's own permission text. Roles allowed to open these screens in our app: SYSTEM_ADMIN, AUDITOR, COMPLIANCE_OFFICER and the legacy ACCOUNTANT.
+The API user needs read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item. The accounting screens also **write**: create/write on **Account** (chart maintenance; renaming calls `erpnext.accounts.doctype.account.account.update_account_number`), and create/submit/cancel on **Journal Entry**. Reports use grouped `GL Entry` queries (`group_by`, `sum(debit)`), so the user must be allowed to read GL Entry with aggregates. If an accounting screen shows an error, read the message: it is ERPNext's own text.
 
 ### 3.5 Firewall / network
 - `ufw` should allow only 22, 80, 443 to the world. Container → host Postgres needs `5432` from `172.16.0.0/12`.
@@ -142,6 +142,9 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 | Approvals list empty / posting an invoice or stop-ship never completes | maker-checker: requester cannot review own request | log in as a second approver, or set `GOVERNANCE_ALLOW_SELF_APPROVAL=true` temporarily |
 | `/auth/me` says user not found; audit rows show an all-zero user id | JWT `sub` remapped, `UserId` = `Guid.Empty` | `MapInboundClaims = false` (fixed) |
 | PDF shows boxes or is missing Arabic | fonts not embedded | fonts are embedded resources under `Infrastructure/Exports/Fonts`; rebuild the image, never rely on OS fonts |
+| Accounting screens say "ERPNext integration is disabled" (503) | `Erpnext:Enabled` is false or the API cannot reach ERPNext | enable it in `.env.vps`, then redeploy |
+| A posted entry stays "بانتظار الإرسال" or "فشل الإرسال" | outbox not processed yet, or ERPNext refused the Journal Entry | open the entry: the error is ERPNext's text (closed period, missing party on a receivable line, currency); fix and press "مزامنة الآن" |
+| "The ticked lines do not match the statement" | statement balance ≠ previously cleared + ticked lines | tick the lines that are on the statement; the difference is shown live |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
 ---

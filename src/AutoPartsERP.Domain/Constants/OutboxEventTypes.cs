@@ -17,4 +17,6 @@ public static class OutboxEventTypes
     public const string SupplierPaymentCreated = "SupplierPaymentCreated";
     public const string SupplierPaymentReversed = "SupplierPaymentReversed";
     public const string StockAdjustmentPosted = "StockAdjustmentPosted";
+    public const string JournalEntryPosted = "JournalEntryPosted";
+    public const string JournalEntryVoided = "JournalEntryVoided";
 }

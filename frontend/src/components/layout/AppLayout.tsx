@@ -1,16 +1,20 @@
 /** Application shell: menu on the right (RTL), top bar with quick actions and the user menu, page content in the middle. */
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, NavLink, Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import {
-  AppBar, Avatar, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Toolbar, Tooltip, Typography,
+  AppBar, Avatar, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tab, Tabs, Toolbar, Tooltip, Typography,
   useMediaQuery,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useAuthStore } from '../../stores/authStore';
-import { NAV_GROUPS, QUICK_ACTIONS } from './navigation';
+import { NAV_GROUPS, QUICK_ACTIONS, type NavItem, type NavTab } from './navigation';
 
 const WIDTH = 260;
 const WIDTH_COLLAPSED = 68;
+
+const tabMatches = (tab: NavTab, pathname: string): boolean => matchPath({ path: tab.to, end: tab.end ?? true }, pathname) !== null;
+const itemMatches = (item: NavItem, pathname: string): boolean =>
+  item.tabs ? item.tabs.some((t) => tabMatches(t, pathname)) : matchPath({ path: item.to, end: item.end ?? false }, pathname) !== null;
 
 const initials = (name: string): string => {
   const parts = name.trim().split(/\s+/);
@@ -20,6 +24,7 @@ const initials = (name: string): string => {
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }): JSX.Element {
   const theme = useTheme();
   const bg = theme.palette.vex.sidebarBg;
+  const { pathname } = useLocation();
   return (
     <Box
       component="aside"
@@ -46,12 +51,13 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             {group.items.map((item) => (
               <Tooltip key={item.to} title={collapsed ? item.label : ''} placement="left">
                 <ListItemButton
-                  component={NavLink}
+                  component={RouterLink}
                   to={item.to}
-                  end={item.end}
+                  selected={itemMatches(item, pathname)}
                   sx={{
                     mx: 1, my: 0.25, borderRadius: 2, minHeight: 40, color: 'inherit', justifyContent: collapsed ? 'center' : 'flex-start',
-                    '&.active': { bgcolor: 'rgba(92,84,255,0.28)', color: '#fff', fontWeight: 700 },
+                    '&.Mui-selected': { bgcolor: 'rgba(92,84,255,0.28)', color: '#fff', fontWeight: 700 },
+                    '&.Mui-selected:hover': { bgcolor: 'rgba(92,84,255,0.36)' },
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.07)' },
                   }}
                 >
@@ -80,6 +86,8 @@ export default function AppLayout(): JSX.Element {
   const [collapsedByUser, setCollapsedByUser] = useState(false);
   const [quick, setQuick] = useState<HTMLElement | null>(null);
   const [account, setAccount] = useState<HTMLElement | null>(null);
+  const { pathname } = useLocation();
+  const section = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.tabs && itemMatches(i, pathname));
 
   const collapsed = narrow || collapsedByUser;
   const name = user?.fullName || user?.username || 'مستخدم';
@@ -114,6 +122,14 @@ export default function AppLayout(): JSX.Element {
         </AppBar>
 
         <Box component="main" sx={{ flex: 1, p: { xs: 2, md: 3 }, minWidth: 0 }}>
+          {section?.tabs ? (
+            <Tabs
+              value={Math.max(0, section.tabs.findIndex((t) => tabMatches(t, pathname)))} variant="scrollable" scrollButtons="auto"
+              sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            >
+              {section.tabs.map((t) => <Tab key={t.to} label={t.label} component={NavLink} to={t.to} end={t.end ?? true} />)}
+            </Tabs>
+          ) : null}
           <Outlet />
         </Box>
       </Box>

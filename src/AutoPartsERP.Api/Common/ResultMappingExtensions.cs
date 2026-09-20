@@ -70,6 +70,11 @@ public static class ResultMappingExtensions
             return StatusCodes.Status202Accepted;
         }
 
+        if (errorCode == "ErpNext.Disabled")
+        {
+            return StatusCodes.Status503ServiceUnavailable;
+        }
+
         return StatusCodes.Status400BadRequest;
     }
 }

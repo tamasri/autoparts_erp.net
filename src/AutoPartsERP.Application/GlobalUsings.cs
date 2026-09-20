@@ -6,6 +6,7 @@ global using System.Text;
 global using System.Text.Json;
 global using System.Text.RegularExpressions;
 
+global using AutoPartsERP.Contracts.Accounting;
 global using AutoPartsERP.Contracts.Approvals;
 global using AutoPartsERP.Contracts.Ai;
 global using AutoPartsERP.Contracts.Audit;

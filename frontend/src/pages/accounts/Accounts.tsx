@@ -24,12 +24,16 @@ type Account = {
   hasCombinedStatement: boolean; activeTypeCodes: string[]; customerId?: string | null;
 };
 
-const ROLES: Record<string, { label: string; color: 'primary' | 'secondary' | 'success' | 'warning' }> = {
+// The role codes are the server's party types (PartyTypeCodes); anything else is refused when the account is created.
+const ROLES: Record<string, { label: string; color: 'primary' | 'secondary' | 'success' | 'warning' | 'default' }> = {
   CUSTOMER: { label: 'زبون', color: 'primary' }, VENDOR: { label: 'مورّد', color: 'secondary' },
-  SALES_REP: { label: 'مندوب مبيعات', color: 'success' }, CARRIER: { label: 'ناقل', color: 'warning' },
+  EMPLOYEE: { label: 'موظف / مندوب', color: 'success' }, DELIVERY_COMPANY: { label: 'شركة توصيل', color: 'warning' }, GOVERNMENT: { label: 'جهة حكومية', color: 'default' },
 };
-const FILTERS = [{ key: '', label: 'الكل' }, { key: 'CUSTOMER', label: 'الزبائن' }, { key: 'VENDOR', label: 'الموردون' }, { key: 'SALES_REP', label: 'المندوبون' }, { key: 'CARRIER', label: 'الناقلون' }];
-const OTHER_ROLES = ['VENDOR', 'SALES_REP', 'CARRIER'];
+const FILTERS = [
+  { key: '', label: 'الكل' }, { key: 'CUSTOMER', label: 'الزبائن' }, { key: 'VENDOR', label: 'الموردون' },
+  { key: 'EMPLOYEE', label: 'الموظفون' }, { key: 'DELIVERY_COMPANY', label: 'شركات التوصيل' }, { key: 'GOVERNMENT', label: 'جهات حكومية' },
+];
+const OTHER_ROLES = ['VENDOR', 'EMPLOYEE', 'DELIVERY_COMPANY', 'GOVERNMENT'];
 
 function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }): JSX.Element {
   const [nameAr, setNameAr] = useState('');
@@ -59,7 +63,7 @@ function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: 
           {error ? <Alert severity="error">{error}</Alert> : null}
           <TextField size="small" label="الاسم بالعربية *" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
           <TextField size="small" label="الاسم بالإنجليزية" value={nameEn} onChange={(e) => setNameEn(e.target.value)} inputProps={{ dir: 'ltr' }} />
-          <TextField size="small" label="الرقم الضريبي" value={tax} onChange={(e) => setTax(e.target.value)} />
+          <TextField size="small" label="الرقم الضريبي" value={tax} onChange={(e) => setTax(e.target.value)} autoComplete="off" />
           <Box>
             {OTHER_ROLES.map((r) => (
               <FormControlLabel key={r} label={ROLES[r].label} control={<Checkbox size="small" checked={roles.includes(r)}
