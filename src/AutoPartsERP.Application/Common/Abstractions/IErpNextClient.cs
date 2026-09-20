@@ -67,7 +67,8 @@ public sealed record ErpNextSalesInvoiceSync(
     bool IsReturn = false,
     string? ReturnAgainst = null);
 
-public sealed record ErpNextCogsEntrySync(Guid LocalInvoiceId, string InvoiceNumber, DateOnly Date, decimal Amount, bool IsReturn);
+/// <summary>A cost-of-goods Journal Entry (Dr COGS / Cr Inventory, reversed when <c>IsReturn</c>). <c>Description</c> replaces the default invoice remark, e.g. for an inventory adjustment.</summary>
+public sealed record ErpNextCogsEntrySync(Guid LocalInvoiceId, string InvoiceNumber, DateOnly Date, decimal Amount, bool IsReturn, string? Description = null);
 
 public sealed record ErpNextPurchaseInvoiceSync(
     Guid LocalId,

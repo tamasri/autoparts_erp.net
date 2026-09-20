@@ -65,3 +65,19 @@ public sealed class SupplierPaymentReversedOutboxHandler : IOutboxEventHandler
         if (payload is not null) await _syncer.CancelPaymentAsync(payload.SupplierPaymentId, cancellationToken);
     }
 }
+
+/// <summary>A posted stock adjustment is booked in ERPNext at its cost value.</summary>
+public sealed class StockAdjustmentPostedOutboxHandler : IOutboxEventHandler
+{
+    private readonly StockAdjustmentErpNextSyncer _syncer;
+
+    public StockAdjustmentPostedOutboxHandler(StockAdjustmentErpNextSyncer syncer) { _syncer = syncer; }
+
+    public string EventType => OutboxEventTypes.StockAdjustmentPosted;
+
+    public async Task HandleAsync(OutboxMessage message, CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Deserialize<StockAdjustmentPostedPayload>(message.PayloadJson);
+        if (payload is not null) await _syncer.SyncAsync(payload.StockAdjustmentId, cancellationToken);
+    }
+}

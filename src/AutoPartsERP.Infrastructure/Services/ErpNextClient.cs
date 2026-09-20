@@ -239,7 +239,7 @@ public sealed partial class ErpNextClient : IErpNextClient
             ["voucher_type"] = "Journal Entry",
             ["company"] = c.Name,
             ["posting_date"] = entry.Date.ToString("yyyy-MM-dd"),
-            ["user_remark"] = $"Cost of goods sold for AutoPartsERP invoice {entry.InvoiceNumber}",
+            ["user_remark"] = entry.Description ?? $"Cost of goods sold for AutoPartsERP invoice {entry.InvoiceNumber}",
             ["accounts"] = new JsonArray
             {
                 new JsonObject { ["account"] = debit, ["debit_in_account_currency"] = entry.Amount },

@@ -17,15 +17,17 @@ public sealed class SyncCatalogToErpNextJob
     private readonly SalesInvoiceErpNextSyncer _invoiceSyncer;
     private readonly PaymentErpNextSyncer _paymentSyncer;
     private readonly PurchaseErpNextSyncer _purchaseSyncer;
+    private readonly StockAdjustmentErpNextSyncer _adjustmentSyncer;
     private readonly ILogger<SyncCatalogToErpNextJob> _logger;
 
-    public SyncCatalogToErpNextJob(IDbConnectionFactory connectionFactory, IErpNextClient erpNextClient, SalesInvoiceErpNextSyncer invoiceSyncer, PaymentErpNextSyncer paymentSyncer, PurchaseErpNextSyncer purchaseSyncer, ILogger<SyncCatalogToErpNextJob> logger)
+    public SyncCatalogToErpNextJob(IDbConnectionFactory connectionFactory, IErpNextClient erpNextClient, SalesInvoiceErpNextSyncer invoiceSyncer, PaymentErpNextSyncer paymentSyncer, PurchaseErpNextSyncer purchaseSyncer, StockAdjustmentErpNextSyncer adjustmentSyncer, ILogger<SyncCatalogToErpNextJob> logger)
     {
         _connectionFactory = connectionFactory;
         _erpNextClient = erpNextClient;
         _invoiceSyncer = invoiceSyncer;
         _paymentSyncer = paymentSyncer;
         _purchaseSyncer = purchaseSyncer;
+        _adjustmentSyncer = adjustmentSyncer;
         _logger = logger;
     }
 
@@ -145,6 +147,11 @@ public sealed class SyncCatalogToErpNextJob
         foreach (var paymentId in pendingSupplierPayments)
         {
             await _purchaseSyncer.SyncPaymentAsync(paymentId, cancellationToken);
+        }
+
+        foreach (var adjustmentId in await _adjustmentSyncer.FindPendingAsync(cancellationToken))
+        {
+            await _adjustmentSyncer.SyncAsync(adjustmentId, cancellationToken);
         }
     }
 

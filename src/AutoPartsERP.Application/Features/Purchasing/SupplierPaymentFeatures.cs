@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Common.Messaging;
 using Dapper;
 
 namespace AutoPartsERP.Application.Features.Purchasing;
@@ -95,7 +96,7 @@ public sealed class CreateSupplierPaymentCommandHandler : IRequestHandler<Create
                 new { Bill = allocation.PurchaseInvoiceId, Amount = allocation.AmountUsd }, transaction, cancellationToken: cancellationToken));
         }
 
-        await PurchasingOutbox.AddAsync(connection, transaction, OutboxEventTypes.SupplierPaymentCreated, "SupplierPayment", id,
+        await OutboxWriter.AddAsync(connection, transaction, OutboxEventTypes.SupplierPaymentCreated, "SupplierPayment", id,
             new SupplierPaymentEventPayload(id), _currentUser.CorrelationId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(id);
@@ -170,7 +171,7 @@ public sealed class ReverseSupplierPaymentCommandHandler : IRequestHandler<Rever
             "UPDATE supplier_payments SET is_reversed = TRUE, reverse_reason = @Reason, reversed_at = now(), reversed_by = @By WHERE id = @Id;",
             new { request.Id, request.Reason, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
 
-        await PurchasingOutbox.AddAsync(connection, transaction, OutboxEventTypes.SupplierPaymentReversed, "SupplierPayment", request.Id,
+        await OutboxWriter.AddAsync(connection, transaction, OutboxEventTypes.SupplierPaymentReversed, "SupplierPayment", request.Id,
             new SupplierPaymentEventPayload(request.Id), _currentUser.CorrelationId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(request.Id);

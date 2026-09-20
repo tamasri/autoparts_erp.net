@@ -1,10 +1,10 @@
 using System.Data.Common;
 using Dapper;
 
-namespace AutoPartsERP.Application.Features.Purchasing;
+namespace AutoPartsERP.Application.Common.Messaging;
 
 /// <summary>Writes an outbox row in the caller's transaction, so the ERPNext hand-off is committed together with the change it reports.</summary>
-internal static class PurchasingOutbox
+internal static class OutboxWriter
 {
     public static Task AddAsync<TPayload>(
         DbConnection connection, DbTransaction transaction, string eventType, string aggregateType, Guid aggregateId,

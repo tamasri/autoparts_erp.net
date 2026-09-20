@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Common.Messaging;
 using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.StockAdjustments;
 
@@ -334,6 +335,10 @@ public sealed class PostStockAdjustmentCommandHandler : IRequestHandler<PostStoc
             new { Id = request.StockAdjustmentId, PostedBy = _currentUser.UserId },
             transaction,
             cancellationToken: cancellationToken));
+
+        // The value of the adjustment must reach the ledger, or ERPNext's inventory drifts from the stock held here.
+        await OutboxWriter.AddAsync(connection, transaction, OutboxEventTypes.StockAdjustmentPosted, "StockAdjustment", request.StockAdjustmentId,
+            new StockAdjustmentPostedPayload(request.StockAdjustmentId), _currentUser.CorrelationId, cancellationToken);
 
         var outboxMessage = OutboxMessage.Create(
             OutboxEventTypes.StockAdjusted,

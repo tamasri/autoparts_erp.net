@@ -1,4 +1,5 @@
 using AutoPartsERP.Application.Features.Inventory;
+using AutoPartsERP.Application.Common.Messaging;
 using Dapper;
 
 namespace AutoPartsERP.Application.Features.Purchasing;
@@ -326,7 +327,7 @@ public sealed class PostPurchaseInvoiceCommandHandler : IRequestHandler<PostPurc
             """,
             new { request.Id, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
 
-        await PurchasingOutbox.AddAsync(connection, transaction, OutboxEventTypes.PurchaseInvoicePosted, "PurchaseInvoice", request.Id,
+        await OutboxWriter.AddAsync(connection, transaction, OutboxEventTypes.PurchaseInvoicePosted, "PurchaseInvoice", request.Id,
             new PurchaseInvoiceEventPayload(request.Id), _currentUser.CorrelationId, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -429,7 +430,7 @@ public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurc
 
         if (bill.Status == "POSTED")
         {
-            await PurchasingOutbox.AddAsync(connection, transaction, OutboxEventTypes.PurchaseInvoiceVoided, "PurchaseInvoice", request.Id,
+            await OutboxWriter.AddAsync(connection, transaction, OutboxEventTypes.PurchaseInvoiceVoided, "PurchaseInvoice", request.Id,
                 new PurchaseInvoiceEventPayload(request.Id), _currentUser.CorrelationId, cancellationToken);
         }
 

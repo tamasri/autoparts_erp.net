@@ -173,6 +173,7 @@ builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
 builder.Services.AddScoped<SalesInvoiceErpNextSyncer>();
 builder.Services.AddScoped<PaymentErpNextSyncer>();
 builder.Services.AddScoped<PurchaseErpNextSyncer>();
+builder.Services.AddScoped<StockAdjustmentErpNextSyncer>();
 builder.Services.Configure<ErpNextOptions>(builder.Configuration.GetSection(ErpNextOptions.SectionName));
 var erpNextEnabled = builder.Configuration.GetValue<bool>($"{ErpNextOptions.SectionName}:Enabled");
 if (erpNextEnabled)
@@ -239,6 +240,7 @@ builder.Services.AddScoped<IOutboxEventHandler, PurchaseInvoicePostedOutboxHandl
 builder.Services.AddScoped<IOutboxEventHandler, PurchaseInvoiceVoidedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, SupplierPaymentCreatedOutboxHandler>();
 builder.Services.AddScoped<IOutboxEventHandler, SupplierPaymentReversedOutboxHandler>();
+builder.Services.AddScoped<IOutboxEventHandler, StockAdjustmentPostedOutboxHandler>();
 
 // Audit configuration
 AuditConfiguration.Configure(builder.Configuration);
