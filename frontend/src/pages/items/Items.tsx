@@ -5,6 +5,10 @@ import { usePagedList } from '../../hooks/usePagedList';
 import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import { toast, extractApiError } from '../../lib/toast';
+import { unwrapPaged } from '../../api/apiData';
+import { num, type ExportDocument } from '../../lib/exportClient';
+import ExportMenu from '../../components/ui/ExportMenu';
+import ItemImportDialog from '../../components/items/ItemImportDialog';
 
 type ItemRow = {
   id: string;
@@ -31,6 +35,7 @@ export default function Items(): JSX.Element {
   const [form, setForm] = useState<CreateItemBody>(emptyForm);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
 
   const list = usePagedList<ItemRow>({
     errorMessage: 'تعذر تحميل الأصناف',
@@ -62,6 +67,24 @@ export default function Items(): JSX.Element {
     } finally { setBusy(false); }
   }
 
+  // Exports what the list is currently filtered to (up to 500 rows), not only the visible page.
+  const buildExport = async (): Promise<ExportDocument> => {
+    // The API serves at most 100 rows per request, so read up to five pages.
+    const first = unwrapPaged<ItemRow>((await itemsApi.browse({ search: list.searchInput.trim() || undefined, page: 1, pageSize: 100, includeInactive })).data);
+    const data = { ...first, items: [...first.items] };
+    for (let page = 2; page <= 5 && data.items.length < first.totalCount; page++) {
+      data.items.push(...unwrapPaged<ItemRow>((await itemsApi.browse({ search: list.searchInput.trim() || undefined, page, pageSize: 100, includeInactive })).data).items);
+    }
+    return {
+      title: 'الأصناف', subtitle: `${data.totalCount} صنف${data.totalCount > 500 ? ' (أول 500)' : ''}`, fileName: 'items', fields: [],
+      tables: [{
+        columns: ['رقم القطعة', 'الاسم (عربي)', 'الاسم (EN)', 'العلامة', 'المتوفر', 'حد الطلب', 'الحالة'],
+        rows: data.items.map((r) => [r.partNumber, r.nameAr, r.nameEn, r.brand ?? '', num(r.availableQty), num(r.reorderLevel), !r.isActive ? 'غير نشط' : r.isStopShip ? 'موقوف الشحن' : 'نشط']),
+        numericColumns: [4, 5],
+      }],
+    };
+  };
+
   const set = <K extends keyof CreateItemBody>(k: K, v: CreateItemBody[K]): void => setForm((f) => ({ ...f, [k]: v }));
 
   return (
@@ -71,10 +94,15 @@ export default function Items(): JSX.Element {
           <h1 className="vex-page-header__title">الأصناف</h1>
           <div className="vex-page-header__breadcrumb">بطاقات القطع: التفاصيل، المخزون، الأسماء البديلة، المكافئات والأسعار</div>
         </div>
-        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ صنف جديد'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <ExportMenu build={buildExport} />
+          <button type="button" onClick={() => setImportOpen(true)} className="btn-secondary">⬆ استيراد Excel / CSV</button>
+          <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
+            {showForm ? '✕ إلغاء' : '＋ صنف جديد'}
+          </button>
+        </div>
       </div>
+      <ItemImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImported={() => list.reload()} />
 
       {list.error ? <ErrorBanner message={list.error} /> : null}
 

@@ -58,7 +58,7 @@
 | **Accounting engine** | **ERPNext (Frappe) via REST**, `IErpNextClient` → `ErpNextClient` / `NullErpNextClient`; `erpnext_sync_log` | Live on the VPS, port 8080 |
 | Observability | OpenTelemetry (traces + Prometheus metrics at `/metrics`), Serilog, health checks | |
 | Docs | OpenAPI + Scalar (mapped unconditionally; not proxied by nginx) | Debt D6 |
-| Files | ClosedXML (Excel), QuestPDF (invoice PDF), QRCoder (QR) | |
+| Files | **One engine for print/export** (`IDocumentRenderer`: QuestPDF + ClosedXML + embedded Noto fonts, Arabic RTL) behind `POST /api/v1/exports/{pdf|xlsx|csv}`; CsvHelper for imports; QRCoder (QR) | QuestPDF Community licence |
 | Frontend | **React 19, Vite 6, TypeScript 5.7, react-router 7, Zustand 5, axios, sonner, @microsoft/signalr** | |
 | Frontend styling | **MUI v6** (`createTheme`, `direction:'rtl'`) + emotion cache + `stylis-plugin-rtl`; Vex tokens preserved inside theme; `theme.css` phased out per screen | **Adopted 2026-09-19** |
 | Frontend data | **@tanstack/react-query v5** (`useQuery`/`useMutation`, 30s `staleTime`); `lib/apiClient.ts` envelope unwrapper | **Adopted 2026-09-19** |
@@ -113,7 +113,9 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | **Items + item card** | browse/search/get/create/update/aliases/interchanges/stop-ship/stock | `Items.tsx`, `ItemCard.tsx` (5 tabs) | ✅ |
 | Catalog (SKU, categories, prices) | full | prices inside item card only | 🟡 no category management |
 | Inventory stock | stock/batches/trace/receive/adjust/transfer | `Inventory.tsx` (paged) | ✅ (no batch screens) |
-| Receiving / Putaway | full | `Receiving.tsx` | ✅ (unpaged) |
+| Warehouses & locations | create / edit / deactivate (blocked while stock exists, no cycles), per-location stock overview | `Warehouses.tsx` (`/inventory/warehouses`) | ✅ |
+| **Item movements (ledger)** | `GET /inventory/movements` over `inventory_movements`, written by receiving, putaway, transfers, adjustments, invoices (sale/return/void), direct receive/adjust/transfer and issue orders; running balance per item | `Movements.tsx` (`/inventory/movements`) | ✅ |
+| Receiving / Putaway | full | `Receiving.tsx` | ✅ (paged, pickers, view/print) |
 | Transfers | requests/orders/ship/receive | `Transfers.tsx` | ✅ (unpaged) |
 | Cycle counts | plan/record/approve variance | `CycleCounts.tsx` | ✅ (unpaged) |
 | Stock adjustments | create/post | `StockAdjustments.tsx` | ✅ (unpaged) |
@@ -122,6 +124,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 | Invoices | create/lines/confirm/post/void/PDF | `Invoices.tsx` (paged), **`InvoiceWorkspace.tsx` (item-picker dialog, customer/FX pickers)**, `InvoiceDetail.tsx` | ✅ (full lifecycle verified on Postgres) |
 | **Payments & allocations** | create, allocate to many invoices, reverse (returns the money to the invoices) — **synced to ERPNext as Payment Entry; reversal cancels it** | — | ✅ screen `/payments` (auto-allocation oldest-first, reversal) + backend + ERPNext link |
 | FX rates | list/latest/create | `FxRates.tsx` | ✅ |
+| **Chart of accounts + ERPNext browser** | `GET /erpnext/accounts` (tree, optional balances), `/accounts/mapping`, `/documents/{doctype}` (read-only allow-list, linked to local records) | `ChartOfAccounts.tsx`, `ErpDocuments.tsx` (MUI) | ✅ (read-only by design) |
+| **Print / export / import** | generic renderer; item import (.xlsx/.csv, dry run, idempotent) `POST /items/import` | `DocumentDialog`, `ExportMenu`, `ItemImportDialog`; view/print on transfers, issue orders, counts, adjustments, receiving, receipts; export on items, invoices, payments, statements, movements, warehouses, chart | ✅ |
 | Warranty | list/claim/process/reject + expiry job | — | 🟡 |
 | Reports | P&L, inventory value (+Excel), batch trace, account statement | — | 🟡 |
 | Barcodes | scan, generate item/batch codes | — | 🟡 (no scanner UI) |
@@ -191,6 +195,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       ids typed by hand). Use `LocationSelect`, `ItemPickerModal mode="warehouse"` and `EntityPicker`. Their list endpoints for
       issue orders/transfers also read `dynamic` rows and need the same typed-record fix.
 - [x] **D14 — DONE: rename propagates via rename_doc.** Was: renaming a customer is not propagated to ERPNext (it identifies customers by name).
+- [ ] **D15 — Two stock models.** WMS documents (receiving, putaway, transfer orders, adjustments) change `inventory_balances`; invoices, direct receive/adjust/transfer and (now) issue orders change `inventory_stock`. A periodic job copies stock → balances only, so goods received through a WMS document are **not** sellable until D9 is done. The item-movement ledger is complete for both sides.
+- [ ] **D16 — Old-style screens.** Only Customers, the chart of accounts, ERPNext documents, statements, warehouses and movements use MUI; the shell (sidebar/top bar) and ~20 other screens still use the Vex CSS classes. Migrate by screen with the shared kit in `components/ui`.
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
@@ -212,11 +218,24 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 #### PHASE 1 — Accounting core  · `Status: Not Started`
 - [x] Sync payments to ERPNext as Payment Entry (settles the Sales Invoices it was allocated to) and cancel on reversal — backend done and verified against a mock ERPNext.
 - [x] Payments **screen** (create, partial/multiple, allocate, reverse).
+- [x] Chart of accounts and account mapping shown from ERPNext; ERPNext document browser (read-only).
 - [ ] Bank/cash accounts (ERPNext accounts) and per-account statements.
 - [ ] Purchase invoices, purchase returns, discounts (ERPNext Purchase Invoice); quick-add supplier; bulk pay/receive.
 - [ ] Financial reports read from ERPNext: trial balance, P&L, balance sheet, AR/AP aging, general ledger.
 - [ ] Taxes (ERPNext tax templates) and currency handling on top of `fx_rates` (company currency USD).
 - [ ] Remove `monthly_pl_summary` / `RefreshMonthlyPlJob` once the ERPNext-backed reports replace them.
+
+#### PHASE W — Warehouse, documents and exports (2026-09-20)  · `Status: Mostly done`
+- [x] Warehouse control (locations CRUD + overview) and the item-movement ledger, fed by every stock-changing path.
+- [x] Issue orders really take stock out when issued (before: status change only).
+- [x] View / print / PDF / Excel / CSV for transfers, issue orders, cycle counts, adjustments, receiving, receipts, statements, movements; exports on the main lists.
+- [x] Real invoice PDF (it used to be a plain-text file served as PDF).
+- [x] Item import from Excel/CSV with template and dry run.
+- [x] Accounts label (UI only; `party` stays in code), combined statement only for customer+vendor accounts, customer statement rebuilt.
+- [ ] Unify the two stock models (D15/D9) — next.
+- [ ] Purchase invoices + supplier payments + ERPNext sync (client methods exist; screens, migration and syncers do not).
+- [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
+- [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 
 #### PHASE 2 — Sales experience  · `Status: Not Started`
 - [ ] POS screen: barcode/name/code search, fast lines, hold (= `DRAFT`) and resume.

@@ -66,7 +66,7 @@ authorised direct pushes to `main`; the working tree was clean at the last check
 behind nginx with a self-signed certificate on the bare IP (no domain yet). PostgreSQL 16 runs on the **host**
 (not in Docker); the `api` and `redis` containers run from `docker-compose.vps.yml`. ERPNext (frappe_docker
 `pwd.yml`) runs on the same host on port 8080. The server must be upgraded before production (see roadmap).
-Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md).
+Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the app image: embedded fonts for PDF (no OS fonts needed).
 
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
@@ -246,3 +246,13 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - Customer rename: when ERPNext refuses the rename (a record with the new name already exists) the catalog job now adopts that record via upsert instead of failing forever.
 - Removed `@mui/icons-material` from `vite.config.ts` manualChunks (not a dependency; broke `npm run build`).
 - New Payments screen and picker-based inventory screens (old-style components; migrate to the MUI stack with the rest).
+
+### 2026-09-20 — Claude (defects from testing, warehouse control, documents, exports)
+- **Audit first (owner rule):** `inventory_movements` already existed (written only by WMS paths), `locations` had a read endpoint only, QuestPDF/ClosedXML were referenced but the invoice "PDF" was plain text. Reused those; added CsvHelper and `@mui/x-tree-view`.
+- **PDF bug:** `GetInvoicePdfQuery` returned UTF-8 text labelled `application/pdf`. Now rendered by `IDocumentRenderer` (embedded Noto Naskh Arabic + Noto Sans, RTL). Verified by rasterising a page with `GenerateImages()` (a scratch console project; the browser pane cannot show PDFs).
+- **Sync errors from the screenshots:** inventory-account parent is now discovered (`Current Assets - ABBR` is not guaranteed); customer payment references are clamped to the invoice's real outstanding in ERPNext.
+- **Statements:** the customer statement endpoint returns an object (`transactions`), the old page read it as a list and showed nothing. A voided invoice and its credit note now net to zero (both were not counted consistently). Combined statement exists only for accounts that are both customer and vendor.
+- **Users page crash:** the API returns `roles: [{roleId, code, name}]`; the page rendered the objects (React error #31) and the shared error boundary kept the error for the next route.
+- **Issue orders** used to change status only; they now decrement stock and write the ledger.
+- New: warehouses screen, movements screen, chart of accounts, ERPNext documents, item import, view/print on all warehouse documents. UI label "Accounts" replaces "الأطراف" (code keeps `party`).
+- Test helpers used: mock ERPNext extended for Account list, `get_balance_on`, `get_count`, document lists (scratchpad, not committed).

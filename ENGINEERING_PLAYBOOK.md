@@ -118,6 +118,21 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
   the API with `Erpnext__Enabled=true Erpnext__BaseUrl=http://localhost:<port>`, and drive the flow; check the mock's request log
   and `erpnext_sync_log`. (Frappe's own validation still only runs on the real server — read its error text in the sync log.)
 
+### 2.3a Before you build anything (owner rule, 2026-09-20)
+1. **Check it is not already built and abandoned.** Search the modules, features, tables, DTOs and unused dependencies first (`grep` the module list, `\d table` in Postgres, `package.json`). This project has several half-finished pieces; extend them instead of adding a second one.
+2. **Use a ready-made library** for anything generic (PDF/Excel/CSV, tree views, tables, file parsing) — QuestPDF, ClosedXML, CsvHelper, MUI X are in the tree. Write only the glue.
+3. State in the commit or the session log what existed and what was reused.
+
+### 2.3b Stock and movements
+- **Every code path that changes stock must write the item ledger** (`inventory_movements`): use `InventoryMovementWriter` (SKU-keyed paths) or insert with the WMS item id (item-keyed paths). A stock change with no ledger row is a bug.
+- `performed_by` has a foreign key to users: never pass `Guid.Empty`.
+- Two stock tables exist until D15 is done: `inventory_stock` (by SKU) and `inventory_balances` (by item). Say which one a change touches.
+
+### 2.3c Printing and exporting
+- Screens never build PDF/Excel themselves: describe the document as an `ExportDocument` and use `DocumentViewButton` / `DocumentDialog` / `ExportMenu` (`lib/exportClient.ts`). Document builders live in `lib/wmsDocuments.ts`.
+- Numeric columns must be listed in `numericColumns`; text beginning with = + - @ is neutralised by the renderer (spreadsheet formula injection).
+- Fonts are embedded resources (`Infrastructure/Exports/Fonts`); never rely on system fonts in the container.
+
 ### 2.4 AI rules
 - All AI features go through one provider abstraction over an **OpenAI-compatible** endpoint (Groq / DeepSeek);
   base URL, model and key are configuration, the key never leaves the server.
@@ -144,6 +159,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **State:** Zustand for auth only. Everything else: TanStack Query (server) or local `useState` (UI toggles). No global client state for server data.
 - **i18n:** `useTranslation()` from `react-i18next` on every screen. New translation keys added to both `ar.json` and `en.json` with a `// TODO: translate` comment in `en.json` if the English translation is unverified. Arabic is the primary language — the app is always shipped in Arabic; the EN switcher is additive.
 - **Notifications:** `toast` / `extractApiError` from `lib/toast`. POSTs guarded by `WithIdempotency()` must send an `Idempotency-Key` header (unchanged).
+- **UI kit for new screens:** `components/ui/PageHeader`, `DocumentDialog`, `DocumentViewButton`, `ExportMenu`, `components/accounts/StatementTable`; tree views via `@mui/x-tree-view`. A route-level `ErrorBoundary` is keyed by the URL so one crash does not stick to the next screen.
 - **Pickers:** `LocationSelect`, `EntityPicker`, `ItemPickerModal`, `FxRateField` remain as-is; they will be progressively wrapped in MUI `Autocomplete` in Phase 5+.
 - **Code splitting:** `React.lazy` + `Suspense` on every route. Route-level `ErrorBoundary` from `components/common/ErrorBoundary.tsx`.
 - **Agent rule:** `frontend/src/features/<entity>/` is the canonical location for: `schema.ts` (Zod), `queries.ts` (TanStack), `<Entity>Dialog.tsx` (RHF form), keeping them co-located and importable by both the list page and detail page.

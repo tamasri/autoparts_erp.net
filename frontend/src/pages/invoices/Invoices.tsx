@@ -5,6 +5,9 @@ import { usePagedList } from '../../hooks/usePagedList';
 import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import StatusBadge from '../../components/common/StatusBadge';
+import ExportMenu from '../../components/ui/ExportMenu';
+import { unwrapPaged } from '../../api/apiData';
+import { num, ymd, type ExportDocument } from '../../lib/exportClient';
 
 type Invoice = {
   id: string;
@@ -43,6 +46,19 @@ export default function Invoices(): JSX.Element {
 
   const today = useMemo(() => new Date(), []);
 
+  const buildExport = async (): Promise<ExportDocument> => {
+    const data = unwrapPaged<Invoice>((await invoicesApi.getInvoices({ page: 1, pageSize: 100, status: status === 'ALL' ? undefined : status, searchTerm: list.searchInput.trim() || undefined })).data);
+    const tab = STATUS_TABS.find((t) => t.key === status)?.label ?? 'الكل';
+    return {
+      title: 'الفواتير', subtitle: `${tab} — ${data.totalCount} فاتورة${data.totalCount > 100 ? ' (أول 100)' : ''}`, fileName: 'invoices', fields: [],
+      tables: [{
+        columns: ['رقم الفاتورة', 'العميل', 'التاريخ', 'الاستحقاق', 'الإجمالي (ل.س)', 'الإجمالي ($)', 'الحالة'],
+        rows: data.items.map((i) => [i.invoiceNumber ?? '', i.customerName ?? '', ymd(i.invoiceDate), ymd(i.dueDate), num(i.totalSyp), num(i.totalUsd), i.status ?? '']),
+        numericColumns: [4, 5],
+      }],
+    };
+  };
+
   return (
     <div style={{ direction: 'rtl' }}>
       {/* Page Header */}
@@ -51,9 +67,12 @@ export default function Invoices(): JSX.Element {
           <h1 className="vex-page-header__title">الفواتير</h1>
           <div className="vex-page-header__breadcrumb">إدارة وتتبع فواتير المبيعات</div>
         </div>
-        <button type="button" onClick={() => navigate('/invoices/new')} className="btn-primary">
-          ＋ فاتورة جديدة
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <ExportMenu build={buildExport} />
+          <button type="button" onClick={() => navigate('/invoices/new')} className="btn-primary">
+            ＋ فاتورة جديدة
+          </button>
+        </div>
       </div>
 
       {error ? <ErrorBanner message={error} /> : null}

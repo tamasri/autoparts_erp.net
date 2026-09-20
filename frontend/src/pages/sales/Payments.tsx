@@ -9,6 +9,8 @@ import { notifyResult } from '../../lib/notify';
 import Pagination from '../../components/common/Pagination';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
+import ExportMenu from '../../components/ui/ExportMenu';
+import { num, ymd, type ExportDocument } from '../../lib/exportClient';
 import DocumentViewButton from '../../components/ui/DocumentViewButton';
 import { paymentDocument } from '../../lib/wmsDocuments';
 import FxRateField from '../../components/pickers/FxRateField';
@@ -70,6 +72,18 @@ export default function Payments(): JSX.Element {
   const [autoApply, setAutoApply] = useState(true);
   const [reverseId, setReverseId] = useState('');
   const [reverseReason, setReverseReason] = useState('');
+
+  const buildExport = async (): Promise<ExportDocument> => {
+    const data = unwrapPaged<Payment>((await paymentsApi.list({ page: 1, pageSize: 200, customerId: filterCustomer?.id, paymentMethod: filterMethod || undefined })).data);
+    return {
+      title: 'الدفعات والقبض', subtitle: `${data.totalCount} سند${data.totalCount > 200 ? ' (أول 200)' : ''}`, fileName: 'payments', fields: [],
+      tables: [{
+        columns: ['رقم السند', 'العميل', 'التاريخ', 'الطريقة', 'المبلغ (ل.س)', 'المبلغ ($)', 'غير الموزّع (ل.س)', 'غير الموزّع ($)', 'الحالة'],
+        rows: data.items.map((p) => [p.paymentNumber, p.customerName, ymd(p.paymentDate), methodLabel(p.paymentMethod), num(p.amountSyp), num(p.amountUsd), num(p.unallocatedSyp), num(p.unallocatedUsd), p.isReversed ? 'معكوسة' : 'فعّالة']),
+        numericColumns: [4, 5, 6, 7],
+      }],
+    };
+  };
 
   const isUsd = method === 'USD_CASH';
   const amountSyp = isUsd ? 0 : amount;
@@ -135,9 +149,12 @@ export default function Payments(): JSX.Element {
           <h1 className="vex-page-header__title">الدفعات والقبض</h1>
           <div className="vex-page-header__breadcrumb">سندات قبض العملاء وتوزيعها على الفواتير المفتوحة</div>
         </div>
-        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ سند قبض'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <ExportMenu build={buildExport} />
+          <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
+            {showForm ? '✕ إلغاء' : '＋ سند قبض'}
+          </button>
+        </div>
       </div>
 
       {list.error ? <ErrorBanner message={list.error} /> : null}

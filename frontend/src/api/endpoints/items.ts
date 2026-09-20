@@ -33,6 +33,12 @@ export const itemsApi = {
   search: (query: string, pageSize = 8) =>
     apiClient.get('/items/search', { params: { query, page: 1, pageSize, includeInactive: false } }),
   getById: (id: string) => apiClient.get(`/items/${id}`),
+  importTemplate: (format: 'xlsx' | 'csv') => apiClient.get('/items/import/template', { params: { format }, responseType: 'blob' }),
+  importFile: (file: File, dryRun: boolean) => {
+    const body = new FormData();
+    body.append('file', file);
+    return apiClient.post('/items/import', body, { params: { dryRun }, headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 });
+  },
   getStock: (id: string) => apiClient.get(`/items/${id}/stock`),
   getAliases: (id: string) => apiClient.get(`/items/${id}/aliases`),
   getInterchanges: (id: string) => apiClient.get(`/items/${id}/interchanges`),
