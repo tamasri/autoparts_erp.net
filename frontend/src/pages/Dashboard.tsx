@@ -1,128 +1,94 @@
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, LinearProgress, Stack, Typography } from '@mui/material';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
-import ErrorBanner from '../components/common/ErrorBanner';
-import KpiCard from '../components/common/KpiCard';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import PageHeader from '../components/ui/PageHeader';
+import KpiTile from '../components/ui/KpiTile';
+import DataTable, { type Column } from '../components/ui/DataTable';
+import StatusChip from '../components/ui/StatusChip';
 import SalesChart from '../components/common/SalesChart';
-import StatusBadge from '../components/common/StatusBadge';
 
 const fmt = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
 
 const QUICK_ACTIONS = [
-  { to: '/invoices/new', label: 'فاتورة جديدة', icon: '🧾', gradient: 'linear-gradient(135deg, var(--clr-primary), var(--clr-primary-mid))' },
-  { to: '/invoices', label: 'الفواتير والمستحقات', icon: '💳', gradient: 'linear-gradient(135deg, #22c55e, #4ade80)' },
-  { to: '/accounts', label: 'الزبائن', icon: '👤', gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)' },
-  { to: '/inventory/receiving', label: 'استلام بضاعة', icon: '📦', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
+  { to: '/invoices/new', label: 'فاتورة مبيعات جديدة', icon: '🧾' },
+  { to: '/payments', label: 'سند قبض', icon: '💳' },
+  { to: '/purchasing', label: 'فاتورة شراء', icon: '🛒' },
+  { to: '/inventory/receiving', label: 'استلام بضاعة', icon: '📦' },
+];
+
+type RecentInvoice = { id: string; invoiceNumber?: string; customerName: string; invoiceDate: string; totalSyp: number; totalUsd: number; status: string };
+
+const RECENT_COLUMNS: Column<RecentInvoice>[] = [
+  { header: 'رقم الفاتورة', render: (i) => <Button size="small" component={RouterLink} to={`/invoices/${i.id}`}>{i.invoiceNumber || i.id.slice(0, 8)}</Button> },
+  { header: 'الزبون', render: (i) => i.customerName },
+  { header: 'التاريخ', render: (i) => i.invoiceDate },
+  { header: 'الإجمالي (ل.س)', numeric: true, render: (i) => fmt(i.totalSyp) },
+  { header: 'الإجمالي ($)', numeric: true, render: (i) => fmt(i.totalUsd) },
+  { header: 'الحالة', render: (i) => <StatusChip status={i.status} /> },
 ];
 
 export default function Dashboard(): JSX.Element {
   const { data, loading, error } = useDashboardSummary('تعذر تحميل بيانات لوحة التحكم');
 
-  if (loading) return <LoadingSpinner />;
-
+  if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '50vh' }}><CircularProgress /></Box>;
   const maxTop = Math.max(...(data?.topCustomers.map((c) => c.totalUsd) ?? [0]), 1);
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">لوحة التحكم</h1>
-          <div className="vex-page-header__breadcrumb">نظرة عامة على أداء النظام — الأرقام محسوبة على كامل البيانات</div>
-        </div>
-        <Link to="/invoices/new" className="btn-primary">
-          <span>＋</span>
-          فاتورة جديدة
-        </Link>
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
+    <>
+      <PageHeader title="لوحة التحكم" subtitle="نظرة عامة على أداء النظام — الأرقام محسوبة على كامل البيانات"
+        actions={<Button variant="contained" size="small" component={RouterLink} to="/invoices/new">＋ فاتورة جديدة</Button>} />
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
       {data ? (
         <>
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 24 }}>
-            <KpiCard title="مبيعات الشهر" value={`$${fmt(data.salesMonthUsd)}`} icon="📈" colorVariant="primary" trend={`${fmt(data.salesMonthSyp)} ل.س`} />
-            <KpiCard title="مبيعات اليوم" value={`$${fmt(data.salesTodayUsd)}`} icon="🗓️" colorVariant="success" trend={`${fmt(data.salesTodaySyp)} ل.س`} />
-            <KpiCard title="الذمم المدينة" value={`$${fmt(data.receivablesUsd)}`} icon="💰" colorVariant="warning" trend={`${fmt(data.receivablesSyp)} ل.س`} />
-            <KpiCard title="فواتير متأخرة" value={data.overdueInvoices} icon="⏰" colorVariant={data.overdueInvoices > 0 ? 'danger' : 'success'} trend={`${fmt(data.overdueSyp)} ل.س متأخرة`} />
-            <KpiCard title="فواتير مرحّلة" value={data.postedInvoices} icon="🧾" colorVariant="primary" />
-            <KpiCard title="الزبائن النشطون" value={data.activeCustomers} icon="👥" colorVariant="success" />
-            <KpiCard title="أصناف نافدة" value={data.skusOutOfStock} icon="📦" colorVariant={data.skusOutOfStock > 0 ? 'danger' : 'success'} trend={`${data.skusLowStock} تحت حد الطلب · ${data.skusInStock} متوفرة`} />
-            <KpiCard title="تنبيهات المخزون" value={data.openAlerts} icon="🚨" colorVariant={data.openAlerts > 0 ? 'danger' : 'success'} trend="تنبيهات غير مغلقة" />
-          </div>
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', mb: 3 }}>
+            <KpiTile icon="📈" title="مبيعات الشهر" value={`$${fmt(data.salesMonthUsd)}`} hint={`${fmt(data.salesMonthSyp)} ل.س`} />
+            <KpiTile icon="🗓️" title="مبيعات اليوم" value={`$${fmt(data.salesTodayUsd)}`} hint={`${fmt(data.salesTodaySyp)} ل.س`} tone="success" />
+            <KpiTile icon="💰" title="الذمم المدينة" value={`$${fmt(data.receivablesUsd)}`} hint={`${fmt(data.receivablesSyp)} ل.س`} tone="warning" />
+            <KpiTile icon="⏰" title="فواتير متأخرة" value={data.overdueInvoices} hint={`${fmt(data.overdueSyp)} ل.س متأخرة`} tone={data.overdueInvoices > 0 ? 'error' : 'success'} />
+            <KpiTile icon="🧾" title="فواتير مرحّلة" value={data.postedInvoices} />
+            <KpiTile icon="👥" title="الزبائن النشطون" value={data.activeCustomers} tone="success" />
+            <KpiTile icon="📦" title="أصناف نافدة" value={data.skusOutOfStock} hint={`${data.skusLowStock} تحت حد الطلب · ${data.skusInStock} متوفرة`} tone={data.skusOutOfStock > 0 ? 'error' : 'success'} />
+            <KpiTile icon="🚨" title="تنبيهات المخزون" value={data.openAlerts} hint="تنبيهات غير مغلقة" tone={data.openAlerts > 0 ? 'error' : 'success'} />
+          </Box>
 
-          <div className="vex-card" style={{ marginBottom: 20 }}>
-            <h2 className="vex-section-title">المبيعات اليومية — آخر 30 يوماً ($)</h2>
-            <SalesChart days={data.salesByDay} />
-          </div>
+          <Card variant="outlined" sx={{ borderRadius: 3, mb: 3 }}>
+            <CardContent><Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>المبيعات اليومية — آخر 30 يوماً ($)</Typography><SalesChart days={data.salesByDay} /></CardContent>
+          </Card>
 
-          <div className="vex-card vex-card--no-pad" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 14px' }}>
-              <h2 className="vex-section-title" style={{ margin: 0 }}>آخر الفواتير المرحّلة</h2>
-              <Link to="/invoices" style={{ fontSize: 13, color: 'var(--clr-primary)', fontWeight: 600, textDecoration: 'none' }}>عرض الكل ←</Link>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="vex-table">
-                <thead>
-                  <tr><th>رقم الفاتورة</th><th>الزبون</th><th>التاريخ</th><th>الإجمالي (ل.س)</th><th>الإجمالي ($)</th><th>الحالة</th></tr>
-                </thead>
-                <tbody>
-                  {data.recentInvoices.length === 0 ? (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد فواتير حالياً</td></tr>
-                  ) : data.recentInvoices.map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td><Link to={`/invoices/${invoice.id}`} style={{ color: 'var(--clr-primary)', fontWeight: 600, textDecoration: 'none' }}>{invoice.invoiceNumber || invoice.id.slice(0, 8)}</Link></td>
-                      <td style={{ color: 'var(--txt-secondary)' }}>{invoice.customerName}</td>
-                      <td style={{ color: 'var(--txt-secondary)' }}>{invoice.invoiceDate}</td>
-                      <td style={{ fontWeight: 600 }}>{fmt(invoice.totalSyp)}</td>
-                      <td style={{ color: 'var(--txt-secondary)' }}>{fmt(invoice.totalUsd)}</td>
-                      <td><StatusBadge status={invoice.status} type="invoice" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="h6" fontWeight={700}>آخر الفواتير المرحّلة</Typography>
+            <Button size="small" component={RouterLink} to="/invoices">عرض الكل ←</Button>
+          </Stack>
+          <Box sx={{ mb: 3 }}><DataTable columns={RECENT_COLUMNS} rows={data.recentInvoices as RecentInvoice[]} getKey={(i) => i.id} empty="لا توجد فواتير حالياً" /></Box>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 20 }}>
-            <div className="vex-card">
-              <h2 className="vex-section-title">أفضل الزبائن هذا الشهر</h2>
-              {data.topCustomers.length === 0 ? (
-                <p style={{ color: 'var(--txt-muted)', fontSize: 13 }}>لا توجد مبيعات هذا الشهر</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {data.topCustomers.map((c) => (
-                    <div key={c.customerId}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                        <span style={{ fontWeight: 500, color: 'var(--txt-primary)' }}>{c.customerName}</span>
-                        <span style={{ color: 'var(--clr-primary)', fontWeight: 700 }}>${fmt(c.totalUsd)} · {c.invoiceCount}</span>
-                      </div>
-                      <div className="vex-progress-bar">
-                        <div className="vex-progress-bar__fill" style={{ width: `${Math.min(100, (c.totalUsd / maxTop) * 100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="vex-card">
-              <h2 className="vex-section-title">إجراءات سريعة</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {QUICK_ACTIONS.map((a) => (
-                  <Link
-                    key={a.to}
-                    to={a.to}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: a.gradient, color: '#fff', borderRadius: 'var(--radius-md)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}
-                  >
-                    <span style={{ fontSize: 18 }}>{a.icon}</span>
-                    {a.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 3 }}>
+            <Card variant="outlined" sx={{ borderRadius: 3 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>أفضل الزبائن هذا الشهر</Typography>
+                {data.topCustomers.length === 0 ? <Typography color="text.secondary">لا توجد مبيعات هذا الشهر</Typography> : (
+                  <Stack spacing={2}>
+                    {data.topCustomers.map((c) => (
+                      <Box key={c.customerId}>
+                        <Stack direction="row" justifyContent="space-between"><Typography variant="body2">{c.customerName}</Typography><Typography variant="body2" color="primary" fontWeight={700}>${fmt(c.totalUsd)} · {c.invoiceCount}</Typography></Stack>
+                        <LinearProgress variant="determinate" value={Math.min(100, (c.totalUsd / maxTop) * 100)} sx={{ height: 8, borderRadius: 4, mt: 0.5 }} />
+                      </Box>
+                    ))}
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ borderRadius: 3 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>إجراءات سريعة</Typography>
+                <Stack spacing={1}>
+                  {QUICK_ACTIONS.map((a) => <Button key={a.to} component={RouterLink} to={a.to} variant="outlined" sx={{ justifyContent: 'flex-start' }}>{a.icon}&nbsp;&nbsp;{a.label}</Button>)}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Box>
         </>
       ) : null}
-    </div>
+    </>
   );
 }

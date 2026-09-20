@@ -1,43 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Button, Chip, Stack } from '@mui/material';
 import { inventoryAlertsApi } from '../../api/endpoints/inventoryAlerts';
 import { unwrapList } from '../../api/apiData';
-import { toast, extractApiError } from '../../lib/toast';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { extractApiError, toast } from '../../lib/toast';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable, { type Column } from '../../components/ui/DataTable';
+import ReasonDialog from '../../components/ui/ReasonDialog';
+import StatusChip from '../../components/ui/StatusChip';
 
-type Alert = {
-  id: string;
-  itemId: string;
-  alertType: string;
-  severity: string;
-  message: string;
-  thresholdValue?: number;
-  currentValue?: number;
-  status: string;
-  createdAt: string;
+type StockAlert = {
+  id: string; itemId: string; alertType: string; severity: string; message: string;
+  thresholdValue?: number; currentValue?: number; status: string; createdAt: string;
 };
 
-const SEVERITY_CONFIG: Record<string, { bg: string; color: string; icon: string }> = {
-  CRITICAL: { bg: '#fef2f2', color: 'var(--clr-danger)', icon: '🔴' },
-  HIGH:     { bg: '#fff7ed', color: '#ea580c', icon: '🟠' },
-  MEDIUM:   { bg: '#fefce8', color: '#ca8a04', icon: '🟡' },
-  LOW:      { bg: '#f0fdf4', color: '#22c55e', icon: '🟢' },
+const SEVERITY: Record<string, { label: string; color: 'error' | 'warning' | 'info' | 'success' }> = {
+  CRITICAL: { label: 'حرج', color: 'error' }, HIGH: { label: 'عالٍ', color: 'warning' }, MEDIUM: { label: 'متوسط', color: 'info' }, LOW: { label: 'منخفض', color: 'success' },
 };
 
 export default function InventoryAlerts(): JSX.Element {
+  const [rows, setRows] = useState<StockAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [rows, setRows] = useState<Alert[]>([]);
-  const [busy, setBusy] = useState<string>('');
+  const [busy, setBusy] = useState('');
+  const [resolving, setResolving] = useState<StockAlert | null>(null);
 
-  async function load(): Promise<void> {
+  const load = useCallback(async () => {
     setLoading(true); setError('');
-    try { const res = await inventoryAlertsApi.list(); setRows(unwrapList<Alert>(res.data)); }
+    try { setRows(unwrapList<StockAlert>((await inventoryAlertsApi.list()).data)); }
     catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل التنبيهات')); }
     finally { setLoading(false); }
-  }
-
-  useEffect(() => { void load(); }, []);
+  }, []);
+  useEffect(() => { void load(); }, [load]);
 
   async function acknowledge(id: string): Promise<void> {
     setBusy(id);
@@ -46,107 +39,40 @@ export default function InventoryAlerts(): JSX.Element {
     finally { setBusy(''); }
   }
 
-  async function resolve(id: string): Promise<void> {
-    const note = window.prompt('ملاحظة الإغلاق (اختياري):') ?? undefined;
-    setBusy(id);
-    try { await inventoryAlertsApi.resolve(id, note); toast.success('تم إغلاق التنبيه'); await load(); }
+  async function resolve(note: string): Promise<void> {
+    if (!resolving) return;
+    try { await inventoryAlertsApi.resolve(resolving.id, note || undefined); toast.success('تم إغلاق التنبيه'); setResolving(null); await load(); }
     catch (e: unknown) { toast.error(extractApiError(e, 'تعذر إغلاق التنبيه')); }
-    finally { setBusy(''); }
   }
 
-  const criticalCount = rows.filter((r) => r.severity === 'CRITICAL' && r.status !== 'RESOLVED').length;
-  const activeCount = rows.filter((r) => r.status !== 'RESOLVED').length;
+  const active = rows.filter((r) => r.status !== 'RESOLVED');
+  const critical = active.filter((r) => r.severity === 'CRITICAL').length;
 
-  if (loading) return <LoadingSpinner />;
+  const columns: Column<StockAlert>[] = [
+    { header: 'الخطورة', render: (a) => <Chip size="small" color={SEVERITY[a.severity]?.color ?? 'default'} label={SEVERITY[a.severity]?.label ?? a.severity} /> },
+    { header: 'النوع', render: (a) => <Chip size="small" variant="outlined" label={a.alertType} sx={{ fontFamily: 'monospace' }} /> },
+    { header: 'الرسالة', render: (a) => a.message },
+    { header: 'الحالي / الحد', numeric: true, render: (a) => (a.currentValue !== undefined ? `${a.currentValue} / ${a.thresholdValue ?? '—'}` : '—') },
+    { header: 'التاريخ', nowrap: true, render: (a) => new Date(a.createdAt).toLocaleString('ar') },
+    { header: 'الحالة', render: (a) => <StatusChip status={a.status} /> },
+    {
+      header: '', nowrap: true,
+      render: (a) => a.status === 'RESOLVED' ? null : (
+        <Stack direction="row" gap={1}>
+          {a.status === 'OPEN' ? <Button size="small" variant="outlined" disabled={busy === a.id} onClick={() => void acknowledge(a.id)}>تأكيد الاطلاع</Button> : null}
+          <Button size="small" variant="contained" color="success" disabled={busy === a.id} onClick={() => setResolving(a)}>إغلاق</Button>
+        </Stack>
+      ),
+    },
+  ];
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">تنبيهات المخزون</h1>
-          <div className="vex-page-header__breadcrumb">مراقبة مستويات المخزون والتنبيهات النشطة</div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {criticalCount > 0 && (
-            <div style={{ background: '#fef2f2', color: 'var(--clr-danger)', border: '1px solid #fecaca', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-              🔴 حرج: {criticalCount}
-            </div>
-          )}
-          {activeCount > 0 && (
-            <div style={{ background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-              ⚠ نشط: {activeCount}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
-
-      <div className="vex-card vex-card--no-pad">
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead>
-              <tr>
-                <th>الخطورة</th>
-                <th>النوع</th>
-                <th>الرسالة</th>
-                <th>الحد</th>
-                <th>الحالي</th>
-                <th>الحالة</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-                    <div style={{ color: 'var(--txt-muted)', fontSize: 14 }}>لا توجد تنبيهات نشطة</div>
-                  </td>
-                </tr>
-              ) : rows.map((a) => {
-                const sev = SEVERITY_CONFIG[a.severity] ?? { bg: '#f8fafc', color: 'var(--txt-muted)', icon: '⚪' };
-                return (
-                  <tr key={a.id} style={{ background: a.status === 'RESOLVED' ? undefined : sev.bg }}>
-                    <td>
-                      <span style={{ color: sev.color, fontWeight: 700, fontSize: 13 }}>
-                        {sev.icon} {a.severity}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, color: 'var(--txt-muted)', background: 'var(--clr-surface-2)', padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>
-                        {a.alertType}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--txt-primary)', maxWidth: 280 }}>{a.message}</td>
-                    <td style={{ color: 'var(--txt-muted)', fontSize: 13 }}>{a.thresholdValue ?? '-'}</td>
-                    <td style={{ fontWeight: 600 }}>{a.currentValue ?? '-'}</td>
-                    <td>
-                      {a.status === 'RESOLVED'
-                        ? <span className="badge badge--success">مغلق</span>
-                        : a.status === 'ACKNOWLEDGED'
-                          ? <span className="badge badge--warning">مؤكد</span>
-                          : <span className="badge badge--danger">مفتوح</span>}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {a.status !== 'RESOLVED' ? (
-                        <>
-                          <button type="button" disabled={busy === a.id} onClick={() => void acknowledge(a.id)} className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12, marginLeft: 6 }}>
-                            ✓ تأكيد
-                          </button>
-                          <button type="button" disabled={busy === a.id} onClick={() => void resolve(a.id)} className="btn-success" style={{ padding: '5px 12px', fontSize: 12 }}>
-                            ✕ إغلاق
-                          </button>
-                        </>
-                      ) : <span style={{ color: 'var(--txt-muted)', fontSize: 12 }}>—</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <>
+      <PageHeader title="تنبيهات المخزون" subtitle="أصناف نافدة أو تحت حد إعادة الطلب"
+        actions={<><Chip variant="outlined" label={`نشط: ${active.length}`} />{critical > 0 ? <Chip color="error" label={`حرج: ${critical}`} /> : null}</>} />
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      <DataTable columns={columns} rows={rows} getKey={(a) => a.id} loading={loading} empty="لا توجد تنبيهات" />
+      <ReasonDialog open={resolving !== null} title="إغلاق التنبيه" confirmLabel="إغلاق" minLength={0} optionalNote onClose={() => setResolving(null)} onConfirm={resolve} />
+    </>
   );
 }

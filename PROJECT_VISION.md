@@ -197,7 +197,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       issue orders/transfers also read `dynamic` rows and need the same typed-record fix.
 - [x] **D14 — DONE: rename propagates via rename_doc.** Was: renaming a customer is not propagated to ERPNext (it identifies customers by name).
 - [x] **D15 — DONE (2026-09-20): stock and warehouse balances are kept in step.** Was: **Two stock models.** WMS documents (receiving, putaway, transfer orders, adjustments) change `inventory_balances`; invoices, direct receive/adjust/transfer and (now) issue orders change `inventory_stock`. A periodic job copies stock → balances only, so goods received through a WMS document are **not** sellable until D9 is done. The item-movement ledger is complete for both sides.
-- [ ] **D16 — Old-style screens.** MUI now covers the shell (menu + top bar), accounts, customer profile/statements, purchasing, chart of accounts, ERPNext documents, warehouses and movements. Still on the Vex CSS classes: dashboard, KPI, invoices (list, workspace, detail), payments, FX rates, items and item card, inventory, receiving, transfers, issue orders, cycle counts, adjustments, alerts, approvals, audit, periods, users, roles, accounting sync. Migrate by screen with the shared kit in `components/ui`.
+- [ ] **D16 — Old-style screens (about a third left).** On MUI with the shared kit (`components/ui`): shell, dashboard, KPIs, accounts, customer profile, statements, purchasing, invoices list, items list, inventory, alerts, warehouses, movements, chart of accounts, ERPNext documents, accounting sync, users, roles, approvals, audit, period locks, FX rates. Still on the Vex CSS classes: **login, invoice workspace and detail, item card, payments, receiving, transfers, issue orders, cycle counts, stock adjustments** and the pickers/line editors they use (`ItemPickerModal`, `LocationSelect`, `EntityPicker`, `FxRateField`, `WmsLinesEditor`).
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
@@ -237,6 +237,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] Unify the two stock models (D15): putaway, transfers and adjustments move sellable stock in the same transaction; duplicate "no batch" balance rows merged.
 - [x] Purchase invoices + supplier payments + ERPNext sync (Purchase Invoice, Payment Entry Pay, cancels); posting receives the goods and sets a weighted-average cost.
 - [x] Stock adjustments are booked in ERPNext (Dr COGS / Cr Inventory at cost).
+- [x] Purchasing roles (ACCOUNTANT, PURCHASER), supplier statement, cost restored when a bill is voided, period locks per module (SALES / PURCHASES / PAYMENTS).
+- [x] Credit limit kept in USD only (lira shown from the latest saved rate); "العميل" is "الزبون" in every Arabic label.
 - [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
 - [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 

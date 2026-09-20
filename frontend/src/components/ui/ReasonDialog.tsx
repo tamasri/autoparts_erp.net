@@ -7,11 +7,13 @@ type Props = {
   title: string;
   confirmLabel?: string;
   minLength?: number;
+  /** The text is a note, not a required reason (neutral button, no asterisk). */
+  optionalNote?: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void | Promise<void>;
 };
 
-export default function ReasonDialog({ open, title, confirmLabel = 'تأكيد', minLength = 3, onClose, onConfirm }: Props): JSX.Element {
+export default function ReasonDialog({ open, title, confirmLabel = 'تأكيد', minLength = 3, optionalNote = false, onClose, onConfirm }: Props): JSX.Element {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (open) setReason(''); }, [open]);
@@ -27,12 +29,12 @@ export default function ReasonDialog({ open, title, confirmLabel = 'تأكيد',
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
-        <TextField autoFocus fullWidth multiline minRows={2} size="small" label="السبب *" value={reason} onChange={(e) => setReason(e.target.value)} sx={{ mt: 1 }}
+        <TextField autoFocus fullWidth multiline minRows={2} size="small" label={optionalNote ? 'ملاحظة (اختيارية)' : 'السبب *'} value={reason} onChange={(e) => setReason(e.target.value)} sx={{ mt: 1 }}
           helperText={valid || reason.length === 0 ? ' ' : `اكتب ${minLength} أحرف على الأقل`} />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>رجوع</Button>
-        <Button variant="contained" color="error" disabled={!valid || busy} onClick={() => void confirm()}>{confirmLabel}</Button>
+        <Button variant="contained" color={optionalNote ? 'primary' : 'error'} disabled={!valid || busy} onClick={() => void confirm()}>{confirmLabel}</Button>
       </DialogActions>
     </Dialog>
   );
