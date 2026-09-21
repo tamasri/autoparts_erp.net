@@ -67,7 +67,7 @@ public sealed record LedgerRowDto(
 
 public sealed record LedgerStatementDto(
     string Account, string? RootType, DateOnly From, DateOnly To, decimal Opening, IReadOnlyList<LedgerRowDto> Rows,
-    decimal TotalDebit, decimal TotalCredit, decimal Closing, bool Truncated);
+    decimal TotalDebit, decimal TotalCredit, decimal Closing, bool Truncated, int TotalCount = 0, int PageNumber = 1, int PageSize = 0);
 
 public sealed record PartyBalanceDto(
     string Party, Guid? PartyId, Guid? CustomerId, decimal Balance, decimal Current, decimal Days1To30, decimal Days31To60, decimal Days61To90, decimal Over90, decimal Unallocated);
