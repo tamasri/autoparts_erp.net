@@ -16,6 +16,22 @@ jobs:
       - run: dotnet build AutoPartsERP.sln -c Release
       - run: dotnet test AutoPartsERP.sln --no-build -c Release
 
+  build-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+
   # Secrets aren't readable from a job-level `if`, so surface their presence as an output.
   check-deploy-config:
     runs-on: ubuntu-latest
@@ -36,7 +52,7 @@ jobs:
           fi
 
   deploy:
-    needs: [build-and-test, check-deploy-config]
+    needs: [build-and-test, build-frontend, check-deploy-config]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && needs.check-deploy-config.outputs.configured == 'true'
     steps:

@@ -11,13 +11,19 @@ builder.Host.UseSerilog((context, _, loggerConfiguration) =>
         .WriteTo.Console();
 });
 
+// Local defaults exist only for Development and Testing. Anywhere else a missing setting is a deployment mistake and must stop the
+// start-up, not silently connect to a guessed database.
+var allowLocalDefaults = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing");
+
 var databaseConnectionString = builder.Configuration["Database:ConnectionString"]
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=autoparts_erp;Username=postgres;Password=postgres";
+    ?? (allowLocalDefaults
+        ? "Host=localhost;Port=5432;Database=autoparts_erp;Username=postgres;Password=postgres"
+        : throw new InvalidOperationException("Database:ConnectionString is not configured."));
 
 var redisConnectionString = builder.Configuration["Redis:ConnectionString"]
     ?? builder.Configuration.GetConnectionString("Redis")
-    ?? "localhost:6379";
+    ?? (allowLocalDefaults ? "localhost:6379" : throw new InvalidOperationException("Redis:ConnectionString is not configured."));
 
 // EF + Identity
 builder.Services.AddDbContext<AppDbContext>(options =>
