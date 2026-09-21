@@ -52,7 +52,7 @@ public sealed class UserManagementIntegrationTests : IClassFixture<ErpWebFactory
     {
         var response = await _client.PutAsJsonAsync(
             $"/api/v1/users/{Guid.NewGuid()}",
-            new UpdateUserRequest("user@example.com", "First", "Last", true, new[] { Guid.NewGuid() }));
+            new UpdateUserRequest("user@example.com", "First", "Last"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }

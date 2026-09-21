@@ -34,6 +34,12 @@ public sealed class UsersModule : ICarterModule
             })
             .WithIdempotency();
 
+        group.MapPost("/{userId:guid}/activate", async Task<IResult> (Guid userId, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new ActivateUserCommand(userId), cancellationToken)).ToApiResult());
+
+        group.MapPost("/{userId:guid}/password", async Task<IResult> (Guid userId, ResetUserPasswordRequest request, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new ResetUserPasswordCommand(userId, request.NewPassword), cancellationToken)).ToApiResult());
+
         group.MapGet("/", async Task<IResult> (
                 int page,
                 int pageSize,
