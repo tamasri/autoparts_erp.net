@@ -213,8 +213,25 @@ public sealed class GovernanceService : IGovernanceService
 
     public async Task<Result<PeriodLockDto>> LockPeriodAsync(LockPeriodRequest request, Guid actorUserId, CancellationToken cancellationToken = default)
     {
-        var entity = new PeriodLock(Guid.NewGuid(), request.PeriodKey, request.ModuleCode, actorUserId, request.Reason);
-        _dbContext.PeriodLocks.Add(entity);
+        // One row per (period, module): locking a month that was unlocked before re-locks that row instead of inserting a second one.
+        var periodKey = request.PeriodKey.Trim();
+        var moduleCode = request.ModuleCode.Trim();
+        var existing = await _dbContext.PeriodLocks.FirstOrDefaultAsync(x => x.PeriodKey == periodKey && x.ModuleCode == moduleCode, cancellationToken);
+        if (existing is { IsLocked: true })
+        {
+            return Result<PeriodLockDto>.Failure(new Error("Periods.Conflict", $"Period {periodKey} is already locked for module {moduleCode}."));
+        }
+
+        var entity = existing ?? new PeriodLock(Guid.NewGuid(), periodKey, moduleCode, actorUserId, request.Reason);
+        if (existing is null)
+        {
+            _dbContext.PeriodLocks.Add(entity);
+        }
+        else
+        {
+            entity.Relock(actorUserId, request.Reason);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Result<PeriodLockDto>.Success(ToDto(entity));
     }

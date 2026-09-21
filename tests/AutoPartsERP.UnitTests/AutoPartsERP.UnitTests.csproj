@@ -21,5 +21,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AutoPartsERP.Application\AutoPartsERP.Application.csproj" />
     <ProjectReference Include="..\..\src\AutoPartsERP.Domain\AutoPartsERP.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AutoPartsERP.Infrastructure\AutoPartsERP.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

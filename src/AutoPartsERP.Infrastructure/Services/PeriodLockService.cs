@@ -2,6 +2,11 @@
 
 public sealed class PeriodLockService : IPeriodLockService
 {
+    /// <summary>Short on purpose: a lock or unlock forgets the cached answer itself, this only bounds the rare miss.</summary>
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(30);
+
+    private static readonly string[] Modules = ["SALES", "PURCHASES", "PAYMENTS", "ACCOUNTING", "INVENTORY"];
+
     private readonly IDistributedCache _cache;
     private readonly IDbConnectionFactory _dbConnectionFactory;
 
@@ -28,7 +33,7 @@ public sealed class PeriodLockService : IPeriodLockService
 
         await _cache.SetStringAsync(cacheKey, isLocked ? "1" : "0", new DistributedCacheEntryOptions
         {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+            AbsoluteExpirationRelativeToNow = CacheLifetime
         }, cancellationToken);
 
         return isLocked;
@@ -39,5 +44,12 @@ public sealed class PeriodLockService : IPeriodLockService
         var periodKey = $"{year:D4}-{month:D2}";
         await _cache.RemoveAsync($"period:{module}:{periodKey}", cancellationToken);
         await _cache.RemoveAsync($"period:ALL:{periodKey}", cancellationToken);
+        if (string.Equals(module, "ALL", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var known in Modules)
+            {
+                await _cache.RemoveAsync($"period:{known}:{periodKey}", cancellationToken);
+            }
+        }
     }
 }

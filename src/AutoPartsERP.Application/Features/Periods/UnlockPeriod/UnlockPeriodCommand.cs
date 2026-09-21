@@ -1,12 +1,12 @@
 namespace AutoPartsERP.Application.Features.Periods.UnlockPeriod;
 
+// Not period-sensitive on purpose: this command manages the lock itself, so a locked period must still be unlockable.
 public sealed record UnlockPeriodCommand(int Year, int Month, string Module, string Reason)
-    : IRequest<Result<PeriodLockDto>>, IAuthorizedRequest, IMakerCheckerRequest, IAuditableRequest, IPeriodSensitiveRequest
+    : IRequest<Result<PeriodLockDto>>, IAuthorizedRequest, IMakerCheckerRequest, IAuditableRequest
 {
     public string RequiredPermission => PermissionCodes.PeriodLocksWrite;
     public bool RequiresApproval => true;
     public string AuditModule => "PERIODS";
-    public DateTimeOffset OperationDate => new DateTimeOffset(Year, Month, 1, 0, 0, 0, TimeSpan.Zero);
 }
 
 public sealed class UnlockPeriodCommandValidator : AbstractValidator<UnlockPeriodCommand>
@@ -24,11 +24,13 @@ public sealed class UnlockPeriodCommandHandler : IRequestHandler<UnlockPeriodCom
 {
     private readonly IGovernanceService _governanceService;
     private readonly ICurrentUser _currentUser;
+    private readonly IPeriodLockService _periodLock;
 
-    public UnlockPeriodCommandHandler(IGovernanceService governanceService, ICurrentUser currentUser)
+    public UnlockPeriodCommandHandler(IGovernanceService governanceService, ICurrentUser currentUser, IPeriodLockService periodLock)
     {
         _governanceService = governanceService;
         _currentUser = currentUser;
+        _periodLock = periodLock;
     }
 
     public async Task<Result<PeriodLockDto>> Handle(UnlockPeriodCommand request, CancellationToken cancellationToken)
@@ -46,6 +48,12 @@ public sealed class UnlockPeriodCommandHandler : IRequestHandler<UnlockPeriodCom
             return Result<PeriodLockDto>.Failure(new Error("Periods.NotFound", "No matching period lock exists for the requested period and module."));
         }
 
-        return await _governanceService.UnlockPeriodAsync(match.Id, new UnlockPeriodRequest(request.Reason), _currentUser.UserId, cancellationToken);
+        var result = await _governanceService.UnlockPeriodAsync(match.Id, new UnlockPeriodRequest(request.Reason), _currentUser.UserId, cancellationToken);
+        if (result.IsSuccess)
+        {
+            await _periodLock.InvalidateCacheAsync(request.Year, request.Month, request.Module, cancellationToken);
+        }
+
+        return result;
     }
 }
