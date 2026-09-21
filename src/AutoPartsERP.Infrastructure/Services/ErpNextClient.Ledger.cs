@@ -219,7 +219,7 @@ public sealed partial class ErpNextClient
         var rows = await QueryRowsAsync(
             "GL Entry",
             ["name", "posting_date", "account", "party_type", "party", "debit", "credit", "voucher_type", "voucher_no", "remarks"],
-            filters.Value!, "posting_date asc, creation asc", null, filter.Limit + 1, cancellationToken);
+            filters.Value!, "posting_date asc, creation asc", null, filter.Limit + 1, cancellationToken, filter.LimitStart);
         if (rows.IsFailure)
         {
             return Result<IReadOnlyList<ErpNextGlEntry>>.Failure(rows.Error);
@@ -296,10 +296,10 @@ public sealed partial class ErpNextClient
 
     /// <summary>A list query against Frappe's REST API. <paramref name="limit"/> 0 means "all rows".</summary>
     private async Task<Result<List<JsonElement>>> QueryRowsAsync(
-        string doctype, string[] fields, IReadOnlyList<object[]> filters, string? orderBy, string? groupBy, int limit, CancellationToken cancellationToken)
+        string doctype, string[] fields, IReadOnlyList<object[]> filters, string? orderBy, string? groupBy, int limit, CancellationToken cancellationToken, int limitStart = 0)
     {
         var url = $"api/resource/{Uri.EscapeDataString(doctype)}?fields={Uri.EscapeDataString(JsonSerializer.Serialize(fields))}"
-            + $"&filters={Uri.EscapeDataString(JsonSerializer.Serialize(filters))}&limit_page_length={limit.ToString(CultureInfo.InvariantCulture)}";
+            + $"&filters={Uri.EscapeDataString(JsonSerializer.Serialize(filters))}&limit_page_length={limit.ToString(CultureInfo.InvariantCulture)}&limit_start={limitStart}";
         if (orderBy is not null)
         {
             url += $"&order_by={Uri.EscapeDataString(orderBy)}";

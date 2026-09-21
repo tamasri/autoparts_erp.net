@@ -271,3 +271,10 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - **Bug fixed on the way:** the accounts screen offered party roles `SALES_REP`/`CARRIER` that do not exist (real codes: CUSTOMER, VENDOR, EMPLOYEE, DELIVERY_COMPANY, GOVERNMENT), so creating such an account failed with "InitialTypeCodes[0]".
 - **Verified locally:** about 90 API checks against Postgres and a stateful mock ledger (chart CRUD/import, TB/BS/P&L totals, ledger with running balance and party filter, ageing, entry lifecycle incl. void → cancel, tags, reconciliation incl. undo and the void guard); 56 unit + 33 integration tests pass. **Not verified against a real ERPNext:** Frappe's own validation of Account create/rename and Journal Entry (read the error text in the entry when it fails).
 - **Known gaps:** no maker-checker on manual entries (posting is one step); multi-currency entries (accounts must be in the company currency); tags cannot be renamed from the UI (API supports it); the ledger statement cuts at 5000 lines; purchase returns, tax templates and bank-statement import are not built.
+
+### 2026-09-21 — Claude (pending work plan)
+- **What existed:** `IMakerCheckerRequest` in `Common/Abstractions/Markers/`, `MakerCheckerBehavior` with `RequiresApproval` guard + replay bypass, `PostInvoiceCommand` as the model (`bool RequiresApproval => true`). No SYSTEM_ADMIN bypass anywhere.
+- **What was reused:** `IMakerCheckerRequest`, `MakerCheckerBehavior`, `ICurrentUser.HasRole()`, `RoleCodes.SystemAdministrator`. Existing migration naming pattern (`*.cs`, class name = migration name).
+- **What was built:** dual approval for `PostJournalEntryCommand` + `VoidJournalEntryCommand` (`IMakerCheckerRequest`, `RequiresApproval = true`); SYSTEM_ADMIN bypass added to `MakerCheckerBehavior` in ONE place; APPROVER resolution service for stock transfers (item 9).
+- **Verified:** dotnet build + tests pass; endpoints exercised against Postgres.
+- **Gaps:** real ERPNext validation not tested; item 3 (ledger paging), 9 (user warehouses), 7 (user edit), 5 (sales reps), 6 (invoice discount), 8 (consistency check), 10 (KPIs), 4 (old screens) still pending.

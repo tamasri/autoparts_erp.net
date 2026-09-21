@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Common.Abstractions.Markers;
 using AutoPartsERP.Application.Common.Messaging;
 using AutoPartsERP.Contracts.Accounting;
 
@@ -200,10 +201,13 @@ public sealed class SaveJournalEntryCommandHandler : IRequestHandler<SaveJournal
 
 // ------------------------------------------------------------------ post / void / delete
 
-public sealed record PostJournalEntryCommand(Guid Id) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
+public sealed record PostJournalEntryCommand(Guid Id) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IPeriodSensitiveRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Accounting.PostEntries;
     public string AuditModule => "ACCOUNTING";
+    public DateTimeOffset OperationDate => DateTimeOffset.UtcNow; // resolved from DB by the handler
+    public string Module => EntryLineRules.Module;
+    public bool RequiresApproval => true;
 }
 
 public sealed class PostJournalEntryCommandHandler : IRequestHandler<PostJournalEntryCommand, Result<Guid>>
@@ -265,10 +269,13 @@ public sealed class PostJournalEntryCommandHandler : IRequestHandler<PostJournal
     }
 }
 
-public sealed record VoidJournalEntryCommand(Guid Id, string Reason) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
+public sealed record VoidJournalEntryCommand(Guid Id, string Reason) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IPeriodSensitiveRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Accounting.PostEntries;
     public string AuditModule => "ACCOUNTING";
+    public DateTimeOffset OperationDate => DateTimeOffset.UtcNow; // resolved from DB by the handler
+    public string Module => EntryLineRules.Module;
+    public bool RequiresApproval => true;
 }
 
 public sealed class VoidJournalEntryCommandValidator : AbstractValidator<VoidJournalEntryCommand>

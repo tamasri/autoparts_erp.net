@@ -84,7 +84,7 @@ public sealed record ErpNextGlBalance(string Account, decimal Debit, decimal Cre
 public sealed record ErpNextGlEntry(
     string Name, DateOnly PostingDate, string Account, string? PartyType, string? Party, decimal Debit, decimal Credit, string? VoucherType, string? VoucherNo, string? Remarks);
 
-public sealed record ErpNextGlFilter(string? Account, string? PartyType, string? Party, DateOnly? From, DateOnly? To, int Limit);
+public sealed record ErpNextGlFilter(string? Account, string? PartyType, string? Party, DateOnly? From, DateOnly? To, int Limit, int LimitStart = 0);
 
 public sealed record ErpNextPartyBalance(string Party, decimal Debit, decimal Credit);
 

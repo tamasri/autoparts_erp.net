@@ -1,6 +1,7 @@
 ﻿using AutoPartsERP.Application.Common.Abstractions;
 using AutoPartsERP.Application.Common.Abstractions.Markers;
 using AutoPartsERP.Application.Common.Models;
+using AutoPartsERP.Domain.Constants;
 
 namespace AutoPartsERP.Application.Common.Behaviors;
 
@@ -35,6 +36,12 @@ public sealed class MakerCheckerBehavior<TRequest, TResponse> : IPipelineBehavio
         if (request is not IMakerCheckerRequest makerCheckerRequest
             || !makerCheckerRequest.RequiresApproval
             || _replayContext.IsReplaying)
+        {
+            return await next();
+        }
+
+        // SYSTEM_ADMIN bypasses all approval — they have the full platform picture and are trusted.
+        if (_currentUser.HasRole(RoleCodes.SystemAdministrator))
         {
             return await next();
         }

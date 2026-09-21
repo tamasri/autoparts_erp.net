@@ -86,7 +86,7 @@ public sealed class GetProfitLossStatementQueryHandler : IRequestHandler<GetProf
 // ------------------------------------------------------------------ ledger statement
 
 /// <summary>Every posting on one ledger account (optionally one party, optionally only tagged vouchers) with a running balance.</summary>
-public sealed record GetLedgerStatementQuery(string Account, DateOnly From, DateOnly To, string? Party, Guid? TagId) : IRequest<Result<LedgerStatementDto>>, IAuthorizedRequest
+public sealed record GetLedgerStatementQuery(string Account, DateOnly From, DateOnly To, string? Party, Guid? TagId, int PageNumber = 1, int PageSize = 100) : IRequest<Result<LedgerStatementDto>>, IAuthorizedRequest
 {
     public string RequiredPermission => PermissionCodes.Accounting.Read;
 }
@@ -123,6 +123,9 @@ public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerSt
 
         var sign = ChartTree.IsDebitNormal(account.RootType) ? 1m : -1m;
         var party = string.IsNullOrWhiteSpace(request.Party) ? null : request.Party.Trim();
+        var page = Math.Max(request.PageNumber, 1);
+        var size = Math.Clamp(request.PageSize, 10, 200);
+        var limitStart = (page - 1) * size;
 
         // Opening = everything before the first day. With a party filter the totals per account cannot be used, so the party's own lines are summed.
         decimal opening;
@@ -134,18 +137,31 @@ public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerSt
         }
         else
         {
-            var earlier = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, null, request.From.AddDays(-1), MaxRows * 4), cancellationToken);
+            var earlier = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, null, request.From.AddDays(-1), MaxRows * 4, 0), cancellationToken);
             if (earlier.IsFailure) return Result<LedgerStatementDto>.Failure(earlier.Error);
             opening = earlier.Value!.Sum(e => e.Debit - e.Credit);
         }
 
-        var entries = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, MaxRows), cancellationToken);
-        if (entries.IsFailure) return Result<LedgerStatementDto>.Failure(entries.Error);
-        var truncated = entries.Value!.Count > MaxRows;
-        var page = entries.Value!.Take(MaxRows).ToList();
+        // Fetch one extra row to detect that there are more pages
+        var allEntries = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, size + 1, limitStart), cancellationToken);
+        if (allEntries.IsFailure) return Result<LedgerStatementDto>.Failure(allEntries.Error);
+        var totalCount = -1; // unknown total — signals "no paging info"
+        var truncated = allEntries.Value!.Count > size;
+        var pageEntries = allEntries.Value!.Take(size).ToList();
+
+        // If this is the first page, we can count the total by fetching with a large limit
+        // to detect whether there are more rows beyond MaxRows
+        if (page == 1)
+        {
+            var countProbe = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, MaxRows + 1, 0), cancellationToken);
+            if (!countProbe.IsFailure)
+            {
+                totalCount = countProbe.Value!.Count;
+            }
+        }
 
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var vouchers = page.Where(e => e.VoucherType is not null && e.VoucherNo is not null).Select(e => (e.VoucherType!, e.VoucherNo!)).Distinct().ToList();
+        var vouchers = pageEntries.Where(e => e.VoucherType is not null && e.VoucherNo is not null).Select(e => (e.VoucherType!, e.VoucherNo!)).Distinct().ToList();
         var tags = await TagResolver.ForVouchersAsync(connection, vouchers, cancellationToken);
         var names = vouchers.Select(v => v.Item2).Distinct().ToArray();
         var links = (await connection.QueryAsync<(string Doctype, string Name, string Type, Guid Id)>(new CommandDefinition(
@@ -155,9 +171,25 @@ public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerSt
             """,
             new { names }, cancellationToken: cancellationToken))).GroupBy(l => TagResolver.VoucherKey(l.Doctype, l.Name)).ToDictionary(g => g.Key, g => g.First());
 
-        var balance = sign * opening;
-        var rows = new List<LedgerRowDto>(page.Count);
-        foreach (var e in page)
+        // Compute the running balance at the start of this page.
+        // For page 1 it is the opening balance; for later pages we must sum all debit-credit from prior pages.
+        decimal pageStartBalance;
+        if (page == 1)
+        {
+            pageStartBalance = sign * opening;
+        }
+        else
+        {
+            // Fetch all rows before this page to compute their net movement
+            var priorEntries = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, size, 0), cancellationToken);
+            if (priorEntries.IsFailure) return Result<LedgerStatementDto>.Failure(priorEntries.Error);
+            var net = priorEntries.Value!.Sum(e => sign * (e.Debit - e.Credit));
+            pageStartBalance = sign * opening + net;
+        }
+
+        var balance = pageStartBalance;
+        var rows = new List<LedgerRowDto>(pageEntries.Count);
+        foreach (var e in pageEntries)
         {
             balance += sign * (e.Debit - e.Credit);
             var key = e.VoucherType is not null && e.VoucherNo is not null ? TagResolver.VoucherKey(e.VoucherType, e.VoucherNo) : null;
@@ -168,7 +200,8 @@ public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerSt
 
         var shown = request.TagId is { } tagId ? rows.Where(r => r.Tags.Any(t => t.Id == tagId)).ToList() : rows;
         return Result<LedgerStatementDto>.Success(new LedgerStatementDto(
-            account.Name, account.RootType, request.From, request.To, sign * opening, shown, shown.Sum(r => r.Debit), shown.Sum(r => r.Credit), balance, truncated));
+            account.Name, account.RootType, request.From, request.To, sign * opening, shown, shown.Sum(r => r.Debit), shown.Sum(r => r.Credit),
+            balance, truncated, totalCount, page, size));
     }
 }
 
