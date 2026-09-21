@@ -3,7 +3,7 @@
 > **READ THIS FIRST.** Any AI agent (or human) starting work on `autoparts_erp.net` must read this file
 > completely before writing a single line of code. Companion docs: `PROJECT_VISION.md` (what exists / roadmap),
 > `ENGINEERING_PLAYBOOK.md` (rules), `SETUP_HARDENING.md` (run, deploy, harden), `docs/FEATURE_GAP_AND_ROADMAP.md`
-> (gap analysis + phased plan). *Last verified against the code: 2026-09-19.*
+> (gap analysis + phased plan). *Last verified against the code: 2026-09-21.*
 
 ---
 
@@ -21,9 +21,10 @@ HARD CONTEXT:
   inventory, warehouse ops, warranty and governance; ERPNext is the system of record for the ledger (chart of
   accounts, payments, purchase invoices, taxes, financial reports). The ONLY door between them is
   `IErpNextClient`. Users never open ERPNext's UI — every accounting screen must live inside OUR frontend.
-- Frontend: React 19 + Vite 6 + TypeScript + react-router 7 + Zustand + axios + sonner, styled with our own
-  "Vex" design system (`frontend/src/styles/theme.css`, classes `vex-*`, `btn-*`, `badge*`). It does NOT use
-  MUI, TanStack Query, react-hook-form or Zod even though some are still listed in package.json (dead deps).
+- Frontend: React 19 + Vite 6 + TypeScript + react-router 7 + Zustand + axios + sonner, on **MUI v6** (RTL, one theme in
+  `frontend/src/theme`) with a shared kit in `components/ui` (DataTable, ReasonDialog, ImportDialog, RoutedTabs, ...) and hooks (`usePagedList`, `useLoad`,
+  `useCan`, `useConfirm`). TanStack Query, react-hook-form and Zod are used only in `features/customers`. Nine screens still use the old "Vex" CSS classes
+  (`theme.css`): login, invoice workspace/detail, item card, payments, receiving, transfers, issue orders, cycle counts, stock adjustments (debt D16).
 - Projects: Domain -> Contracts -> Application -> Infrastructure -> Api (dependency rule is absolute).
   Tests: UnitTests, IntegrationTests (need Docker/Testcontainers), E2ETests (empty). SPA in /frontend.
 
@@ -41,7 +42,7 @@ ABSOLUTE RULES:
    the existing hardcoded-Arabic convention until an externalisation pass is scheduled; never mix languages.
 8. Feature-folder convention under Application/Features/<Domain>/<Action>/.
 9. LISTS ARE SERVER-PAGED. Never fetch "a big page" and filter/aggregate in the browser. Use
-   `usePagedList` + `<Pagination>` for lists and server-side endpoints for every total/KPI.
+   `usePagedList` + `DataTable` paging for lists and server-side endpoints for every total/KPI.
 10. AI NEVER WRITES core data. It reads through permission-checked tools and proposes; execution goes
     through the existing approval (maker-checker) flow.
 11. NEVER put secrets in code, commits, docs or chat. Keys live in env / .env.vps on the server only.
@@ -71,7 +72,7 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~28 Carter modules; 18 raw-SQL migrations (later ones use ids `202401010000NN`); 60+ tables.
+- ~30 Carter modules; 19 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
@@ -82,10 +83,10 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
   yet (see PROJECT_VISION debts D10–D14).
 - Reference pickers (no typing of ids): `LocationSelect`, `EntityPicker`, `ItemPickerModal`, `FxRateField` in
   `frontend/src/components/pickers/`; the invoice screen uses all of them. Five WMS screens still use raw-ID inputs (debt D13).
-- Frontend screens (all RTL Arabic): Login, Dashboard, KPI, Customers (+detail), Parties (+combined statement),
-  Invoices (+workspace, detail), FX rates, Items list + **item card** (details/edit, stop-ship, stock, aliases,
-  interchanges, prices), Inventory, Receiving, Transfers, Cycle counts, Adjustments, Issue orders, Inventory
-  alerts, Approvals, Audit log, Period locks, Users (list), Roles, **Accounting Sync**.
+- Frontend screens (all RTL Arabic), by menu section: Sales (Accounts with customer profile/statements, invoices + workspace + detail, payments), Accounting
+  (chart of accounts, entries, reconciliation, receivables/payables, financial reports, FX rates), Purchasing, Items (+ item card), Stock (balances, movements,
+  warehouses, alerts), Warehouse operations (receiving, transfers, issue orders, cycle counts, adjustments), Administration (approvals, audit, period locks,
+  ERPNext sync, **users with create/edit/roles/password/activation**, roles), Login, Dashboard, KPI.
 - Server-side paging on: invoices, customers, parties, inventory, users, approvals, audit, ERPNext sync log,
   items. Still unpaged in the UI: receiving, transfers, cycle counts, adjustments, issue orders, FX rates.
 - CI (`.github/workflows/deploy.yml`): build + unit + integration tests on every push; the deploy job only
@@ -94,10 +95,9 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
 **What is stubbed or missing (do not assume it works):**
 - **AI is not implemented.** `AiService.ChatAsync` now returns an explicit `Ai.ProviderNotConfigured` error (it used to
   echo the user's text); nothing generates suggestions; no screen calls `/ai/*`. See PROJECT_VISION §6.
-- Backend with no screen: AI, Payments, Warranty, Reports, Barcodes, Catalog categories, batches, user/role
-  editors, reason codes. Tables with no API: `party_contacts`, `party_addresses`, `party_notes`,
-  `attribute_schemas`, `item_reorder_settings`, `barcode_scan_logs`.
-- No purchase invoices, bank/cash accounts, POS, public invoice links, e-mail/SMS, CRM extras, backups UI.
+- Backend with no screen: AI, Warranty, Reports (the old P&L/inventory value), Barcodes, Catalog categories, batches, role-permission editing, reason codes.
+  Tables with no API: `party_contacts`, `party_addresses`, `party_notes`, `attribute_schemas`, `item_reorder_settings`, `barcode_scan_logs`.
+- Not built: POS, public invoice links, e-mail/SMS, CRM extras, backups UI, purchase returns, tax templates (purchasing and the accounting section exist).
 
 **Bootstrap admin:** created once by `DatabaseSeeder` from `Seed:AdminEmail/AdminUsername/AdminPassword`.
 In Production the app refuses to start without a real password (the deploy script generates one into
@@ -161,9 +161,10 @@ In Production the app refuses to start without a real password (the deploy scrip
     multi-line text into noVNC corrupts it — do server work over SSH. Never disable SSH password auth without a
     verified working key (this locked the owner out once).
 16. **SDK pin:** `global.json` = 9.0.312 with `rollForward: latestMajor`.
-17. **Local secrets/noise:** `ADMIN PASSWORD.txt`, `*password*.txt`, `appsettings.Development.json`,
-    `scripts/logs/`, `*_run_*.log` are git-ignored. One of them was committed once and had to be purged — check
-    `git status` before every commit.
+17. **Local secrets/noise:** `ADMIN PASSWORD.txt`, `*password*.txt`, `scripts/logs/`, `*_run_*.log` and `appsettings.Development.json` are git-ignored. **Exception found
+    2026-09-21:** `appsettings.Development.json` (a dev JWT private key and the dev DB password) had been committed in the very first commit, before the ignore rule
+    existed, and the repository is public. It is untracked now and `scripts/init-dev-settings.ps1` creates a fresh one (new key pair) on any checkout, but it
+    **stays in git history** and must be treated as public (the VPS uses its own key pair from `.env.vps`). Check `git status` before every commit.
 18. **Verify data-layer changes against a real Postgres, locally.** CI does not execute your SQL: integration tests run in
     `Testing` (no migrations, no seeding) and only check auth/health. Start the dev stack
     (`docker compose -f docker-compose.dev.yml up -d postgres redis`, needs Docker Desktop), run the API in
@@ -278,3 +279,21 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - **What was built:** dual approval for `PostJournalEntryCommand` + `VoidJournalEntryCommand` (`IMakerCheckerRequest`, `RequiresApproval = true`); SYSTEM_ADMIN bypass added to `MakerCheckerBehavior` in ONE place; APPROVER resolution service for stock transfers (item 9).
 - **Verified:** dotnet build + tests pass; endpoints exercised against Postgres.
 - **Gaps:** real ERPNext validation not tested; item 3 (ledger paging), 9 (user warehouses), 7 (user edit), 5 (sales reps), 6 (invoice discount), 8 (consistency check), 10 (KPIs), 4 (old screens) still pending.
+
+### 2026-09-21 — Claude (review of the interrupted session + Round 5)
+- **What the previous session left:** one commit (`5e3d2a3`, in a Claude worktree branch `claude/fervent-heyrovsky-952240` under `.claude/worktrees/`, invisible from the main folder) and uncommitted files for warehouse
+  approval. The commit was merged; its faults were fixed in `673f4a3` (period-lock marker looked at today's month; page 2 double-counted a line and page 3+ started from the wrong balance; the screen
+  showed 100 rows with no pager). The uncommitted files were NOT adopted (migration without attributes and against a non-existent `users` table, hand-rolled JSON scanning with an operator-precedence bug, calls
+  to service methods that do not exist, `||` where both managers must approve, and a silent change making every other approval need the APPROVER role); a backup patch was kept outside the repo.
+- **Done (item numbers = the task list):** 1 dual approval for manual entries (`IMakerCheckerRequest`, SYSTEM_ADMIN exempt in `MakerCheckerBehavior`); 3 exact paged ledger statement (aggregate totals, offset totals,
+  stable order, tag filter inside the query, export up to 20,000 lines); 7 users screen + backend loopholes closed (see below). Security fixes from an external static review: dev settings untracked, fail-closed
+  connection strings, package-lock tracked, CI builds the frontend, Grafana on localhost.
+- **Three period-lock defects found and fixed** (`1182b4f`): the cached answer was never invalidated (a lock took up to 10 minutes to apply), re-locking an unlocked month failed with a duplicate key, and the
+  lock/unlock commands were themselves period-sensitive (once the cache was right a locked month could not be unlocked).
+- **Users:** `PUT /users/{id}` is the profile only (it used to change roles, bypassing the approval on `AssignRoles`); `IsActive` was hard-coded true and could not be undone (now real, `/activate` added);
+  admin password reset `/users/{id}/password` is deliberately not governed (an approval stores the request as plain JSON); guards in `UserService`: no self role/status change, never remove the last usable
+  system administrator, unknown roles refused.
+- **Not done (still open):** 2 currency display layer (see the open question in PROJECT_VISION §5.4), 4 old screens to MUI, 5 sales-rep page, 6 invoice-level discount, 8 ERPNext consistency screen, 9 per-user
+  warehouses and warehouse-manager approval of transfers (design: `user_warehouses(user_id → asp_net_users, warehouse_id → locations, is_manager)`; approvers resolved in one service used by `MakerCheckerBehavior` and
+  `GovernanceService`; both the source and destination manager must approve; SYSTEM_ADMIN exempt; do not change who may approve other requests), 10 ERPNext-grade KPIs.
+- **Verified locally:** ~60 API checks on Postgres + the stateful mock ledger (230 vouchers paged and stitched, dual approval incl. replay, period locks, users); 84 unit + 33 integration tests; `tsc` and build clean.

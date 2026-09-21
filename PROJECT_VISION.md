@@ -2,7 +2,7 @@
 
 > **Isolation notice:** This document describes **`autoparts_erp.net`** only — a standalone .NET / PostgreSQL /
 > React ecosystem (plus ERPNext as a headless accounting engine). It shares nothing with any prior
-> Next.js/NestJS/TypeScript project. *Last verified against the code and the live server: 2026-09-19.*
+> Next.js/NestJS/TypeScript project. *Last verified against the code: 2026-09-21 (live server last checked 2026-09-19).*
 
 ---
 
@@ -46,7 +46,7 @@
 | API host | ASP.NET Core Minimal APIs + **Carter** modules (~28) | `Api/Modules/*` |
 | CQRS | **MediatR 12** behaviors: Validation → Authorization → Idempotency → PeriodLock → MakerChecker | `Program.cs` |
 | Validation / mapping | FluentValidation 11, Mapster | |
-| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (18) | `Persistence/Migrations` |
+| Writes | EF Core 9 + Npgsql; **raw-SQL migrations** (19) | `Persistence/Migrations` |
 | Reads | **Dapper 2** on snake_case tables + `DapperTypeHandlers` (`DateOnly`, `DateTimeOffset`) | |
 | Database | **PostgreSQL 16** (`ltree`, `pg_trgm`, `uuid-ossp`; `pgvector` for embeddings) | On the VPS it runs on the host |
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
@@ -66,7 +66,7 @@
 | Frontend i18n | **react-i18next** `useTranslation` active; `ar.json`/`en.json` expanded; language switcher in Topbar | **Adopted 2026-09-19** |
 | Reverse proxy / TLS | nginx in Docker; self-signed cert on the IP until a domain exists | |
 | CI | GitHub Actions: build + unit + integration tests; deploy job gated on secrets | GREEN |
-| Tests | UnitTests (32), IntegrationTests (25, need Docker; auth/health only — they do not run SQL), E2ETests (empty project) | |
+| Tests | UnitTests (84), IntegrationTests (33, need Docker; auth/health only — they do not run SQL), E2ETests (empty project) | |
 
 **Stack adoption status — updated 2026-09-19 (owner-approved full migration; see §2a):**
 - **Frontend — NOW ACTIVE:** `@mui/material` v6, `@mui/x-data-grid`, `@tanstack/react-query` v5, `react-hook-form` v7, `zod` v3, `@emotion/cache`, `@emotion/react`, `stylis-plugin-rtl`, `react-i18next`.
@@ -102,11 +102,11 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 |---|---|---|---|
 | Auth | Login/refresh/logout/me | `Login.tsx`, `authStore` | ✅ |
 | Dashboard / KPIs | **`GET /dashboard/summary`** (server-aggregated) + `/kpi/admin/*` definitions | `Dashboard.tsx` (cards, 30-day chart, recent invoices, top customers), `KpiDashboard.tsx` | ✅ |
-| Users | CRUD + roles endpoints | list only (paged, searchable) | 🟡 no create/edit forms |
+| Users | create, edit profile, assign roles (governed), password reset, activate/deactivate (governed); guards: no self role/status change, last system administrator protected | `Users.tsx` + `UserDialog` (paged, status filter) | ✅ (warehouse assignment: open, item 9) |
 | Roles & permissions | create, grant/revoke | list/partial | 🟡 |
 | Approvals (maker-checker) | pending/approve/reject **+ replay executes the request** | `Approvals.tsx` (paged) | ✅ |
 | Audit log | list/detail | `AuditLog.tsx` (paged, filters) | ✅ |
-| Period locks | lock/unlock/list | `PeriodLocks.tsx` | ✅ |
+| Period locks | lock/unlock/re-lock/list per module; effective immediately (cache invalidated on change) | `PeriodLocks.tsx` | ✅ (fixed 2026-09-21) |
 | Reason codes | create/list | — | 🟡 |
 | Customers | full CRUD + statement | `Customers.tsx` (paged), `CustomerDetail.tsx` | ✅ |
 | Parties (customer/supplier) | CRUD, types, statements | `Parties.tsx` (paged), `CombinedStatement.tsx` | ✅ (contacts/addresses/notes tables have no API) |
@@ -198,6 +198,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] **D14 — DONE: rename propagates via rename_doc.** Was: renaming a customer is not propagated to ERPNext (it identifies customers by name).
 - [x] **D15 — DONE (2026-09-20): stock and warehouse balances are kept in step.** Was: **Two stock models.** WMS documents (receiving, putaway, transfer orders, adjustments) change `inventory_balances`; invoices, direct receive/adjust/transfer and (now) issue orders change `inventory_stock`. A periodic job copies stock → balances only, so goods received through a WMS document are **not** sellable until D9 is done. The item-movement ledger is complete for both sides.
 - [ ] **D16 — Old-style screens (about a third left).** On MUI with the shared kit (`components/ui`): shell, dashboard, KPIs, accounts, customer profile, statements, purchasing, invoices list, items list, inventory, alerts, warehouses, movements, the whole accounting section, accounting sync, users, roles, approvals, audit, period locks, FX rates. Still on the Vex CSS classes: **login, invoice workspace and detail, item card, payments, receiving, transfers, issue orders, cycle counts, stock adjustments** and the pickers/line editors they use (`ItemPickerModal`, `LocationSelect`, `EntityPicker`, `FxRateField`, `WmsLinesEditor`).
+- [ ] **D17 — Dev key in git history.** `appsettings.Development.json` (a dev JWT private key and the dev DB password) was committed in the first commit of a public repository; it is untracked but remains in history. Decide: purge history (force-push) or just treat as public. The VPS uses its own keys.
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
 ### 5.2 Phases (in the agreed order)
@@ -238,6 +239,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] Purchase invoices + supplier payments + ERPNext sync (Purchase Invoice, Payment Entry Pay, cancels); posting receives the goods and sets a weighted-average cost.
 - [x] Stock adjustments are booked in ERPNext (Dr COGS / Cr Inventory at cost).
 - [x] **Accounting section (2026-09-20):** chart of accounts with groups and ledgers (+ import/export), dynamic entry types (receipt, payment, contra, journal, opening, debit/credit note and any the business adds), manual entries with tags, ledger reconciliation and its statement, trial balance, balance sheet, profit & loss, ledger statement, receivables/payables ageing, PDF/Excel/CSV on every report. Permissions `accounting:*` (ACCOUNTANT holds all four, AUDITOR reads).
+- [x] **Fixes and reviews (2026-09-21):** ledger statement is paged exactly (aggregates, offset totals, stable order); manual entries need a second approval (SYSTEM_ADMIN exempt); period locks take effect at once and can be re-locked/unlocked; users screen and role-change guards; dev settings file untracked (repository is public), fail-closed connection strings, lockfile + CI frontend job.
 - [x] **Menu restructured:** related screens are one menu entry with section tabs (sales documents, stock, warehouse operations, users and roles); the raw ERPNext document browser and the duplicate ERPNext-documents screen were removed.
 - [x] Purchasing roles (ACCOUNTANT, PURCHASER), supplier statement, cost restored when a bill is voided, period locks per module (SALES / PURCHASES / PAYMENTS).
 - [x] Credit limit kept in USD only (lira shown from the latest saved rate); "العميل" is "الزبون" in every Arabic label.
@@ -261,7 +263,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       salesperson points; date + tag filters; Excel export everywhere (ClosedXML is in place).
 
 #### PHASE 5 — Security & administration  · `Status: Not Started`
-- [ ] Users and roles editors (forms), user ↔ warehouse scoping, one-click database backup (scheduled
+- [ ] Role-permission editor (the users editor is done, 2026-09-21), user ↔ warehouse scoping, one-click database backup (scheduled
       `pg_dump`, rotation, admin-only download), catalog categories, batches, warranty and reason-code screens.
 
 #### PHASE 6 — Real AI  · `Status: Not Started`
@@ -287,6 +289,10 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
   accounting-sync screen, nginx `/hangfire`, Hangfire queue fix.
 
 ---
+
+### 5.4 Open questions for the owner
+1. **Company currency.** The last request asks for accounts and entries in the Syrian pound with the dollar equivalent in small type everywhere, and only the credit limit shown in dollars. The system today keeps every amount in USD (`*_usd` columns) and the ERPNext company currency is USD, which ERPNext will not let us change once entries exist. Options: (a) **display layer only** (lira primary, dollar small, no data change — safe, recommended first step), (b) keep USD as the ledger and show lira as now, (c) a new ERPNext company in SYP with migrated history (large, risky). Which one?
+2. **Warehouse approval semantics.** Read as: a transfer between two warehouses needs the source manager AND the destination manager; SYSTEM_ADMIN needs none. Confirm, and say whether "responsible for a warehouse" also allows that person to approve other requests.
 
 ## 6. AI layer — truthful status
 

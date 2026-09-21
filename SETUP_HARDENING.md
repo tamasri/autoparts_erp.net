@@ -1,6 +1,6 @@
 # SETUP_HARDENING.md — AutoPartsERP
 
-> Setup, deployment and hardening for **`autoparts_erp.net`** only. *Last verified 2026-09-19 against the running VPS.*
+> Setup, deployment and hardening for **`autoparts_erp.net`** only. *Last verified 2026-09-19 against the running VPS; local setup and security items updated 2026-09-21.*
 > Never paste secrets into chat, tickets or commits. Anything that has been pasted in a chat is considered exposed.
 
 ---
@@ -27,6 +27,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1     # switche
 (`START-FULLSTACK.bat` / `.vbs` are double-click wrappers.) Logs land in `scripts/logs/` (git-ignored).
 
 ### Option B — manual
+A fresh checkout has no `appsettings.Development.json` (it is untracked, it holds a JWT private key and the DB password). Create it once:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\init-dev-settings.ps1 -DbPassword <password from docker-compose.dev.yml>
+```
+It copies `appsettings.Development.example.json` and generates a new RSA key pair on your machine; it refuses to overwrite an existing file.
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # Postgres 16, Redis 7, Seq, pgAdmin
 dotnet restore AutoPartsERP.sln --configfile NuGet.Config
@@ -145,6 +150,8 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 | Accounting screens say "ERPNext integration is disabled" (503) | `Erpnext:Enabled` is false or the API cannot reach ERPNext | enable it in `.env.vps`, then redeploy |
 | A posted entry stays "بانتظار الإرسال" or "فشل الإرسال" | outbox not processed yet, or ERPNext refused the Journal Entry | open the entry: the error is ERPNext's text (closed period, missing party on a receivable line, currency); fix and press "مزامنة الآن" |
 | "The ticked lines do not match the statement" | statement balance ≠ previously cleared + ticked lines | tick the lines that are on the statement; the difference is shown live |
+| API stops at start-up with "Database:ConnectionString is not configured" (or Redis) | outside Development the app no longer falls back to a local default | set the missing value in `.env.vps` (production) or run `scripts/init-dev-settings.ps1` (development) |
+| A locked period still accepts entries for a few minutes / a locked month cannot be unlocked | (fixed 2026-09-21) the lock answer was cached for 10 minutes and never invalidated; the lock commands were gated by the lock they manage | deploy the fix; nothing to do in the data |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
 ---
@@ -152,6 +159,7 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 ## 5. Production hardening checklist
 
 **Done ✔**
+- [x] 2026-09-21: `Program.cs` stops the start-up outside Development/Testing when `Database:ConnectionString` or `Redis:ConnectionString` is missing (no more `postgres/postgres` fallback); `appsettings.Development.json` untracked; `frontend/package-lock.json` tracked; CI has a `build-frontend` job (`npm ci`, `tsc`, build); Grafana in `docker-compose.prod.yml` bound to 127.0.0.1.
 - [x] CORS from `AllowedOrigins`; fails closed outside Development.
 - [x] Hangfire dashboard requires an authenticated `SYSTEM_ADMIN`.
 - [x] No committed default admin password; production requires `Seed__AdminPassword`.
@@ -161,6 +169,7 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 - [x] Scalar/OpenAPI are **not proxied** by nginx (unreachable from outside).
 
 **Pending**
+- [ ] **H-0 Dev key in git history:** `appsettings.Development.json` (a dev JWT private key and the dev DB password) sat in the public repository from the first commit until 2026-09-21 and is still in history. It never signed production tokens (the VPS generates its own pair), but treat it as public: do not reuse that DB password anywhere; decide whether to purge history (force-push, owner decision).
 - [ ] **H-1 Rotate exposed secrets:** Postgres password, JWT key pair (invalidates sessions), Redis password. Then
       delete/relocate any local `ADMIN PASSWORD.txt`.
 - [ ] **H-2 Domain + real TLS** (Let's Encrypt or Cloudflare). `docs/cloudflare-setup.md` is a template that still
@@ -173,6 +182,11 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 - [ ] **H-7** Server upgrade (RAM/CPU) before production load; monitor swap.
 - [ ] **H-8** Set GitHub secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` so CI can deploy (currently skipped).
 - [ ] **H-9** Decide migration policy for production (auto-migrate on boot vs a controlled step) and take a backup first.
+- [ ] **H-11 Tokens in localStorage:** the access and refresh tokens are persisted by the auth store (an XSS could read them). Preferred: refresh token in an `HttpOnly; Secure; SameSite` cookie with CSRF protection, access token in memory; until then a strict CSP.
+- [ ] **H-12 nginx headers:** add a CSP, `Permissions-Policy`, `client_max_body_size` and cache headers for sensitive responses.
+- [ ] **H-13 Rate limits** beyond login: refresh/logout, exports/imports, AI.
+- [ ] **H-14 Pin versions:** GitHub Actions to commit SHAs, Docker images to versions/digests (`latest` for Prometheus/Grafana/Loki/Tempo in the prod compose), Dependabot/Renovate, dependency and image scanning in CI.
+- [ ] **H-15 CI deploy step** (`.github/workflows/deploy.yml`) ends its migration command with `|| true`: a failed migration does not stop a deploy. The VPS deploys through `scripts/deploy-vps.sh`, so this path is unused today; fix before enabling it.
 - [ ] **H-10** AI/notification keys (`AI_*`, `SMTP_*`) live only in `.env.vps`; document their rotation.
 
 ---

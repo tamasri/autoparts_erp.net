@@ -54,7 +54,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
   the durable fix (backlog D8).
 - **No flaky tests.** A test may not depend on timing of an internal exporter or on test order. (The metrics
   endpoint test failed intermittently for that reason and now asserts only what is deterministic.)
-- **Never commit secrets [convention + .gitignore]:** `appsettings.Development.json`, `*password*.txt`,
+- **Never commit secrets [convention + .gitignore]:** `appsettings.Development.json` (it was tracked from the first commit until 2026-09-21 — create yours with `scripts/init-dev-settings.ps1`), `*password*.txt`,
   `.env*` (except templates). A leaked file must be purged, and any secret ever pasted in chat is rotated.
 - Check `git status` before every commit for local noise (`scripts/logs/`, `*_run_*.log`).
 
@@ -146,6 +146,10 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **Tags** attach to a manual entry (`JOURNAL_ENTRY`, id) or any ERPNext voucher (`ERPNEXT`, `"<voucher type>|<number>"`); `TagResolver` merges both views once an entry has been booked.
 - **Period locks:** module `ACCOUNTING` (create/edit through the pipeline, post and void through `IPeriodLockService`).
 - **Sections in the menu:** put related screens in one `NavItem` with `tabs` (`components/layout/navigation.ts`); do not add a menu entry per screen. Tabs inside a screen use `RoutedTabs` (`?tab=`).
+- **A paged ledger read is exact [convention]:** totals and counts come from ERPNext aggregate queries (`GetGlSummaryAsync`), the balance a page starts from from the totals of the lines skipped (`GetGlOffsetSummaryAsync`), the order is always `posting_date, creation, name`, and the arithmetic lives in `LedgerPaging` (tested). Never re-read "a page of history" to derive a balance.
+- **Period locks [enforced by tests]:** the check reads a short-lived cache; every lock/unlock must call `IPeriodLockService.InvalidateCacheAsync`. The lock/unlock commands themselves are NOT `IPeriodSensitiveRequest`. A command that is period-sensitive by request date implements `IPeriodSensitiveRequest` with that date; one that learns the date from the database checks `IPeriodLockService` in its handler — never `OperationDate = now`.
+- **Governed commands never carry secrets [convention]:** an approval stores the request as JSON in `approval_requests`. Passwords and keys go through ungoverned, audited commands (e.g. admin password reset).
+- **Approval exemptions live in one place [convention]:** SYSTEM_ADMIN's exemption is in `MakerCheckerBehavior`; approver resolution (who may approve what) must be one service used by `GovernanceService`, not per handler.
 - Verify accounting changes with the stateful mock ledger approach: a fake ERPNext that really posts Journal Entries to an in-memory GL and answers grouped `GL Entry` queries, then check TB/BS/P&L totals by hand.
 
 ### 2.4 AI rules
@@ -165,13 +169,13 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 > **Never use `require()` in `frontend/src`.** It works in the Vite dev server but not in the production bundle, where it blanks the whole app (`require is not defined`) — this happened on 2026-09-19 with `rtlCache.ts`. Use ES `import`s (add a `.d.ts` for untyped packages). After any change to `main.tsx`, the theme or the emotion cache, run `npm run build && npx vite preview` and open the page: a green `tsc`/`build` does not prove the bundle runs.
 
 - **Component model:** React 19 function components + hooks. **No class components.**
-- **Data fetching:** **@tanstack/react-query v5** — `useQuery` / `useMutation` with typed query keys. Every entity has a `features/<entity>/queries.ts` exporting `use<Entity>List`, `use<Entity>ById`, `useSave<Entity>`, `useDelete<Entity>`. `staleTime` default 30 s. `keepPreviousData` (alias `placeholderData`) on list queries to prevent flash. Cache invalidation via `queryClient.invalidateQueries({ queryKey: [entity] })` in `onSuccess`. **No raw `useEffect` data fetching.** `usePagedList` is deprecated — migrate screen by screen.
+- **Data fetching:** server state is loaded with `useLoad` (one request that reloads when its filters change) or `usePagedList` (server paging + debounced search) — both keep only the newest answer. TanStack Query v5 is used in `features/customers` only; use it for a new feature only when caching across screens is needed. Hooks must not call the API in `useEffect` more than once per screen concern.
 - **API layer:** single `lib/apiClient.ts` instance (wraps `api/client.ts`) that unwraps the `ApiResponse` envelope (`res.data?.data ?? res.data`) once and throws a typed `ApiError`. Typed endpoint modules in `api/endpoints/*` stay; they return the raw axios response — `apiClient.ts` normalises it for TanStack Query.
 - **Forms:** **react-hook-form v7** + **Zod v3** (`zodResolver`). One `schema.ts` per entity. MUI `Controller` or a thin `RHFTextField` wrapper bridges RHF to MUI inputs. `window.prompt` is banned — use MUI `Dialog` with a Zod-validated form.
 - **Styling:** **MUI v6 `createTheme`** with `direction: 'rtl'` as the single source of truth. Vex CSS tokens (`#5c54ff`, `12px` radii, card shadows, font stack) are mapped 1-to-1 into the theme. Per-component `style={{ direction: 'rtl' }}` inline overrides are deleted as each screen is migrated. `theme.css` sections are removed only when their last consumer is gone. **No new colour literals** — use theme palette or CSS variables from `theme.css` during migration.
 - **RTL:** `@emotion/cache` + `stylis-plugin-rtl` wired once in `main.tsx`. All MUI components flip automatically. `document.dir` is set by `i18n.changeLanguage` callback.
-- **Lists:** `<DataGrid paginationMode="server" rowCount={total} />` from `@mui/x-data-grid`. Pagination, sorting and search params feed the TanStack Query key. `usePagedList` is a migration aid only — do not use it on new screens.
-- **State:** Zustand for auth only. Everything else: TanStack Query (server) or local `useState` (UI toggles). No global client state for server data.
+- **Lists:** `DataTable` with its `paging` prop, fed by `usePagedList` (1-based page there, 0-based in `DataTable`); totals come from the server. `DataGrid` is not used.
+- **State:** Zustand for auth only. Everything else: server state through the hooks above, or local `useState` for UI toggles. `useCan(permission)` hides buttons the server would refuse (the server still decides).
 - **i18n:** `useTranslation()` from `react-i18next` on every screen. New translation keys added to both `ar.json` and `en.json` with a `// TODO: translate` comment in `en.json` if the English translation is unverified. Arabic is the primary language — the app is always shipped in Arabic; the EN switcher is additive.
 - **Notifications:** `toast` / `extractApiError` from `lib/toast`. POSTs guarded by `WithIdempotency()` must send an `Idempotency-Key` header (unchanged).
 - **Wording:** in Arabic UI text a customer is **الزبون / الزبائن** (never عميل). Money that has a company currency is stored and edited in USD; show the lira value from `useFxMid()` (`inLira`) instead of storing a second figure.
