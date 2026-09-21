@@ -193,12 +193,102 @@ public sealed partial class ErpNextClient
             : Result<IReadOnlyList<ErpNextGlBalance>>.Success(rows.Value!.Where(r => Text(r, "account") is not null).Select(r => new ErpNextGlBalance(Text(r, "account")!, Dec(r, "debit"), Dec(r, "credit"))).ToList());
     }
 
+    /// <summary>The order every paged ledger read uses; the name breaks ties so two queries never disagree about which line comes first.</summary>
+    private const string LedgerOrder = "posting_date asc, creation asc, name asc";
+    private const int OffsetChunk = 2000;
+    private const int MaxOffsetScan = 200_000;
+
     public async Task<Result<IReadOnlyList<ErpNextGlEntry>>> GetGlEntriesAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default)
+    {
+        var filters = await GlFiltersAsync(filter, cancellationToken);
+        if (filters.IsFailure)
+        {
+            return Result<IReadOnlyList<ErpNextGlEntry>>.Failure(filters.Error);
+        }
+
+        var rows = await QueryRowsAsync(
+            "GL Entry",
+            ["name", "posting_date", "account", "party_type", "party", "debit", "credit", "voucher_type", "voucher_no", "remarks"],
+            filters.Value!, LedgerOrder, null, filter.Limit + 1, cancellationToken, filter.LimitStart);
+        if (rows.IsFailure)
+        {
+            return Result<IReadOnlyList<ErpNextGlEntry>>.Failure(rows.Error);
+        }
+
+        return Result<IReadOnlyList<ErpNextGlEntry>>.Success(rows.Value!
+            .Where(r => Text(r, "name") is not null && Date(r, "posting_date") is not null)
+            .Select(r => new ErpNextGlEntry(
+                Text(r, "name")!, Date(r, "posting_date")!.Value, Text(r, "account") ?? string.Empty, Text(r, "party_type"), Text(r, "party"),
+                Dec(r, "debit"), Dec(r, "credit"), Text(r, "voucher_type"), Text(r, "voucher_no"), Text(r, "remarks")))
+            .ToList());
+    }
+
+    public async Task<Result<ErpNextGlSummary>> GetGlSummaryAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default)
+    {
+        var filters = await GlFiltersAsync(filter, cancellationToken);
+        if (filters.IsFailure)
+        {
+            return Result<ErpNextGlSummary>.Failure(filters.Error);
+        }
+
+        // No group_by: the aggregate query answers with a single row for everything that matches.
+        var rows = await QueryRowsAsync("GL Entry", ["count(name) as n", "sum(debit) as debit", "sum(credit) as credit"], filters.Value!, null, null, 0, cancellationToken);
+        if (rows.IsFailure)
+        {
+            return Result<ErpNextGlSummary>.Failure(rows.Error);
+        }
+
+        var row = rows.Value!.FirstOrDefault();
+        return Result<ErpNextGlSummary>.Success(rows.Value!.Count == 0 ? new ErpNextGlSummary(0, 0, 0) : new ErpNextGlSummary((long)Dec(row, "n"), Dec(row, "debit"), Dec(row, "credit")));
+    }
+
+    public async Task<Result<ErpNextGlSummary>> GetGlOffsetSummaryAsync(ErpNextGlFilter filter, int skip, CancellationToken cancellationToken = default)
+    {
+        if (skip > MaxOffsetScan)
+        {
+            return Result<ErpNextGlSummary>.Failure(new Error("ErpNext.LedgerTooLarge", $"A statement page beyond line {MaxOffsetScan:N0} cannot be positioned; narrow the dates."));
+        }
+
+        var filters = await GlFiltersAsync(filter, cancellationToken);
+        if (filters.IsFailure)
+        {
+            return Result<ErpNextGlSummary>.Failure(filters.Error);
+        }
+
+        long count = 0;
+        decimal debit = 0, credit = 0;
+        for (var start = 0; start < skip; start += OffsetChunk)
+        {
+            var take = Math.Min(OffsetChunk, skip - start);
+            var rows = await QueryRowsAsync("GL Entry", ["debit", "credit"], filters.Value!, LedgerOrder, null, take, cancellationToken, start);
+            if (rows.IsFailure)
+            {
+                return Result<ErpNextGlSummary>.Failure(rows.Error);
+            }
+
+            foreach (var row in rows.Value!)
+            {
+                debit += Dec(row, "debit");
+                credit += Dec(row, "credit");
+            }
+
+            count += rows.Value!.Count;
+            if (rows.Value!.Count < take)
+            {
+                break;
+            }
+        }
+
+        return Result<ErpNextGlSummary>.Success(new ErpNextGlSummary(count, debit, credit));
+    }
+
+    /// <summary>The ledger filters of every line-level read: company, live entries, dates, and what the caller narrowed to.</summary>
+    private async Task<Result<List<object[]>>> GlFiltersAsync(ErpNextGlFilter filter, CancellationToken cancellationToken)
     {
         var filters = await LedgerFiltersAsync(filter.From, filter.To, cancellationToken);
         if (filters.IsFailure)
         {
-            return Result<IReadOnlyList<ErpNextGlEntry>>.Failure(filters.Error);
+            return filters;
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Account))
@@ -216,21 +306,12 @@ public sealed partial class ErpNextClient
             filters.Value!.Add(["party", "=", filter.Party]);
         }
 
-        var rows = await QueryRowsAsync(
-            "GL Entry",
-            ["name", "posting_date", "account", "party_type", "party", "debit", "credit", "voucher_type", "voucher_no", "remarks"],
-            filters.Value!, "posting_date asc, creation asc", null, filter.Limit + 1, cancellationToken, filter.LimitStart);
-        if (rows.IsFailure)
+        if (filter.VoucherNos is { Count: > 0 })
         {
-            return Result<IReadOnlyList<ErpNextGlEntry>>.Failure(rows.Error);
+            filters.Value!.Add(["voucher_no", "in", filter.VoucherNos.ToArray()]);
         }
 
-        return Result<IReadOnlyList<ErpNextGlEntry>>.Success(rows.Value!
-            .Where(r => Text(r, "name") is not null && Date(r, "posting_date") is not null)
-            .Select(r => new ErpNextGlEntry(
-                Text(r, "name")!, Date(r, "posting_date")!.Value, Text(r, "account") ?? string.Empty, Text(r, "party_type"), Text(r, "party"),
-                Dec(r, "debit"), Dec(r, "credit"), Text(r, "voucher_type"), Text(r, "voucher_no"), Text(r, "remarks")))
-            .ToList());
+        return filters;
     }
 
     public async Task<Result<IReadOnlyList<ErpNextPartyBalance>>> GetPartyBalancesAsync(string partyType, DateOnly asOf, CancellationToken cancellationToken = default)

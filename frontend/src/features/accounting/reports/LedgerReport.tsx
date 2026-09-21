@@ -10,10 +10,15 @@ import { useLoad } from '../../../hooks/useLoad';
 import { money, moneyOrBlank, today, yearStart } from '../../../lib/money';
 import DataTable, { type Column } from '../../../components/ui/DataTable';
 import ExportMenu from '../../../components/ui/ExportMenu';
+import type { ExportDocument } from '../../../lib/exportClient';
 import AccountPicker from '../AccountPicker';
 import TagChips from '../TagChips';
 import { ROOT_LABEL, VOUCHER_LABEL, sourceRoute } from '../labels';
 import { ledgerDocument } from '../documents';
+
+/** A ledger export takes at most this many lines (fetched page by page); beyond it the file says how many were left out. */
+const EXPORT_LIMIT = 20000;
+const EXPORT_PAGE = 5000;
 
 export default function LedgerReport({ initialAccount }: { initialAccount?: string | null }): JSX.Element {
   const canTag = useCan(ACCOUNTING.postEntries);
@@ -25,15 +30,33 @@ export default function LedgerReport({ initialAccount }: { initialAccount?: stri
   const [partyApplied, setPartyApplied] = useState('');
   const [tagId, setTagId] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(100);
 
   useEffect(() => { const h = window.setTimeout(() => setPartyApplied(party.trim()), 400); return () => window.clearTimeout(h); }, [party]);
   useEffect(() => { setAccount(initialAccount ?? null); }, [initialAccount]);
+  useEffect(() => { setPage(0); }, [account, from, to, partyApplied, tagId]);
   const loadTags = useCallback(() => { accountingApi.tags().then((r) => setTags(unwrapList<Tag>(r.data))).catch(() => undefined); }, []);
   useEffect(loadTags, [loadTags]);
 
   const { data, loading, error, reload } = useLoad<LedgerStatement | null>(
-    async () => unwrapNode<LedgerStatement>((await accountingApi.ledger({ account: account!, from, to, party: partyApplied || undefined, tagId: tagId || undefined })).data),
-    [account, from, to, partyApplied, tagId], 'تعذر إعداد كشف الحساب', Boolean(account) && from <= to);
+    async () => unwrapNode<LedgerStatement>((await accountingApi.ledger({ account: account!, from, to, party: partyApplied || undefined, tagId: tagId || undefined, page: page + 1, pageSize })).data),
+    [account, from, to, partyApplied, tagId, page, pageSize], 'تعذر إعداد كشف الحساب', Boolean(account) && from <= to);
+
+  /** Every page of the period, up to EXPORT_LIMIT lines, as one statement. */
+  async function buildExport(): Promise<ExportDocument> {
+    const base = { account: account!, from, to, party: partyApplied || undefined, tagId: tagId || undefined, pageSize: EXPORT_PAGE };
+    const first = unwrapNode<LedgerStatement>((await accountingApi.ledger({ ...base, page: 1 })).data) as LedgerStatement;
+    const rows = [...first.rows];
+    for (let p = 2; rows.length < Math.min(first.totalCount, EXPORT_LIMIT); p++) {
+      const next = (unwrapNode<LedgerStatement>((await accountingApi.ledger({ ...base, page: p })).data) as LedgerStatement).rows;
+      if (next.length === 0) break; // the ledger shrank while exporting
+      rows.push(...next);
+    }
+
+    const kept = rows.slice(0, EXPORT_LIMIT);
+    return ledgerDocument({ ...first, rows: kept }, partyApplied, Math.max(0, first.totalCount - kept.length));
+  }
 
   const columns: Column<LedgerRow>[] = [
     { header: 'التاريخ', nowrap: true, render: (r) => r.postingDate },
@@ -67,7 +90,7 @@ export default function LedgerReport({ initialAccount }: { initialAccount?: stri
         <TextField select size="small" label="الوسم" value={tagId} onChange={(e) => setTagId(e.target.value)} sx={{ minWidth: 130 }}>
           <MenuItem value="">الكل</MenuItem>{tags.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
         </TextField>
-        <span style={{ marginInlineStart: 'auto' }}><ExportMenu build={async () => ledgerDocument(data!, partyApplied)} disabled={!data} /></span>
+        <span style={{ marginInlineStart: 'auto' }}><ExportMenu build={buildExport} disabled={!data} /></span>
       </Stack>
       {loading ? <LinearProgress /> : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -80,9 +103,14 @@ export default function LedgerReport({ initialAccount }: { initialAccount?: stri
             <Chip color="primary" variant="outlined" label={`دائن: ${money(data.totalCredit)}`} />
             <Chip color="success" label={`الرصيد الختامي: ${money(data.closing)}`} />
             {data.rootType ? <Chip variant="outlined" label={ROOT_LABEL[data.rootType] ?? data.rootType} /> : null}
+            <Chip variant="outlined" label={`${data.totalCount.toLocaleString('en-US')} حركة`} />
           </Stack>
-          {data.truncated ? <Alert severity="warning">الفترة تحوي أكثر من 5000 حركة؛ عُرضت الأولى فقط. ضيّق المدة.</Alert> : null}
-          <DataTable columns={columns} rows={data.rows} getKey={(r) => r.glName ?? `${r.voucherNo}-${r.debit}-${r.credit}`} empty="لا توجد حركات في هذه الفترة" />
+          {data.tagFiltered ? <Alert severity="info">الحركات الموسومة فقط؛ والرصيد تراكمي لها وليس رصيد الحساب.</Alert> : null}
+          {data.totalCount > EXPORT_LIMIT ? <Alert severity="warning">الفترة تحوي أكثر من {EXPORT_LIMIT.toLocaleString('en-US')} حركة: التصدير يشمل أول {EXPORT_LIMIT.toLocaleString('en-US')} فقط. ضيّق المدة لتصدير الباقي.</Alert> : null}
+          <DataTable
+            columns={columns} rows={data.rows} getKey={(r) => r.glName ?? `${r.voucherNo}-${r.debit}-${r.credit}`} empty="لا توجد حركات في هذه الفترة" loading={loading}
+            paging={{ page, pageSize, total: data.totalCount, onPage: setPage, onPageSize: (n) => { setPageSize(n); setPage(0); } }}
+          />
         </>
       ) : null}
     </Stack>

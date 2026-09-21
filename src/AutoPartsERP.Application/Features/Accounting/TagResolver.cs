@@ -74,6 +74,22 @@ internal static class TagResolver
         return result;
     }
 
+    /// <summary>The ERPNext voucher numbers carrying a tag, whether it was put on the ERPNext voucher or on the manual entry that was booked as it.</summary>
+    public static async Task<IReadOnlyList<string>> VouchersForTagAsync(DbConnection connection, Guid tagId, CancellationToken cancellationToken) =>
+        (await connection.QueryAsync<string>(new CommandDefinition(
+            """
+            SELECT v FROM (
+                SELECT split_part(l.target_key, '|', 2) AS v
+                FROM accounting_tag_links l WHERE l.tag_id = @tagId AND l.target_type = 'ERPNEXT'
+                UNION
+                SELECT s.erpnext_name AS v
+                FROM accounting_tag_links l
+                INNER JOIN erpnext_sync_log s ON s.local_entity_type = 'JournalEntry' AND s.local_entity_id::text = l.target_key AND s.erpnext_doctype = 'Journal Entry'
+                WHERE l.tag_id = @tagId AND l.target_type = 'JOURNAL_ENTRY' AND s.erpnext_name IS NOT NULL
+            ) t WHERE v <> '' ORDER BY v;
+            """,
+            new { tagId }, cancellationToken: cancellationToken))).ToList();
+
     private static async Task<List<TagLink>> LoadAsync(DbConnection connection, string[] erpKeys, string[] entryKeys, CancellationToken cancellationToken) =>
         (await connection.QueryAsync<TagLink>(new CommandDefinition(
             """

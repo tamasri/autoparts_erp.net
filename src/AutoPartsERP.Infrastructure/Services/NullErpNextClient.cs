@@ -62,6 +62,10 @@ public sealed class NullErpNextClient : IErpNextClient
     public Task<Result<IReadOnlyList<ErpNextGlEntry>>> GetGlEntriesAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default) =>
         Disabled<IReadOnlyList<ErpNextGlEntry>>();
 
+    public Task<Result<ErpNextGlSummary>> GetGlSummaryAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default) => Disabled<ErpNextGlSummary>();
+
+    public Task<Result<ErpNextGlSummary>> GetGlOffsetSummaryAsync(ErpNextGlFilter filter, int skip, CancellationToken cancellationToken = default) => Disabled<ErpNextGlSummary>();
+
     public Task<Result<IReadOnlyList<ErpNextPartyBalance>>> GetPartyBalancesAsync(string partyType, DateOnly asOf, CancellationToken cancellationToken = default) =>
         Disabled<IReadOnlyList<ErpNextPartyBalance>>();
 

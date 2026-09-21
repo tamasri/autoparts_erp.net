@@ -58,6 +58,12 @@ public interface IErpNextClient
     /// <summary>Ledger lines in date order. At most <c>Limit</c> rows are returned; one extra tells the caller the result was cut.</summary>
     Task<Result<IReadOnlyList<ErpNextGlEntry>>> GetGlEntriesAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default);
 
+    /// <summary>Exact row count and debit/credit totals of every ledger line matching the filter (its paging is ignored).</summary>
+    Task<Result<ErpNextGlSummary>> GetGlSummaryAsync(ErpNextGlFilter filter, CancellationToken cancellationToken = default);
+
+    /// <summary>Totals of the first <paramref name="skip"/> matching lines in ledger order: the running balance a later page starts from.</summary>
+    Task<Result<ErpNextGlSummary>> GetGlOffsetSummaryAsync(ErpNextGlFilter filter, int skip, CancellationToken cancellationToken = default);
+
     /// <summary>What each customer or supplier owes or is owed according to the ledger, up to a date.</summary>
     Task<Result<IReadOnlyList<ErpNextPartyBalance>>> GetPartyBalancesAsync(string partyType, DateOnly asOf, CancellationToken cancellationToken = default);
 
@@ -84,7 +90,11 @@ public sealed record ErpNextGlBalance(string Account, decimal Debit, decimal Cre
 public sealed record ErpNextGlEntry(
     string Name, DateOnly PostingDate, string Account, string? PartyType, string? Party, decimal Debit, decimal Credit, string? VoucherType, string? VoucherNo, string? Remarks);
 
-public sealed record ErpNextGlFilter(string? Account, string? PartyType, string? Party, DateOnly? From, DateOnly? To, int Limit, int LimitStart = 0);
+/// <summary><c>Limit</c> and <c>LimitStart</c> page the result; <c>VoucherNos</c> keeps only lines of those vouchers (e.g. everything carrying a tag).</summary>
+public sealed record ErpNextGlFilter(
+    string? Account, string? PartyType, string? Party, DateOnly? From, DateOnly? To, int Limit, int LimitStart = 0, IReadOnlyList<string>? VoucherNos = null);
+
+public sealed record ErpNextGlSummary(long Count, decimal Debit, decimal Credit);
 
 public sealed record ErpNextPartyBalance(string Party, decimal Debit, decimal Credit);
 

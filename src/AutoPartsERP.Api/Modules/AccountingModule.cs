@@ -150,8 +150,8 @@ public sealed class AccountingModule : ICarterModule
         reports.MapGet("/profit-loss", async Task<IResult> (DateOnly from, DateOnly to, ISender sender, CancellationToken ct) =>
             (await sender.Send(new GetProfitLossStatementQuery(from, to), ct)).ToApiResult());
 
-        reports.MapGet("/ledger", async Task<IResult> (string account, DateOnly from, DateOnly to, string? party, Guid? tagId, ISender sender, CancellationToken ct) =>
-            (await sender.Send(new GetLedgerStatementQuery(account, from, to, party, tagId), ct)).ToApiResult());
+        reports.MapGet("/ledger", async Task<IResult> (string account, DateOnly from, DateOnly to, string? party, Guid? tagId, int? page, int? pageSize, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new GetLedgerStatementQuery(account, from, to, party, tagId, page ?? 1, pageSize ?? LedgerPaging.DefaultPageSize), ct)).ToApiResult());
 
         reports.MapGet("/party-balances", async Task<IResult> (string partyType, DateOnly asOf, ISender sender, CancellationToken ct) =>
             (await sender.Send(new GetPartyBalancesQuery(partyType.ToUpperInvariant(), asOf), ct)).ToApiResult());

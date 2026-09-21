@@ -65,9 +65,11 @@ public sealed record LedgerRowDto(
     string? GlName, DateOnly PostingDate, string? VoucherType, string? VoucherNo, string? Party, string? Remarks, decimal Debit, decimal Credit, decimal Balance,
     string? LocalEntityType, Guid? LocalEntityId, IReadOnlyList<TagDto> Tags);
 
+/// <summary>One page of a ledger statement. Opening, totals and closing cover the whole period; <c>TotalCount</c> is the number of lines in it.
+/// With <c>TagFiltered</c> the statement lists only the tagged vouchers and its balance is their own running total (opening 0).</summary>
 public sealed record LedgerStatementDto(
     string Account, string? RootType, DateOnly From, DateOnly To, decimal Opening, IReadOnlyList<LedgerRowDto> Rows,
-    decimal TotalDebit, decimal TotalCredit, decimal Closing, bool Truncated, int TotalCount = 0, int PageNumber = 1, int PageSize = 0);
+    decimal TotalDebit, decimal TotalCredit, decimal Closing, long TotalCount, int PageNumber, int PageSize, bool TagFiltered);
 
 public sealed record PartyBalanceDto(
     string Party, Guid? PartyId, Guid? CustomerId, decimal Balance, decimal Current, decimal Days1To30, decimal Days31To60, decimal Days61To90, decimal Over90, decimal Unallocated);

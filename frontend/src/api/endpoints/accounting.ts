@@ -49,7 +49,12 @@ export type LedgerRow = {
   glName: string | null; postingDate: string; voucherType: string | null; voucherNo: string | null; party: string | null; remarks: string | null;
   debit: number; credit: number; balance: number; localEntityType: string | null; localEntityId: string | null; tags: Tag[];
 };
-export type LedgerStatement = { account: string; rootType: string | null; from: string; to: string; opening: number; rows: LedgerRow[]; totalDebit: number; totalCredit: number; closing: number; truncated: boolean };
+/** One page of a statement. Opening, totals and closing cover the whole period; totalCount is the number of lines in it. */
+export type LedgerStatement = {
+  account: string; rootType: string | null; from: string; to: string; opening: number; rows: LedgerRow[];
+  totalDebit: number; totalCredit: number; closing: number; totalCount: number; pageNumber: number; pageSize: number; tagFiltered: boolean;
+};
+export type LedgerParams = { account: string; from: string; to: string; party?: string; tagId?: string; page?: number; pageSize?: number };
 export type PartyBalance = {
   party: string; partyId: string | null; customerId: string | null; balance: number; current: number;
   days1To30: number; days31To60: number; days61To90: number; over90: number; unallocated: number;
@@ -104,7 +109,7 @@ export const accountingApi = {
   trialBalance: (from: string, to: string, includeZero: boolean) => apiClient.get('/accounting/reports/trial-balance', { params: { from, to, includeZero }, timeout: 120000 }),
   balanceSheet: (asOf: string) => apiClient.get('/accounting/reports/balance-sheet', { params: { asOf }, timeout: 120000 }),
   profitLoss: (from: string, to: string) => apiClient.get('/accounting/reports/profit-loss', { params: { from, to }, timeout: 120000 }),
-  ledger: (p: { account: string; from: string; to: string; party?: string; tagId?: string }) => apiClient.get('/accounting/reports/ledger', { params: p, timeout: 120000 }),
+  ledger: (p: LedgerParams) => apiClient.get('/accounting/reports/ledger', { params: p, timeout: 120000 }),
   partyBalances: (partyType: 'CUSTOMER' | 'VENDOR', asOf: string) => apiClient.get('/accounting/reports/party-balances', { params: { partyType, asOf }, timeout: 120000 }),
 
   reconcileCandidates: (account: string, asOf: string) => apiClient.get('/accounting/reconciliation/candidates', { params: { account, asOf }, timeout: 120000 }),

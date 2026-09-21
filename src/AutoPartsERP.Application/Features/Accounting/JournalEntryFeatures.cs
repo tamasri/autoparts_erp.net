@@ -201,12 +201,11 @@ public sealed class SaveJournalEntryCommandHandler : IRequestHandler<SaveJournal
 
 // ------------------------------------------------------------------ post / void / delete
 
-public sealed record PostJournalEntryCommand(Guid Id) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IPeriodSensitiveRequest, IMakerCheckerRequest
+/// <summary>Posting is final, so it needs a second person's approval (SYSTEM_ADMIN is exempt). The period lock is checked by the handler against the entry's own date.</summary>
+public sealed record PostJournalEntryCommand(Guid Id) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Accounting.PostEntries;
     public string AuditModule => "ACCOUNTING";
-    public DateTimeOffset OperationDate => DateTimeOffset.UtcNow; // resolved from DB by the handler
-    public string Module => EntryLineRules.Module;
     public bool RequiresApproval => true;
 }
 
@@ -269,12 +268,11 @@ public sealed class PostJournalEntryCommandHandler : IRequestHandler<PostJournal
     }
 }
 
-public sealed record VoidJournalEntryCommand(Guid Id, string Reason) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IPeriodSensitiveRequest, IMakerCheckerRequest
+/// <summary>Voiding removes a booked entry from the ledger, so it needs approval like posting does.</summary>
+public sealed record VoidJournalEntryCommand(Guid Id, string Reason) : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Accounting.PostEntries;
     public string AuditModule => "ACCOUNTING";
-    public DateTimeOffset OperationDate => DateTimeOffset.UtcNow; // resolved from DB by the handler
-    public string Module => EntryLineRules.Module;
     public bool RequiresApproval => true;
 }
 

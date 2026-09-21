@@ -62,10 +62,12 @@ export function profitLossDocument(p: ProfitLoss): ExportDocument {
   };
 }
 
-export function ledgerDocument(l: LedgerStatement, party?: string): ExportDocument {
+/** <paramref name="omitted"/> = how many lines of the period are not in <paramref name="l"/> because the export limit was reached. */
+export function ledgerDocument(l: LedgerStatement, party?: string, omitted = 0): ExportDocument {
   return {
     title: `كشف حساب: ${plain(l.account)}`, subtitle: `من ${ymd(l.from)} إلى ${ymd(l.to)}${party ? ` — ${party}` : ''}`, fileName: 'ledger-statement',
-    fields: [{ label: 'الرصيد الافتتاحي', value: num(l.opening) }, { label: 'الرصيد الختامي', value: num(l.closing) }, ...(l.truncated ? [{ label: 'تنبيه', value: 'عُرضت أول 5000 حركة فقط' }] : [])],
+    fields: [{ label: 'الرصيد الافتتاحي', value: num(l.opening) }, { label: 'الرصيد الختامي', value: num(l.closing) }, ...(omitted > 0 ? [{ label: 'تنبيه', value: `الفترة تحوي ${omitted.toLocaleString('en-US')} حركة إضافية لم تُدرج في الملف (حد التصدير)؛ ضيّق المدة` }] : []),
+      ...(l.tagFiltered ? [{ label: 'ملاحظة', value: 'الحركات الموسومة فقط، والرصيد تراكمي لها' }] : [])],
     tables: [{
       columns: ['التاريخ', 'المستند', 'الرقم', 'الحساب', 'مدين', 'دائن', 'الرصيد', 'وسوم'],
       rows: l.rows.map((r) => [ymd(r.postingDate), VOUCHER_LABEL[r.voucherType ?? ''] ?? r.voucherType ?? '', r.voucherNo ?? '', r.party ?? '', r.debit ? num(r.debit) : '', r.credit ? num(r.credit) : '', num(r.balance), r.tags.map((t) => t.name).join('، ')]),

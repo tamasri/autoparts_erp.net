@@ -85,8 +85,12 @@ public sealed class GetProfitLossStatementQueryHandler : IRequestHandler<GetProf
 
 // ------------------------------------------------------------------ ledger statement
 
-/// <summary>Every posting on one ledger account (optionally one party, optionally only tagged vouchers) with a running balance.</summary>
-public sealed record GetLedgerStatementQuery(string Account, DateOnly From, DateOnly To, string? Party, Guid? TagId, int PageNumber = 1, int PageSize = 100) : IRequest<Result<LedgerStatementDto>>, IAuthorizedRequest
+/// <summary>
+/// One page of the postings on a ledger account (optionally one party, optionally only vouchers carrying a tag), with a running balance that is
+/// right on every page. The totals and the closing balance always cover the whole period; only the rows are paged.
+/// </summary>
+public sealed record GetLedgerStatementQuery(string Account, DateOnly From, DateOnly To, string? Party, Guid? TagId, int PageNumber = 1, int PageSize = LedgerPaging.DefaultPageSize)
+    : IRequest<Result<LedgerStatementDto>>, IAuthorizedRequest
 {
     public string RequiredPermission => PermissionCodes.Accounting.Read;
 }
@@ -97,12 +101,14 @@ public sealed class GetLedgerStatementQueryValidator : AbstractValidator<GetLedg
     {
         RuleFor(x => x.Account).NotEmpty();
         RuleFor(x => x.To).GreaterThanOrEqualTo(x => x.From).WithMessage("The end date is before the start date.");
+        RuleFor(x => x.PageNumber).GreaterThanOrEqualTo(1);
     }
 }
 
 public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerStatementQuery, Result<LedgerStatementDto>>
 {
-    public const int MaxRows = 5000;
+    /// <summary>A tag can be filtered on only while its vouchers fit in one ERPNext query.</summary>
+    public const int MaxTaggedVouchers = 300;
 
     private readonly IErpNextClient _erpNext;
     private readonly IDbConnectionFactory _connectionFactory;
@@ -123,44 +129,53 @@ public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerSt
 
         var sign = ChartTree.IsDebitNormal(account.RootType) ? 1m : -1m;
         var party = string.IsNullOrWhiteSpace(request.Party) ? null : request.Party.Trim();
+        var size = LedgerPaging.ClampPageSize(request.PageSize);
         var page = Math.Max(request.PageNumber, 1);
-        var size = Math.Clamp(request.PageSize, 10, 200);
-        var limitStart = (page - 1) * size;
+        var offset = LedgerPaging.Offset(page, size);
 
-        // Opening = everything before the first day. With a party filter the totals per account cannot be used, so the party's own lines are summed.
-        decimal opening;
-        if (party is null)
-        {
-            var before = await _erpNext.GetGlBalancesAsync(null, request.From.AddDays(-1), cancellationToken);
-            if (before.IsFailure) return Result<LedgerStatementDto>.Failure(before.Error);
-            opening = before.Value!.Where(b => b.Account == account.Name).Sum(b => b.Debit - b.Credit);
-        }
-        else
-        {
-            var earlier = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, null, request.From.AddDays(-1), MaxRows * 4, 0), cancellationToken);
-            if (earlier.IsFailure) return Result<LedgerStatementDto>.Failure(earlier.Error);
-            opening = earlier.Value!.Sum(e => e.Debit - e.Credit);
-        }
+        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
 
-        // Fetch one extra row to detect that there are more pages
-        var allEntries = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, size + 1, limitStart), cancellationToken);
-        if (allEntries.IsFailure) return Result<LedgerStatementDto>.Failure(allEntries.Error);
-        var totalCount = -1; // unknown total — signals "no paging info"
-        var truncated = allEntries.Value!.Count > size;
-        var pageEntries = allEntries.Value!.Take(size).ToList();
-
-        // If this is the first page, we can count the total by fetching with a large limit
-        // to detect whether there are more rows beyond MaxRows
-        if (page == 1)
+        // Only the vouchers carrying the tag. The statement is then a list of those lines with its own running total: the account's
+        // balance before them means nothing, so the opening is 0.
+        IReadOnlyList<string>? tagged = null;
+        if (request.TagId is { } tagId)
         {
-            var countProbe = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, MaxRows + 1, 0), cancellationToken);
-            if (!countProbe.IsFailure)
+            tagged = await TagResolver.VouchersForTagAsync(connection, tagId, cancellationToken);
+            if (tagged.Count > MaxTaggedVouchers)
             {
-                totalCount = countProbe.Value!.Count;
+                return Result<LedgerStatementDto>.Failure(new Error("Accounting.TooManyTagged", $"The tag is on more than {MaxTaggedVouchers} vouchers; narrow the dates or pick another tag."));
+            }
+
+            if (tagged.Count == 0)
+            {
+                return Result<LedgerStatementDto>.Success(new LedgerStatementDto(account.Name, account.RootType, request.From, request.To, 0, [], 0, 0, 0, 0, page, size, true));
             }
         }
 
-        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        // Opening = everything before the first day, exact (no row cap), for the whole account or for one party.
+        decimal opening = 0;
+        if (tagged is null)
+        {
+            var before = await _erpNext.GetGlSummaryAsync(new ErpNextGlFilter(account.Name, null, party, null, request.From.AddDays(-1), 0), cancellationToken);
+            if (before.IsFailure) return Result<LedgerStatementDto>.Failure(before.Error);
+            opening = before.Value!.Debit - before.Value!.Credit;
+        }
+
+        var period = new ErpNextGlFilter(account.Name, null, party, request.From, request.To, size, offset, tagged);
+        var totals = await _erpNext.GetGlSummaryAsync(period, cancellationToken);
+        if (totals.IsFailure) return Result<LedgerStatementDto>.Failure(totals.Error);
+        var entries = await _erpNext.GetGlEntriesAsync(period, cancellationToken);
+        if (entries.IsFailure) return Result<LedgerStatementDto>.Failure(entries.Error);
+        var pageEntries = entries.Value!.Take(size).ToList();
+
+        var skipped = new ErpNextGlSummary(0, 0, 0);
+        if (offset > 0)
+        {
+            var before = await _erpNext.GetGlOffsetSummaryAsync(period, offset, cancellationToken);
+            if (before.IsFailure) return Result<LedgerStatementDto>.Failure(before.Error);
+            skipped = before.Value!;
+        }
+
         var vouchers = pageEntries.Where(e => e.VoucherType is not null && e.VoucherNo is not null).Select(e => (e.VoucherType!, e.VoucherNo!)).Distinct().ToList();
         var tags = await TagResolver.ForVouchersAsync(connection, vouchers, cancellationToken);
         var names = vouchers.Select(v => v.Item2).Distinct().ToArray();
@@ -171,37 +186,21 @@ public sealed class GetLedgerStatementQueryHandler : IRequestHandler<GetLedgerSt
             """,
             new { names }, cancellationToken: cancellationToken))).GroupBy(l => TagResolver.VoucherKey(l.Doctype, l.Name)).ToDictionary(g => g.Key, g => g.First());
 
-        // Compute the running balance at the start of this page.
-        // For page 1 it is the opening balance; for later pages we must sum all debit-credit from prior pages.
-        decimal pageStartBalance;
-        if (page == 1)
-        {
-            pageStartBalance = sign * opening;
-        }
-        else
-        {
-            // Fetch all rows before this page to compute their net movement
-            var priorEntries = await _erpNext.GetGlEntriesAsync(new ErpNextGlFilter(account.Name, null, party, request.From, request.To, size, 0), cancellationToken);
-            if (priorEntries.IsFailure) return Result<LedgerStatementDto>.Failure(priorEntries.Error);
-            var net = priorEntries.Value!.Sum(e => sign * (e.Debit - e.Credit));
-            pageStartBalance = sign * opening + net;
-        }
-
-        var balance = pageStartBalance;
+        var start = LedgerPaging.PageStartBalance(sign, opening, skipped.Debit, skipped.Credit);
+        var balances = LedgerPaging.RunningBalances(sign, start, pageEntries.Select(e => (e.Debit, e.Credit)));
         var rows = new List<LedgerRowDto>(pageEntries.Count);
-        foreach (var e in pageEntries)
+        for (var i = 0; i < pageEntries.Count; i++)
         {
-            balance += sign * (e.Debit - e.Credit);
+            var e = pageEntries[i];
             var key = e.VoucherType is not null && e.VoucherNo is not null ? TagResolver.VoucherKey(e.VoucherType, e.VoucherNo) : null;
             var link = key is not null ? links.GetValueOrDefault(key) : default;
-            rows.Add(new LedgerRowDto(e.Name, e.PostingDate, e.VoucherType, e.VoucherNo, e.Party, e.Remarks, e.Debit, e.Credit, balance,
+            rows.Add(new LedgerRowDto(e.Name, e.PostingDate, e.VoucherType, e.VoucherNo, e.Party, e.Remarks, e.Debit, e.Credit, balances[i],
                 link.Type, link.Type is null ? null : link.Id, key is not null && tags.TryGetValue(key, out var t) ? t : []));
         }
 
-        var shown = request.TagId is { } tagId ? rows.Where(r => r.Tags.Any(t => t.Id == tagId)).ToList() : rows;
         return Result<LedgerStatementDto>.Success(new LedgerStatementDto(
-            account.Name, account.RootType, request.From, request.To, sign * opening, shown, shown.Sum(r => r.Debit), shown.Sum(r => r.Credit),
-            balance, truncated, totalCount, page, size));
+            account.Name, account.RootType, request.From, request.To, sign * opening, rows, totals.Value!.Debit, totals.Value!.Credit,
+            LedgerPaging.ClosingBalance(sign, opening, totals.Value!.Debit, totals.Value!.Credit), totals.Value!.Count, page, size, tagged is not null));
     }
 }
 
