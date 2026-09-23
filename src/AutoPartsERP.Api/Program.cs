@@ -42,6 +42,7 @@ builder.Services.AddMediatR(configuration =>
 });
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuthorizationBehavior<,>));
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(WarehouseScopeBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(PeriodLockBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(MakerCheckerBehavior<,>));
@@ -174,6 +175,7 @@ builder.Services.AddScoped<IPeriodLockService, PeriodLockService>();
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
 builder.Services.AddScoped<IApprovalReplayContext, ApprovalReplayContext>();
 builder.Services.AddScoped<IWarehouseAccess, AutoPartsERP.Application.Features.Wms.WarehouseAccess>();
+builder.Services.AddScoped<IWarehouseScope, AutoPartsERP.Application.Features.Wms.WarehouseScope>();
 // ERPNext accounting hand-off. Every call site (InvoicePostedOutboxHandler, SyncCatalogToErpNextJob)
 // depends only on IErpNextClient, so flipping Erpnext:Enabled is the only thing that changes
 // behaviour - no call site needs to change.

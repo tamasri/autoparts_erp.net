@@ -158,6 +158,11 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - Customer updates: a missing `assignedSalesRep` keeps the rep, `Guid.Empty` removes it (same convention as `Customer.AssignSalesRep`). Never write NULL because a form left a field out.
 - ERPNext: the rep is a Sales Person named by the user's full name; invoices carry `sales_team` at 100 %.
 
+### 2.3h Warehouse scoping [enforced by tests]
+- A new request that reads a warehouse document or changes stock implements `IWarehouseScopedRequest` and gets a case in `WarehouseScope.ResolveAsync` (which throws for an unknown scoped type, so it cannot be forgotten silently).
+- A new warehouse list filters with `(@ScopeAll OR <column> IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))` and passes `ScopeAll = WarehouseScopeSql.SeesAll(user)`, `ScopeUser = user.UserId`.
+- Seeing every warehouse is the permission `inventory:all_warehouses`, never a role-name check.
+
 ### 2.3f Invoice totals and discounts
 - **One formula.** A sales invoice's subtotal/discount/total are written only by `recalc_invoice_totals(id)` (via `InvoiceTotals`); any code that changes lines, the fee or the discount calls it. Never update `total_*` by hand.
 - **Invoice discount = percentage or amount** (`DocumentDiscount.Resolve`), stored positive; a RETURN's subtotal and total are negative. Line discounts stay on the lines. Only a DRAFT's discount can change.

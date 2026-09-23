@@ -10,7 +10,7 @@ public sealed record AdjustInventoryCommand(
     string Reason,
     string? Notes,
     string IdempotencyKey)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IMakerCheckerRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IMakerCheckerRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Inventory.Adjust;
     public string AuditModule => "INVENTORY";

@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Wms;
 namespace AutoPartsERP.Application.Features.CycleCounts;
 
 public sealed record GetCycleCountPlansQuery(int PageNumber = 1, int PageSize = 20)
@@ -9,10 +10,12 @@ public sealed record GetCycleCountPlansQuery(int PageNumber = 1, int PageSize = 
 public sealed class GetCycleCountPlansQueryHandler : IRequestHandler<GetCycleCountPlansQuery, Result<PagedResponse<CycleCountPlanDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetCycleCountPlansQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetCycleCountPlansQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<CycleCountPlanDto>>> Handle(GetCycleCountPlansQuery request, CancellationToken cancellationToken)
@@ -33,11 +36,12 @@ public sealed class GetCycleCountPlansQueryHandler : IRequestHandler<GetCycleCou
                     scheduled_for AS ScheduledFor,
                     COUNT(*) OVER() AS TotalCount
                 FROM cycle_count_plans
+                WHERE (@ScopeAll OR warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
                 ORDER BY created_at DESC
                 OFFSET @Offset
                 LIMIT @PageSize;
                 """,
-                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
+                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId },
                 cancellationToken: cancellationToken))).ToArray();
 
         var items = rows.Select(x => new CycleCountPlanDto(
@@ -64,7 +68,7 @@ public sealed class GetCycleCountPlansQueryHandler : IRequestHandler<GetCycleCou
 }
 
 public sealed record CreateCycleCountPlanCommand(CreateCycleCountPlanRequest Request)
-    : IRequest<Result<CycleCountPlanDto>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<CycleCountPlanDto>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.CycleCounts.Create;
     public string AuditModule => "CYCLE_COUNTS";
@@ -164,7 +168,7 @@ public sealed class CreateCycleCountPlanCommandHandler : IRequestHandler<CreateC
 }
 
 public sealed record RecordCycleCountCommand(RecordCycleCountRequest Request)
-    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.CycleCounts.Record;
     public string AuditModule => "CYCLE_COUNTS";
@@ -229,7 +233,7 @@ public sealed class RecordCycleCountCommandHandler : IRequestHandler<RecordCycle
 }
 
 public sealed record ApproveCycleCountVarianceCommand(Guid CycleCountPlanId)
-    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IMakerCheckerRequest
+    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IMakerCheckerRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.CycleCounts.ApproveVariance;
     public string AuditModule => "CYCLE_COUNTS";

@@ -95,7 +95,7 @@ password (generates one if it is still a placeholder) → checks Postgres reacha
 files → **builds the frontend into `frontend/dist`** → `docker compose down/up --build` → waits for `/health` → checks
 the HTTPS edge.
 
-Migrations run when the API starts (20 = user warehouses, 21 = invoice discounts, 22 = sales reps, 2026-09-23); nothing to run by hand.
+Migrations run when the API starts (20 = user warehouses, 21 = invoice discounts, 22 = sales reps, 23 = warehouse visibility, 2026-09-23); nothing to run by hand.
 
 **Do not** run `docker compose up` by hand:
 - it does not rebuild `frontend/dist` (the UI would stay stale);
@@ -160,6 +160,7 @@ The API user needs create/write on **Sales Person** (reps), read on **Cost Cente
 | ERPNext rejects an invoice: Sales Person not found / "Sales Team" missing | the root sales-person group has another name on that server | read the error in the sync log; create "Sales Team" as a group Sales Person in ERPNext or adjust `SyncSalesPersonAsync` |
 | Consistency screen: many "أُرسل ثم اختفى" rows | documents were deleted in ERPNext, or the app was pointed at another ERPNext/company | check `Erpnext:BaseUrl` and the company; re-create what is really missing by clearing its sync-log row and running the sync |
 | Invoice refused by ERPNext: no default income account for the delivery fee | the company has no Default Income Account | set it in ERPNext (Company → Default Income Account), then "مزامنة الآن" |
+| A warehouse user sees empty lists / gets "This warehouse is not assigned to you" | no warehouse assigned, or the document belongs to another warehouse | assign the warehouse (Users → edit → warehouses), or give the role `inventory:all_warehouses` if the person must see all |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
 ---

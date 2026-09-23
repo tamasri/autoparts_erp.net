@@ -5,7 +5,7 @@ namespace AutoPartsERP.Application.Features.Wms;
 // Header + lines of a transfer order and a stock adjustment, so every warehouse document can be viewed and printed.
 
 public sealed record GetTransferOrderByIdQuery(Guid TransferOrderId)
-    : IRequest<Result<TransferOrderDetailDto>>, IAuthorizedRequest
+    : IRequest<Result<TransferOrderDetailDto>>, IAuthorizedRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.Read;
 }
@@ -54,7 +54,7 @@ public sealed class GetTransferOrderByIdQueryHandler : IRequestHandler<GetTransf
 }
 
 public sealed record GetStockAdjustmentByIdQuery(Guid AdjustmentId)
-    : IRequest<Result<StockAdjustmentDetailDto>>, IAuthorizedRequest
+    : IRequest<Result<StockAdjustmentDetailDto>>, IAuthorizedRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.StockAdjustments.Read;
 }

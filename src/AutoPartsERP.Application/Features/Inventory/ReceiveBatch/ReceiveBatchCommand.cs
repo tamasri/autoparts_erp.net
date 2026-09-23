@@ -16,7 +16,7 @@ public sealed record ReceiveBatchCommand(
     string? SupplierInvoice,
     string? Notes,
     string IdempotencyKey)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Inventory.ManageBatches;
     public string AuditModule => "INVENTORY";

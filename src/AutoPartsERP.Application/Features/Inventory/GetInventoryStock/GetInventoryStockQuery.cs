@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Wms;
 using Dapper;
 
 namespace AutoPartsERP.Application.Features.Inventory.GetInventoryStock;
@@ -25,17 +26,21 @@ public sealed class GetInventoryStockQueryValidator : AbstractValidator<GetInven
 public sealed class GetInventoryStockQueryHandler : IRequestHandler<GetInventoryStockQuery, Result<PagedResponse<InventoryStockDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetInventoryStockQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetInventoryStockQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<InventoryStockDto>>> Handle(GetInventoryStockQuery request, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var conditions = new List<string>();
+        var conditions = new List<string> { "(@ScopeAll OR st.location_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))" };
         var parameters = new DynamicParameters();
+        parameters.Add("ScopeAll", WarehouseScopeSql.SeesAll(_currentUser));
+        parameters.Add("ScopeUser", _currentUser.UserId);
 
         if (request.LocationId.HasValue)
         {

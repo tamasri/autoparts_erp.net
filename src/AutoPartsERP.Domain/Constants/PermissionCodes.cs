@@ -41,6 +41,9 @@ public static class PermissionCodes
         public const string Transfer = "inventory:transfer";
         public const string ViewBatches = "inventory:view_batches";
         public const string ManageBatches = "inventory:manage_batches";
+
+        /// <summary>Sees and works in every warehouse; without it a user is kept to the warehouses assigned to them.</summary>
+        public const string AllWarehouses = "inventory:all_warehouses";
     }
 
     public static class Invoices
@@ -239,6 +242,7 @@ public static class PermissionCodes
         Inventory.Transfer,
         Inventory.ViewBatches,
         Inventory.ManageBatches,
+        Inventory.AllWarehouses,
         Invoices.Read,
         Invoices.Create,
         Invoices.Update,

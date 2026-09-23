@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Wms;
 namespace AutoPartsERP.Application.Features.IssueOrders;
 
 public sealed record GetIssueOrdersQuery(int PageNumber = 1, int PageSize = 20)
@@ -9,10 +10,12 @@ public sealed record GetIssueOrdersQuery(int PageNumber = 1, int PageSize = 20)
 public sealed class GetIssueOrdersQueryHandler : IRequestHandler<GetIssueOrdersQuery, Result<PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetIssueOrdersQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetIssueOrdersQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<AutoPartsERP.Contracts.Wms.IssueOrderListDto>>> Handle(GetIssueOrdersQuery request, CancellationToken cancellationToken)
@@ -27,10 +30,11 @@ public sealed class GetIssueOrdersQueryHandler : IRequestHandler<GetIssueOrdersQ
                 SELECT id AS Id, order_no AS OrderNo, source_type AS SourceType, source_id AS SourceId, warehouse_id AS WarehouseId,
                        status AS Status, issued_at AS IssuedAt, created_at AS CreatedAt, COUNT(*) OVER() AS TotalCount
                 FROM issue_orders
+                WHERE (@ScopeAll OR warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
                 ORDER BY created_at DESC
                 OFFSET @Offset LIMIT @PageSize;
                 """,
-                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
+                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId },
                 cancellationToken: cancellationToken))).ToArray();
 
         var items = rows.Select(x => new AutoPartsERP.Contracts.Wms.IssueOrderListDto(
@@ -50,7 +54,7 @@ public sealed record CreateIssueOrderCommand(
     Guid WarehouseId,
     IReadOnlyCollection<CreateIssueOrderLine> Lines,
     string IdempotencyKey)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Create;
     public string AuditModule => "ISSUE_ORDERS";
@@ -143,7 +147,7 @@ public sealed class CreateIssueOrderCommandHandler : IRequestHandler<CreateIssue
 }
 
 public sealed record GeneratePickTasksCommand(Guid IssueOrderId)
-    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Pick;
     public string AuditModule => "ISSUE_ORDERS";
@@ -191,7 +195,7 @@ public sealed class GeneratePickTasksCommandHandler : IRequestHandler<GeneratePi
 }
 
 public sealed record CompletePickTaskCommand(Guid IssueOrderId, Guid TaskId)
-    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Pick;
     public string AuditModule => "ISSUE_ORDERS";
@@ -259,7 +263,7 @@ public sealed class CompletePickTaskCommandHandler : IRequestHandler<CompletePic
 }
 
 public sealed record VerifyPickTaskCommand(Guid IssueOrderId, Guid TaskId)
-    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Verify;
     public string AuditModule => "ISSUE_ORDERS";
@@ -330,7 +334,7 @@ public sealed class VerifyPickTaskCommandHandler : IRequestHandler<VerifyPickTas
 }
 
 public sealed record IssueOrderCommand(Guid IssueOrderId)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Issue;
     public string AuditModule => "ISSUE_ORDERS";

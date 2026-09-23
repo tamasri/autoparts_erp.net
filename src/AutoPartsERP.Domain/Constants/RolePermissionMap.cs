@@ -75,6 +75,7 @@ public static class RolePermissionMap
                 PermissionCodes.Party.Read,
                 PermissionCodes.Items.Read,
                 PermissionCodes.Inventory.Read,
+                PermissionCodes.Inventory.AllWarehouses,
                 PermissionCodes.PeriodLocksRead
             },
 
@@ -90,6 +91,7 @@ public static class RolePermissionMap
                 PermissionCodes.Items.Read,
                 PermissionCodes.Catalog.Read,
                 PermissionCodes.Inventory.Read,
+                PermissionCodes.Inventory.AllWarehouses,
                 PermissionCodes.Receiving.Read
             },
 
@@ -164,6 +166,7 @@ public static class RolePermissionMap
             .ToList();
 
         reads.Add(PermissionCodes.AuditRead);
+        reads.Add(PermissionCodes.Inventory.AllWarehouses);
 
         return reads
             .Distinct(StringComparer.Ordinal)

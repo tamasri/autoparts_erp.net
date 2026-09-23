@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Wms;
 using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.Transfers;
 
@@ -10,10 +11,12 @@ public sealed record GetTransferRequestsQuery(int PageNumber = 1, int PageSize =
 public sealed class GetTransferRequestsQueryHandler : IRequestHandler<GetTransferRequestsQuery, Result<PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetTransferRequestsQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetTransferRequestsQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<AutoPartsERP.Contracts.Wms.TransferRequestListDto>>> Handle(GetTransferRequestsQuery request, CancellationToken cancellationToken)
@@ -29,10 +32,11 @@ public sealed class GetTransferRequestsQueryHandler : IRequestHandler<GetTransfe
                        status AS Status, requested_by AS RequestedBy, approved_by AS ApprovedBy, notes AS Notes,
                        created_at AS CreatedAt, COUNT(*) OVER() AS TotalCount
                 FROM transfer_requests
+                WHERE ((@ScopeAll OR source_warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser))) OR (@ScopeAll OR destination_warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser))))
                 ORDER BY created_at DESC
                 OFFSET @Offset LIMIT @PageSize;
                 """,
-                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
+                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId },
                 cancellationToken: cancellationToken))).ToArray();
 
         var items = rows.Select(x => new AutoPartsERP.Contracts.Wms.TransferRequestListDto(
@@ -51,7 +55,7 @@ public sealed record CreateTransferRequestCommand(
     Guid DestinationWarehouseId,
     IReadOnlyCollection<CreateTransferOrderLineRequest> Lines,
     string? Notes)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseTransferRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseTransferRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.CreateRequest;
     public string AuditModule => "TRANSFERS";
@@ -143,10 +147,12 @@ public sealed record GetTransferOrdersQuery(int PageNumber = 1, int PageSize = 2
 public sealed class GetTransferOrdersQueryHandler : IRequestHandler<GetTransferOrdersQuery, Result<PagedResponse<TransferOrderDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetTransferOrdersQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetTransferOrdersQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<TransferOrderDto>>> Handle(GetTransferOrdersQuery request, CancellationToken cancellationToken)
@@ -169,10 +175,11 @@ public sealed class GetTransferOrdersQueryHandler : IRequestHandler<GetTransferO
                     received_at AS ReceivedAt,
                     COUNT(*) OVER() AS TotalCount
                 FROM transfer_orders
+                WHERE ((@ScopeAll OR source_warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser))) OR (@ScopeAll OR destination_warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser))))
                 ORDER BY created_at DESC
                 OFFSET @Offset LIMIT @PageSize;
                 """,
-                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
+                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId },
                 cancellationToken: cancellationToken))).ToArray();
 
         var items = rows.Select(x => new TransferOrderDto(
@@ -203,7 +210,7 @@ public sealed class GetTransferOrdersQueryHandler : IRequestHandler<GetTransferO
 }
 
 public sealed record CreateTransferOrderCommand(CreateTransferOrderRequest Request)
-    : IRequest<Result<TransferOrderDto>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<TransferOrderDto>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.CreateOrder;
     public string AuditModule => "TRANSFERS";
@@ -302,7 +309,7 @@ public sealed class CreateTransferOrderCommandHandler : IRequestHandler<CreateTr
 
 /// <summary>Shipping takes the stock out of the source warehouse, so it is the step the warehouses' managers approve.</summary>
 public sealed record ShipTransferOrderCommand(Guid TransferOrderId)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseTransferRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseTransferRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.Ship;
     public string AuditModule => "TRANSFERS";
@@ -506,7 +513,7 @@ public sealed class ShipTransferOrderCommandHandler : IRequestHandler<ShipTransf
 }
 
 public sealed record ReceiveTransferOrderCommand(Guid TransferOrderId)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.Receive;
     public string AuditModule => "TRANSFERS";

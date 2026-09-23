@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Wms;
 using AutoPartsERP.Application.Common.Messaging;
 using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.StockAdjustments;
@@ -11,10 +12,12 @@ public sealed record GetStockAdjustmentsQuery(int PageNumber = 1, int PageSize =
 public sealed class GetStockAdjustmentsQueryHandler : IRequestHandler<GetStockAdjustmentsQuery, Result<PagedResponse<StockAdjustmentDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetStockAdjustmentsQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetStockAdjustmentsQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<StockAdjustmentDto>>> Handle(GetStockAdjustmentsQuery request, CancellationToken cancellationToken)
@@ -36,10 +39,11 @@ public sealed class GetStockAdjustmentsQueryHandler : IRequestHandler<GetStockAd
                     posted_at AS PostedAt,
                     COUNT(*) OVER() AS TotalCount
                 FROM stock_adjustments
+                WHERE (@ScopeAll OR warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
                 ORDER BY created_at DESC
                 OFFSET @Offset LIMIT @PageSize;
                 """,
-                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
+                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId },
                 cancellationToken: cancellationToken))).ToArray();
 
         var items = rows.Select(x => new StockAdjustmentDto(
@@ -68,7 +72,7 @@ public sealed class GetStockAdjustmentsQueryHandler : IRequestHandler<GetStockAd
 }
 
 public sealed record CreateStockAdjustmentCommand(CreateStockAdjustmentRequest Request)
-    : IRequest<Result<StockAdjustmentDto>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<StockAdjustmentDto>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.StockAdjustments.Create;
     public string AuditModule => "INVENTORY";
@@ -169,7 +173,7 @@ public sealed class CreateStockAdjustmentCommandHandler : IRequestHandler<Create
 }
 
 public sealed record PostStockAdjustmentCommand(Guid StockAdjustmentId, DateOnly PostingDate)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IPeriodSensitiveRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IPeriodSensitiveRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.StockAdjustments.Post;
     public string AuditModule => "INVENTORY";

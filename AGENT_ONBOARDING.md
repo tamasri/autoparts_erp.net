@@ -72,7 +72,7 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~30 Carter modules; 22 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
+- ~30 Carter modules; 23 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
@@ -315,7 +315,7 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - **Verified locally:** unit 112, integration 33; live against Postgres + mock ERPNext: item 9 31/31, item 6 30/30 (totals in both currencies, percent following lines, delivery change, refusals, draft-only,
   PDF, ERPNext payloads for sale/return/no-discount/bill, weighted cost at the discounted price and its exact reversal); discount applied and removed in the browser on a draft invoice.
 - **Known gaps:** the delivery fee is still not sent to ERPNext (its Sales Invoice total is lower than ours by the fee); a RETURN is not linked to the invoice it returns, so it carries its own discount;
-  stock lists are not yet filtered by the user's warehouses (only approvals and assignment are); no purchase returns.
+  no purchase returns. (Stock lists filtered by warehouse: done, see "Item 9 completed" below.)
 - **Item 5 — sales representatives.** What existed (abandoned): `invoices.sales_rep_id` and `customers.assigned_sales_rep` holding user ids with no table, FK or validation; a `SALES_REP` role row
   seeded in migration 1 with no permissions and not in `RoleCodes`; the invoice screen copied the customer's rep. Built on them: migration 22 `sales_reps(user_id → asp_net_users, commission_pct,
   monthly_target_usd, is_active, notes)` with the existing references kept as reps and FKs added; `RoleCodes.SalesRep` with a 14-permission bundle; permissions `sales_reps:read|manage` (ACCOUNTANT reads).
@@ -344,3 +344,11 @@ AGENT_ONBOARDING.md                                  [MODIFY]
 - **Known gaps (item 8):** the comparison reads every record of each doctype on each run (fine for thousands, not for hundreds of thousands — add date filters then); stock-adjustment entries are compared
   by existence only (they were valued at the cost of the day they were sent); parties deactivated here stay enabled in ERPNext and are reported as such; the "only in ERPNext" list cannot tell a
   document made directly in ERPNext from one whose sync-log row was lost.
+- **Item 9 completed — warehouse scoping of lists and actions** (the part of the spec left open earlier). Migration 23: SQL function `user_visible_locations(user)` = assigned warehouses and
+  everything under them. Permission `inventory:all_warehouses` (SYSTEM_ADMIN, ACCOUNTANT, PURCHASER, AUDITOR) sees every warehouse; everyone else only their own — no assignment means empty lists.
+  Lists filtered in SQL: receiving, transfer requests/orders (either side), issue orders, cycle counts, adjustments, stock, item movements, warehouse overview. Details and every warehouse command
+  carry `IWarehouseScopedRequest`; `WarehouseScopeBehavior` (after authorization) asks `WarehouseScope` which locations the request touches and refuses with 403
+  `Authorization.WarehouseNotAssigned`. Transfers: create needs one side, ship the source, receive the destination; an approved request being replayed is not re-checked. Unknown documents stay 404.
+  Not filtered on purpose: the sales item picker (sellers need stock everywhere) and the plain location list used by pickers (a transfer needs the other warehouse as destination).
+- **Verified:** unit 135 (6 new for the behaviour); live 21/21 (four document lists × five kinds of user, transfer lists, stock, movements, overview, 403 on another warehouse's documents and
+  new work, transfers allowed from one side, ship refused to the wrong side, unknown = 404, admin unaffected); item 9 approval test re-run 31/31.

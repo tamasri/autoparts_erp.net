@@ -1,3 +1,4 @@
+using AutoPartsERP.Application.Features.Wms;
 using AutoPartsERP.Application.Features.Inventory;
 namespace AutoPartsERP.Application.Features.Receiving;
 
@@ -10,10 +11,12 @@ public sealed record GetReceivingDocumentsQuery(int PageNumber = 1, int PageSize
 public sealed class GetReceivingDocumentsQueryHandler : IRequestHandler<GetReceivingDocumentsQuery, Result<PagedResponse<ReceivingDocumentDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetReceivingDocumentsQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetReceivingDocumentsQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<ReceivingDocumentDto>>> Handle(GetReceivingDocumentsQuery request, CancellationToken cancellationToken)
@@ -38,11 +41,12 @@ public sealed class GetReceivingDocumentsQueryHandler : IRequestHandler<GetRecei
                     notes AS Notes,
                     COUNT(*) OVER() AS TotalCount
                 FROM receiving_documents
+                WHERE (@ScopeAll OR warehouse_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
                 ORDER BY created_at DESC
                 OFFSET @Offset
                 LIMIT @PageSize;
                 """,
-                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize },
+                new { Offset = (pageNumber - 1) * pageSize, PageSize = pageSize, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId },
                 cancellationToken: cancellationToken))).ToArray();
 
         var items = rows.Select(x => new ReceivingDocumentDto(
@@ -77,7 +81,7 @@ public sealed class GetReceivingDocumentsQueryHandler : IRequestHandler<GetRecei
 }
 
 public sealed record CreateReceivingDocumentCommand(CreateReceivingDocumentRequest Request, string IdempotencyKey)
-    : IRequest<Result<ReceivingDocumentDto>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest
+    : IRequest<Result<ReceivingDocumentDto>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Receiving.Create;
     public string AuditModule => "RECEIVING";
@@ -157,7 +161,7 @@ public sealed class CreateReceivingDocumentCommandHandler : IRequestHandler<Crea
 }
 
 public sealed record AddReceivingLineCommand(Guid ReceivingDocumentId, AddReceivingLineRequest Request)
-    : IRequest<Result<ReceivingLineDto>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<ReceivingLineDto>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Receiving.Create;
     public string AuditModule => "RECEIVING";
@@ -233,7 +237,7 @@ public sealed class AddReceivingLineCommandHandler : IRequestHandler<AddReceivin
 }
 
 public sealed record PostReceivingDocumentCommand(Guid ReceivingDocumentId)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Receiving.Post;
     public string AuditModule => "RECEIVING";
@@ -382,7 +386,7 @@ public sealed class PostReceivingDocumentCommandHandler : IRequestHandler<PostRe
 }
 
 public sealed record GetPutawayTasksQuery(Guid ReceivingDocumentId)
-    : IRequest<Result<IReadOnlyCollection<PutawayTaskDto>>>, IAuthorizedRequest
+    : IRequest<Result<IReadOnlyCollection<PutawayTaskDto>>>, IAuthorizedRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Receiving.Putaway;
 }
@@ -425,7 +429,7 @@ public sealed class GetPutawayTasksQueryHandler : IRequestHandler<GetPutawayTask
 }
 
 public sealed record CompletePutawayTaskCommand(Guid TaskId, CompletePutawayTaskRequest Request)
-    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result>, IAuthorizedRequest, IAuditableRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Receiving.Putaway;
     public string AuditModule => "RECEIVING";

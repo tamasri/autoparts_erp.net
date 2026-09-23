@@ -10,7 +10,7 @@ public sealed record TransferStockCommand(
     decimal Quantity,
     string? Notes,
     string IdempotencyKey)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IWarehouseTransferRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IWarehouseTransferRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Inventory.Transfer;
     public string AuditModule => "INVENTORY";

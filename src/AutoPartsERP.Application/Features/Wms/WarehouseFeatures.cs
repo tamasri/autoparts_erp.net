@@ -22,10 +22,12 @@ public sealed record GetStockMovementsQuery(
 public sealed class GetStockMovementsQueryHandler : IRequestHandler<GetStockMovementsQuery, Result<PagedResponse<StockMovementDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetStockMovementsQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetStockMovementsQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PagedResponse<StockMovementDto>>> Handle(GetStockMovementsQuery request, CancellationToken cancellationToken)
@@ -49,7 +51,9 @@ public sealed class GetStockMovementsQueryHandler : IRequestHandler<GetStockMove
             To = request.To?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
             Search = string.IsNullOrWhiteSpace(request.Search) ? null : $"%{request.Search.Trim()}%",
             Offset = (page - 1) * size,
-            Size = size
+            Size = size,
+            ScopeAll = WarehouseScopeSql.SeesAll(_currentUser),
+            ScopeUser = _currentUser.UserId
         };
 
         var rows = (await connection.QueryAsync<StockMovementDto>(new CommandDefinition(
@@ -64,6 +68,7 @@ public sealed class GetStockMovementsQueryHandler : IRequestHandler<GetStockMove
                 INNER JOIN locations l ON l.id = m.location_id
                 LEFT JOIN asp_net_users u ON u.id = m.performed_by
                 WHERE (@ItemId::uuid IS NULL OR m.item_id = @ItemId)
+                  AND (@ScopeAll OR m.location_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
             ) x
             WHERE (@LocationId::uuid IS NULL OR x.LocationId = @LocationId)
               AND (@MovementType::text IS NULL OR x.MovementType = @MovementType)
@@ -82,6 +87,7 @@ public sealed class GetStockMovementsQueryHandler : IRequestHandler<GetStockMove
             FROM inventory_movements m
             INNER JOIN items i ON i.id = m.item_id
             WHERE (@ItemId::uuid IS NULL OR m.item_id = @ItemId)
+                  AND (@ScopeAll OR m.location_id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
               AND (@LocationId::uuid IS NULL OR m.location_id = @LocationId)
               AND (@MovementType::text IS NULL OR m.movement_type = @MovementType)
               AND (@Direction::text IS NULL OR m.direction = @Direction)
@@ -104,10 +110,12 @@ public sealed record GetLocationOverviewQuery(bool IncludeInactive)
 public sealed class GetLocationOverviewQueryHandler : IRequestHandler<GetLocationOverviewQuery, Result<IReadOnlyCollection<LocationOverviewDto>>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ICurrentUser _currentUser;
 
-    public GetLocationOverviewQueryHandler(IDbConnectionFactory connectionFactory)
+    public GetLocationOverviewQueryHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
     {
         _connectionFactory = connectionFactory;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<IReadOnlyCollection<LocationOverviewDto>>> Handle(GetLocationOverviewQuery request, CancellationToken cancellationToken)
@@ -127,10 +135,10 @@ public sealed class GetLocationOverviewQueryHandler : IRequestHandler<GetLocatio
                 FROM inventory_stock st
                 INNER JOIN skus k ON k.id = st.sku_id
                 GROUP BY st.location_id) s ON s.location_id = l.id
-            WHERE @IncludeInactive OR l.is_active
+            WHERE (@IncludeInactive OR l.is_active) AND (@ScopeAll OR l.id IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))
             ORDER BY l.code;
             """,
-            new { request.IncludeInactive }, cancellationToken: cancellationToken))).ToArray();
+            new { request.IncludeInactive, ScopeAll = WarehouseScopeSql.SeesAll(_currentUser), ScopeUser = _currentUser.UserId }, cancellationToken: cancellationToken))).ToArray();
         return Result<IReadOnlyCollection<LocationOverviewDto>>.Success(rows);
     }
 }

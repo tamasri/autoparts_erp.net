@@ -245,7 +245,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] **Menu restructured:** related screens are one menu entry with section tabs (sales documents, stock, warehouse operations, users and roles); the raw ERPNext document browser and the duplicate ERPNext-documents screen were removed.
 - [x] Purchasing roles (ACCOUNTANT, PURCHASER), supplier statement, cost restored when a bill is voided, period locks per module (SALES / PURCHASES / PAYMENTS).
 - [x] Credit limit kept in USD only (lira shown from the latest saved rate); "العميل" is "الزبون" in every Arabic label.
-- [x] **Per-user warehouses (2026-09-23):** admin assigns warehouses and manager status; transfers between warehouses wait for the managers of the warehouses involved (SYSTEM_ADMIN exempt). Stock lists are not filtered by warehouse yet.
+- [x] **Per-user warehouses (2026-09-23):** admin assigns warehouses and manager status; transfers between warehouses wait for the managers of the warehouses involved (SYSTEM_ADMIN exempt). Warehouse lists, documents and actions are kept to the user's warehouses (`inventory:all_warehouses` sees all).
 - [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
 - [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 
@@ -267,7 +267,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       salesperson points (rep figures exist on the reps page); date + tag filters; Excel export everywhere (ClosedXML is in place).
 
 #### PHASE 5 — Security & administration  · `Status: Not Started`
-- [ ] Role-permission editor (the users editor is done, 2026-09-21), user ↔ warehouse scoping of stock lists (assignment and transfer approval done), one-click database backup (scheduled
+- [ ] Role-permission editor (the users editor is done, 2026-09-21), user ↔ warehouse scoping (done 2026-09-23), one-click database backup (scheduled
       `pg_dump`, rotation, admin-only download), catalog categories, batches, warranty and reason-code screens.
 
 #### PHASE 6 — Real AI  · `Status: Not Started`

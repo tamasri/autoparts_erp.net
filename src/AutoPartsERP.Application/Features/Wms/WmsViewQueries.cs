@@ -6,7 +6,7 @@ namespace AutoPartsERP.Application.Features.Wms;
 // looked for camelCase names and found nothing), and the old list handlers reported the size of the *page* as the total.
 
 public sealed record GetIssueOrderByIdQuery(Guid IssueOrderId)
-    : IRequest<Result<IssueOrderDetailDto>>, IAuthorizedRequest
+    : IRequest<Result<IssueOrderDetailDto>>, IAuthorizedRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.IssueOrders.Read;
 }
@@ -69,7 +69,7 @@ public sealed class GetIssueOrderByIdQueryHandler : IRequestHandler<GetIssueOrde
 }
 
 public sealed record GetCycleCountPlanByIdQuery(Guid PlanId)
-    : IRequest<Result<CycleCountPlanDetailDto>>, IAuthorizedRequest
+    : IRequest<Result<CycleCountPlanDetailDto>>, IAuthorizedRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.CycleCounts.Read;
 }
@@ -118,7 +118,7 @@ public sealed class GetCycleCountPlanByIdQueryHandler : IRequestHandler<GetCycle
 }
 
 public sealed record GetReceivingDocumentDetailQuery(Guid DocumentId)
-    : IRequest<Result<ReceivingDocumentDetailDto>>, IAuthorizedRequest
+    : IRequest<Result<ReceivingDocumentDetailDto>>, IAuthorizedRequest, IWarehouseScopedRequest
 {
     public string RequiredPermission => PermissionCodes.Receiving.Read;
 }
