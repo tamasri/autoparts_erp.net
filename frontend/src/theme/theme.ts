@@ -187,10 +187,6 @@ export const theme = createTheme({
       },
     },
 
-    // NOTE: MuiDataGrid component overrides must be added via
-    //   import '@mui/x-data-grid' augmentation — not in @mui/material theme.
-    //   DataGrid styles applied via sx prop on the component instead.
-
     // ── Chip / Badge ──────────────────────────────────────────────────────
     MuiChip: {
       styleOverrides: {

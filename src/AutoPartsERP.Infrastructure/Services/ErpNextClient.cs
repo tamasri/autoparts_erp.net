@@ -583,7 +583,14 @@ public sealed partial class ErpNextClient : IErpNextClient
     /// </summary>
     private async Task<Result<string>> UpsertPartyAsync(string doctype, string nameField, string name, JsonObject payload, CancellationToken cancellationToken)
     {
-        var existing = await FindNameByFieldAsync(doctype, nameField, name, cancellationToken);
+        var lookup = await FindNameByFieldAsync(doctype, nameField, name, cancellationToken);
+        if (lookup.IsFailure)
+        {
+            // Creating on a failed lookup would add a second "X - 1" party when the first already exists; the outbox retries later.
+            return Result<string>.Failure(lookup.Error);
+        }
+
+        var existing = lookup.Value;
         if (existing is null)
         {
             return await UpsertAsync(doctype, name, payload, cancellationToken);
@@ -600,8 +607,11 @@ public sealed partial class ErpNextClient : IErpNextClient
         return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{response.StatusCode}: {Truncate(body)}"));
     }
 
-    /// <summary>The ERPNext document name whose <paramref name="field"/> equals <paramref name="value"/>, or null (also when the lookup itself fails).</summary>
-    private async Task<string?> FindNameByFieldAsync(string doctype, string field, string value, CancellationToken cancellationToken)
+    /// <summary>
+    /// The ERPNext document name whose <paramref name="field"/> equals <paramref name="value"/>: success with null when there is none,
+    /// failure when the lookup itself fails (so the caller does not mistake "unreachable" for "not there").
+    /// </summary>
+    private async Task<Result<string?>> FindNameByFieldAsync(string doctype, string field, string value, CancellationToken cancellationToken)
     {
         try
         {
@@ -609,17 +619,18 @@ public sealed partial class ErpNextClient : IErpNextClient
             var response = await _httpClient.GetAsync($"api/resource/{Uri.EscapeDataString(doctype)}?filters={filters}&fields=%5B%22name%22%5D&limit_page_length=1", cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                return null;
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                return Result<string?>.Failure(new Error("ErpNext.LookupFailed", $"{doctype} lookup: {response.StatusCode}: {Truncate(body)}"));
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
             var rows = document!.RootElement.GetProperty("data");
-            return rows.GetArrayLength() > 0 ? rows[0].GetProperty("name").GetString() : null;
+            return Result<string?>.Success(rows.GetArrayLength() > 0 ? rows[0].GetProperty("name").GetString() : null);
         }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or HttpRequestException)
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or HttpRequestException or InvalidOperationException)
         {
-            return null;
+            return Result<string?>.Failure(new Error("ErpNext.LookupFailed", $"{doctype} lookup: {ex.Message}"));
         }
     }
 
@@ -665,7 +676,7 @@ public sealed partial class ErpNextClient : IErpNextClient
             var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
             return document?.RootElement.GetProperty("data").GetProperty("name").GetString();
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
         {
             return null;
         }

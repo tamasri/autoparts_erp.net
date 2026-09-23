@@ -42,7 +42,8 @@ public sealed class InvoicesModule : ICarterModule
                 return result.IsSuccess && result.Value is not null
                     ? Results.File(result.Value, "application/pdf", $"invoice-{id}.pdf")
                     : result.ToApiResult();
-            });
+            })
+            .RequireRateLimiting(RateLimiting.Heavy);
 
         group.MapPost("/", async Task<IResult> (CreateInvoiceRequest request, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {
@@ -92,23 +93,14 @@ public sealed class InvoicesModule : ICarterModule
 
         group.MapPost("/{id:guid}/post", async Task<IResult> (Guid id, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {
-                var result = await sender.Send(new PostInvoiceCommand(
-                    id,
-                    DateOnly.FromDateTime(DateTime.UtcNow),
-                    EndpointRequestHelpers.GetIdempotencyKey(httpContext)),
-                    cancellationToken);
+                var result = await sender.Send(new PostInvoiceCommand(id, EndpointRequestHelpers.GetIdempotencyKey(httpContext)), cancellationToken);
                 return result.ToApiResult();
             })
             .WithIdempotency();
 
         group.MapPost("/{id:guid}/void", async Task<IResult> (Guid id, VoidInvoiceRequest request, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {
-                var result = await sender.Send(new VoidInvoiceCommand(
-                    id,
-                    DateOnly.FromDateTime(DateTime.UtcNow),
-                    request.Reason,
-                    EndpointRequestHelpers.GetIdempotencyKey(httpContext)),
-                    cancellationToken);
+                var result = await sender.Send(new VoidInvoiceCommand(id, request.Reason, EndpointRequestHelpers.GetIdempotencyKey(httpContext)), cancellationToken);
                 return result.ToApiResult();
             })
             .WithIdempotency();

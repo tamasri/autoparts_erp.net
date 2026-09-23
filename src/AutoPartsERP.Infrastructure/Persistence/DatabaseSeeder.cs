@@ -77,18 +77,21 @@ public static class DatabaseSeeder
     {
         var adminEmail = configuration["Seed:AdminEmail"] ?? "admin@autoparts.local";
         var adminUsername = configuration["Seed:AdminUsername"] ?? "admin";
-        var adminPassword = configuration["Seed:AdminPassword"]
-            ?? (environment.IsDevelopment()
-                ? "Admin@123456"
-                : throw new InvalidOperationException(
-                    "Seed:AdminPassword must be configured (e.g. via environment variable Seed__AdminPassword) outside the Development environment."));
-
         // Only create the admin once; do NOT delete/recreate on every restart, or an operator-changed
         // production password would be silently reset back to the seed value on the next deploy.
         var existing = await userManager.FindByEmailAsync(adminEmail);
         if (existing is not null)
         {
             return;
+        }
+
+        // No built-in default in any environment: a known password on a reachable dev box is as bad as in production.
+        // scripts/init-dev-settings.ps1 writes a random one into the git-ignored appsettings.Development.json.
+        var adminPassword = configuration["Seed:AdminPassword"];
+        if (string.IsNullOrWhiteSpace(adminPassword))
+        {
+            throw new InvalidOperationException(
+                $"Seed:AdminPassword must be configured to create the first admin ({environment.EnvironmentName}): set Seed__AdminPassword, or run scripts/init-dev-settings.ps1 on a dev machine.");
         }
 
         var user = new AppUser

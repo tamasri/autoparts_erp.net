@@ -83,7 +83,8 @@ public sealed class AccountingModule : ICarterModule
 
                 return (await sender.Send(new ImportAccountsCommand(rows, dryRun ?? true), ct)).ToApiResult();
             })
-            .DisableAntiforgery();
+            .DisableAntiforgery()
+            .RequireRateLimiting(RateLimiting.Heavy);
     }
 
     private static void MapEntries(RouteGroupBuilder group)

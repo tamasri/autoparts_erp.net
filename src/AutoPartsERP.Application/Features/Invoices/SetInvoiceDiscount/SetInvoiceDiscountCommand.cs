@@ -22,8 +22,13 @@ public sealed class SetInvoiceDiscountCommandValidator : AbstractValidator<SetIn
 public sealed class SetInvoiceDiscountCommandHandler : IRequestHandler<SetInvoiceDiscountCommand, Result<InvoiceDto>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly IPeriodLockService _periodLock;
 
-    public SetInvoiceDiscountCommandHandler(IDbConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
+    public SetInvoiceDiscountCommandHandler(IDbConnectionFactory connectionFactory, IPeriodLockService periodLock)
+    {
+        _connectionFactory = connectionFactory;
+        _periodLock = periodLock;
+    }
 
     public async Task<Result<InvoiceDto>> Handle(SetInvoiceDiscountCommand request, CancellationToken cancellationToken)
     {
@@ -39,6 +44,12 @@ public sealed class SetInvoiceDiscountCommandHandler : IRequestHandler<SetInvoic
         if (status != "DRAFT")
         {
             return Result<InvoiceDto>.Failure(new Error("Invoice.InvalidState", "The discount can only be changed on a draft invoice."));
+        }
+
+        var open = await InvoicePeriod.EnsureOpenAsync(_periodLock, connection, transaction, request.InvoiceId, cancellationToken);
+        if (open.IsFailure)
+        {
+            return Result<InvoiceDto>.Failure(open.Error);
         }
 
         var applied = await InvoiceTotals.ApplyDiscountAsync(connection, transaction, request.InvoiceId, request.DiscountPct, request.DiscountAmountUsd, cancellationToken);

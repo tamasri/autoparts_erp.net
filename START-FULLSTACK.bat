@@ -29,7 +29,7 @@ echo  API      : http://localhost:47000
 echo  API Docs : http://localhost:47000/scalar
 echo  pgAdmin  : http://localhost:47050
 echo  Seq Logs : http://localhost:47341
-echo  Login    : admin / Admin@123456
+echo  Login    : admin / Seed.AdminPassword in appsettings.Development.json
 echo =========================================
 echo.
 echo To stop: run STOP-FULLSTACK.bat

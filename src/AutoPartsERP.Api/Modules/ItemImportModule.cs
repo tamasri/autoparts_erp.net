@@ -54,6 +54,7 @@ public sealed class ItemImportModule : ICarterModule
                 var result = await sender.Send(new ImportItemsCommand(rows, dryRun ?? true, fileKey), cancellationToken);
                 return result.ToApiResult();
             })
-            .DisableAntiforgery();
+            .DisableAntiforgery()
+            .RequireRateLimiting(RateLimiting.Heavy);
     }
 }

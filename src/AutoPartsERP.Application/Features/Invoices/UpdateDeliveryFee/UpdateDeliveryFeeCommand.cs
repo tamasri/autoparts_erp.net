@@ -28,16 +28,24 @@ public sealed class UpdateDeliveryFeeCommandHandler : IRequestHandler<UpdateDeli
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ICurrentUser _currentUser;
+    private readonly IPeriodLockService _periodLock;
 
-    public UpdateDeliveryFeeCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
+    public UpdateDeliveryFeeCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser, IPeriodLockService periodLock)
     {
         _connectionFactory = connectionFactory;
         _currentUser = currentUser;
+        _periodLock = periodLock;
     }
 
     public async Task<Result<Guid>> Handle(UpdateDeliveryFeeCommand request, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var open = await InvoicePeriod.EnsureOpenAsync(_periodLock, connection, null, request.InvoiceId, cancellationToken);
+        if (open.IsFailure)
+        {
+            return Result<Guid>.Failure(open.Error);
+        }
+
         var updated = await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE invoices

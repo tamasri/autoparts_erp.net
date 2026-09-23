@@ -4,7 +4,7 @@ public sealed class AiModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/v1/ai").RequireAuthorization();
+        var group = app.MapGroup("/api/v1/ai").RequireAuthorization().RequireRateLimiting(RateLimiting.Heavy);
 
         group.MapPost("/chat", async Task<IResult> (AiChatRequest request, ISender sender, CancellationToken cancellationToken) =>
             {

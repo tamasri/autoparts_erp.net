@@ -38,7 +38,8 @@ public sealed class ExportsModule : ICarterModule
                         return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Export.Format", detail: "Format must be pdf, xlsx or csv.");
                 }
             })
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.Heavy);
     }
 
     private static string SafeFileName(string raw)

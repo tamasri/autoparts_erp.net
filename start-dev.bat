@@ -20,6 +20,6 @@ echo ===================================================
 echo [SUCCESS] Both servers are starting in separate windows!
 echo Please wait about 30 seconds for the API to apply migrations and seed data.
 echo Then, open your browser to: http://localhost:47173
-echo Login: admin / Admin@123456
+echo Login: admin / Seed.AdminPassword in appsettings.Development.json
 echo ===================================================
 pause

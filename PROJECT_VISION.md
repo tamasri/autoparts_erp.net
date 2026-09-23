@@ -57,7 +57,7 @@
 | Idempotency | IdempotentAPI + `DistributedIdempotencyService` + `IdempotencyBehavior` | send `Idempotency-Key` on POSTs |
 | **Accounting engine** | **ERPNext (Frappe) via REST**, `IErpNextClient` → `ErpNextClient` / `NullErpNextClient`; `erpnext_sync_log` | Live on the VPS, port 8080 |
 | Observability | OpenTelemetry (traces + Prometheus metrics at `/metrics`), Serilog, health checks | |
-| Docs | OpenAPI + Scalar (mapped unconditionally; not proxied by nginx) | Debt D6 |
+| Docs | OpenAPI + Scalar (Development only; not proxied by nginx) | D6 closed 2026-09-23 |
 | Files | **One engine for print/export** (`IDocumentRenderer`: QuestPDF + ClosedXML + embedded Noto fonts, Arabic RTL) behind `POST /api/v1/exports/{pdf|xlsx|csv}`; CsvHelper for imports; QRCoder (QR) | QuestPDF Community licence |
 | Frontend | **React 19, Vite 6, TypeScript 5.7, react-router 7, Zustand 5, axios, sonner, @microsoft/signalr** | |
 | Frontend styling | **MUI v6** (`createTheme`, `direction:'rtl'`) + emotion cache + `stylis-plugin-rtl`; the design tokens live in the theme; `theme.css` removed (2026-09-23) | **Adopted 2026-09-19** |
@@ -69,9 +69,8 @@
 | Tests | UnitTests (84), IntegrationTests (33, need Docker; auth/health only — they do not run SQL), E2ETests (empty project) | |
 
 **Stack adoption status — updated 2026-09-19 (owner-approved full migration; see §2a):**
-- **Frontend — NOW ACTIVE:** `@mui/material` v6, `@mui/x-data-grid`, `@tanstack/react-query` v5, `react-hook-form` v7, `zod` v3, `@emotion/cache`, `@emotion/react`, `stylis-plugin-rtl`, `react-i18next`.
-- **Frontend — still dead (remove):** `@tanstack/react-table` (superseded by MUI X DataGrid), `@zxing/*` (pending barcode screen decision).
-- **Backend — still dead (remove):** `Microsoft.SemanticKernel`, `Microsoft.Extensions.AI`, `Pgvector`, `FluentEmail.*`, `ZXing.Net` — remove after Phase 6 AI decisions.
+- **Frontend — NOW ACTIVE:** `@mui/material` v6, `@mui/x-charts`, `@tanstack/react-query` v5, `react-hook-form` v7, `zod` v3, `@emotion/cache`, `@emotion/react`, `stylis-plugin-rtl`, `react-i18next`.
+- **Removed 2026-09-23 (unused):** frontend `@tanstack/react-table`, `@zxing/*`, `@mui/x-data-grid`, `@playwright/test`; backend `Microsoft.SemanticKernel`, `Microsoft.Extensions.AI`, `Pgvector`(+EF), `FluentEmail.*`, `ZXing.Net`, `SkiaSharp`. Add back the one a feature actually needs when it is built (the `vector` Postgres extension stays).
 
 ### §2a — Owner-Approved Policy Override (2026-09-19)
 
@@ -182,7 +181,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] **D3 — i18n**: externalise the hardcoded Arabic into `ar.json`/`en.json` and use `useTranslation`.
 - [ ] **D4 — Dead dependencies** (list in §2) and stale `README.md`.
 - [ ] **D5 — Secrets exposed in past chats** (DB password, JWT keys, ERPNext `Administrator` = `admin`): rotate.
-- [ ] **D6 — Scalar/OpenAPI mapped in every environment**: map only in Development or gate by role.
+- [x] **D6 — DONE (2026-09-23):** Scalar/OpenAPI are mapped only in Development.
 - [ ] **D7 — Unpaged list screens** (receiving, transfers, cycle counts, adjustments, issue orders, FX rates).
 - [ ] **D8 — CI does not exercise SQL.** Make the integration tests migrate + seed a Testcontainers database and hit the
       real endpoints (login → dashboard/items/approvals flows) so a green run means something. Until then, local verification
@@ -248,7 +247,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] **Per-user warehouses (2026-09-23):** admin assigns warehouses and manager status; transfers between warehouses wait for the managers of the warehouses involved (SYSTEM_ADMIN exempt). Warehouse lists, documents and actions are kept to the user's warehouses (`inventory:all_warehouses` sees all).
 - [x] All screens and the shell on MUI (D16, 2026-09-23).
 - [ ] export buttons on customers, inventory, approvals, audit.
-- [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
+- [ ] Barcode scanner UI (add a scanner library when it is built) and purchase-side statements.
 
 #### PHASE 2 — Sales experience  · `Status: In Progress`
 - [x] **Sales representatives (2026-09-23):** rep list and page (sales, returns, collections, receivables, commission, monthly target, 12-month trend), customer hand-over, rep on invoices and customers, ERPNext Sales Person + sales team.

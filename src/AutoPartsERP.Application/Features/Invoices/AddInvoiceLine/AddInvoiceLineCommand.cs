@@ -32,11 +32,13 @@ public sealed class AddInvoiceLineCommandHandler : IRequestHandler<AddInvoiceLin
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ICurrentUser _currentUser;
+    private readonly IPeriodLockService _periodLock;
 
-    public AddInvoiceLineCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
+    public AddInvoiceLineCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser, IPeriodLockService periodLock)
     {
         _connectionFactory = connectionFactory;
         _currentUser = currentUser;
+        _periodLock = periodLock;
     }
 
     public async Task<Result<Guid>> Handle(AddInvoiceLineCommand request, CancellationToken cancellationToken)
@@ -55,6 +57,13 @@ public sealed class AddInvoiceLineCommandHandler : IRequestHandler<AddInvoiceLin
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.InvalidState", "Only draft invoices can be modified."));
+        }
+
+        var open = await InvoicePeriod.EnsureOpenAsync(_periodLock, connection, transaction, request.InvoiceId, cancellationToken);
+        if (open.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(open.Error);
         }
 
         var sku = await connection.QuerySingleOrDefaultAsync<(string Name, decimal CostPriceSyp, decimal CostPriceUsd)>(

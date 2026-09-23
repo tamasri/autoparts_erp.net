@@ -24,5 +24,11 @@ $settings.Jwt.PrivateKeyPemBase64 = & $toBase64 $rsa.ExportPkcs8PrivateKeyPem()
 $settings.Jwt.PublicKeyPemBase64 = & $toBase64 $rsa.ExportSubjectPublicKeyInfoPem()
 if ($DbPassword) { $settings.Database.ConnectionString = $settings.Database.ConnectionString -replace 'Password=[^;]*', "Password=$DbPassword" }
 
+# First-admin password: random, written only into the git-ignored file (never printed). Used once, when the admin user does not exist yet.
+$bytes = [byte[]]::new(18)
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$adminPassword = 'Dev!' + ([Convert]::ToBase64String($bytes) -replace '[+/=]', 'x') + '9a'
+$settings | Add-Member -NotePropertyName Seed -NotePropertyValue ([pscustomobject]@{ AdminPassword = $adminPassword }) -Force
+
 $settings | ConvertTo-Json -Depth 5 | Set-Content -Path $OutFile -Encoding UTF8
-Write-Host "Wrote $OutFile (git-ignored). Keys are local to this machine."
+Write-Host "Wrote $OutFile (git-ignored). Keys and the first-admin password (Seed.AdminPassword) are local to this machine."

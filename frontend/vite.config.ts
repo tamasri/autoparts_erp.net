@@ -28,8 +28,6 @@ export default defineConfig({
         manualChunks: {
           // MUI core — shared by all screens
           'vendor-mui': ['@mui/material', '@mui/system'],
-          // MUI X DataGrid — larger package, only screens that use it need it
-          'vendor-datagrid': ['@mui/x-data-grid'],
           // Emotion — MUI styling engine
           'vendor-emotion': ['@emotion/react', '@emotion/cache', '@emotion/styled'],
           // TanStack Query

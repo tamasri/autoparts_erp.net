@@ -2,18 +2,16 @@ using Dapper;
 
 namespace AutoPartsERP.Application.Features.Invoices.VoidInvoice;
 
+// Voiding cancels the posted document in ERPNext on its own date, so the period lock is checked against the invoice date (InvoicePeriod).
 public sealed record VoidInvoiceCommand(
     Guid InvoiceId,
-    DateOnly InvoiceDate,
     string Reason,
     string IdempotencyKey)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IMakerCheckerRequest, IPeriodSensitiveRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Invoices.Void;
     public string AuditModule => "INVOICES";
     public bool RequiresApproval => true;
-    public DateTimeOffset OperationDate => InvoiceDate.ToDateTime(TimeOnly.MinValue);
-    public string Module => "INVOICES";
 }
 
 public sealed class VoidInvoiceCommandValidator : AbstractValidator<VoidInvoiceCommand>
@@ -30,11 +28,13 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ICurrentUser _currentUser;
+    private readonly IPeriodLockService _periodLock;
 
-    public VoidInvoiceCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
+    public VoidInvoiceCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser, IPeriodLockService periodLock)
     {
         _connectionFactory = connectionFactory;
         _currentUser = currentUser;
+        _periodLock = periodLock;
     }
 
     public async Task<Result<Guid>> Handle(VoidInvoiceCommand request, CancellationToken cancellationToken)
@@ -70,6 +70,13 @@ public sealed class VoidInvoiceCommandHandler : IRequestHandler<VoidInvoiceComma
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.HasAllocations", "Cannot void an invoice that has payment allocations."));
+        }
+
+        var open = await InvoicePeriod.EnsureOpenAsync(_periodLock, connection, transaction, request.InvoiceId, cancellationToken);
+        if (open.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(open.Error);
         }
 
         // Undo the stock effect of the posting: a voided sale returns its goods, a voided customer return takes them back out.

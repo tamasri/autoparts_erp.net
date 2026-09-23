@@ -23,5 +23,5 @@ sh.Popup "Two console windows opened." & vbCrLf & vbCrLf & _
     "Docs: http://localhost:47000/scalar" & vbCrLf & _
     "pgAdmin : http://localhost:47050" & vbCrLf & _
     "Seq : http://localhost:47341" & vbCrLf & vbCrLf & _
-    "Login: admin / Admin@123456", _
+    "Login: admin / Seed.AdminPassword in appsettings.Development.json", _
     0, "AutoPartsERP Started"

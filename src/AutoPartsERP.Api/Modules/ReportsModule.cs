@@ -24,7 +24,8 @@ public sealed class ReportsModule : ICarterModule
                 return result.IsSuccess && result.Value is not null
                     ? Results.File(result.Value, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "inventory-value.xlsx")
                     : result.ToApiResult();
-            });
+            })
+            .RequireRateLimiting(RateLimiting.Heavy);
 
         group.MapGet("/batch-trace/{batchId:guid}", async Task<IResult> (Guid batchId, ISender sender, CancellationToken cancellationToken) =>
             {

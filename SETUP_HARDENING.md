@@ -50,8 +50,9 @@ cd frontend && npm install && npm run dev                                   # ht
 | Seq UI / pgAdmin | `:47341` / `:47050` |
 
 **Bootstrap admin.** Created once by `DatabaseSeeder` from `Seed:AdminEmail`, `Seed:AdminUsername`,
-`Seed:AdminPassword` (env: `Seed__AdminPassword`, …). In **Development** a fallback (in `DatabaseSeeder`) exists so a fresh checkout works; in
-**Production** the API refuses to start without a real password. There is no shared default password.
+`Seed:AdminPassword` (env: `Seed__AdminPassword`, …). There is no built-in password in any environment: when the admin does not exist yet the API
+refuses to start without one. `scripts/init-dev-settings.ps1` writes a random `Seed.AdminPassword` into the git-ignored
+`appsettings.Development.json` (it is not printed; read it from that file for the first login, then change it). An existing admin is never touched.
 
 **Migrations** auto-apply on startup outside `Testing`. They are raw SQL (`Persistence/Migrations`, ids
 `202401010000NN`); to add one, create the next numbered class — see ENGINEERING_PLAYBOOK §2.2.
@@ -175,7 +176,8 @@ The API user needs create/write on **Sales Person** (reps), read on **Cost Cente
 - [x] JWT keys, DB and Redis passwords, ERPNext keys come from `.env.vps` (untracked; local secret files are git-ignored).
 - [x] TLS at nginx (self-signed for now), HSTS and security headers, login rate limit.
 - [x] Scripted deploy with health verification; CI green; approval replay and Hangfire queues fixed.
-- [x] Scalar/OpenAPI are **not proxied** by nginx (unreachable from outside).
+- [x] Scalar/OpenAPI are **not proxied** by nginx, and since 2026-09-23 are mapped only in Development (H-6).
+- [x] 2026-09-23: no fallback admin password in any environment (the dev settings script generates one); nginx sends a CSP (scripts `'self'` only; styles allow inline for MUI; Google Fonts; `blob:` frames for print; ws/wss for SignalR; none on `/hangfire`), `Permissions-Policy`, `client_max_body_size 6m`, and limits `/auth/refresh` per IP (20/min) as well as login (H-12); the API limits exports, PDFs, imports and AI to 30 per minute per user (`RateLimiting.Heavy`, 429) (H-13); unused packages removed (SemanticKernel, Extensions.AI, Pgvector, FluentEmail, ZXing, SkiaSharp; frontend react-table, zxing, x-data-grid, playwright).
 
 **Pending**
 - [ ] **H-0 Dev key in git history:** `appsettings.Development.json` (a dev JWT private key and the dev DB password) sat in the public repository from the first commit until 2026-09-21 and is still in history. It never signed production tokens (the VPS generates its own pair), but treat it as public: do not reuse that DB password anywhere; decide whether to purge history (force-push, owner decision).
@@ -187,13 +189,11 @@ The API user needs create/write on **Sales Person** (reps), read on **Cost Cente
 - [ ] **H-4 ERPNext:** change the `Administrator` password; close port 8080 to the internet (`ufw status` to check).
 - [ ] **H-5 Backups:** scheduled `pg_dump` of `autoparts_erp` with rotation and an off-server copy; restore test; the
       one-click backup screen is Phase 5.
-- [ ] **H-6** Map Scalar/OpenAPI only in Development (or gate by role).
 - [ ] **H-7** Server upgrade (RAM/CPU) before production load; monitor swap.
 - [ ] **H-8** Set GitHub secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` so CI can deploy (currently skipped).
 - [ ] **H-9** Decide migration policy for production (auto-migrate on boot vs a controlled step) and take a backup first.
-- [ ] **H-11 Tokens in localStorage:** the access and refresh tokens are persisted by the auth store (an XSS could read them). Preferred: refresh token in an `HttpOnly; Secure; SameSite` cookie with CSRF protection, access token in memory; until then a strict CSP.
-- [ ] **H-12 nginx headers:** add a CSP, `Permissions-Policy`, `client_max_body_size` and cache headers for sensitive responses.
-- [ ] **H-13 Rate limits** beyond login: refresh/logout, exports/imports, AI.
+- [ ] **H-11 Tokens in localStorage:** the access and refresh tokens are persisted by the auth store (an XSS could read them). Preferred: refresh token in an `HttpOnly; Secure; SameSite` cookie with CSRF protection, access token in memory. A CSP now limits scripts to the app itself (2026-09-23), which narrows but does not close this.
+- [ ] **H-12 (rest):** `Cache-Control: no-store` on sensitive API responses.
 - [ ] **H-14 Pin versions:** GitHub Actions to commit SHAs, Docker images to versions/digests (`latest` for Prometheus/Grafana/Loki/Tempo in the prod compose), Dependabot/Renovate, dependency and image scanning in CI.
 - [ ] **H-15 CI deploy step** (`.github/workflows/deploy.yml`) ends its migration command with `|| true`: a failed migration does not stop a deploy. The VPS deploys through `scripts/deploy-vps.sh`, so this path is unused today; fix before enabling it.
 - [ ] **H-10** AI/notification keys (`AI_*`, `SMTP_*`) live only in `.env.vps`; document their rotation.

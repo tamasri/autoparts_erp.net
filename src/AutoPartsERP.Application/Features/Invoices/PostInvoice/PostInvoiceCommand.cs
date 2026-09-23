@@ -3,17 +3,15 @@ using Humanizer;
 
 namespace AutoPartsERP.Application.Features.Invoices.PostInvoice;
 
+// The period lock is checked in the handler against the invoice's own date (InvoicePeriod), not the day of posting.
 public sealed record PostInvoiceCommand(
     Guid InvoiceId,
-    DateOnly InvoiceDate,
     string IdempotencyKey,
     string? ModuleInput = null)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IPeriodSensitiveRequest, IMakerCheckerRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IMakerCheckerRequest
 {
     public string RequiredPermission => PermissionCodes.Invoices.Post;
     public string AuditModule => "INVOICES";
-    public DateTimeOffset OperationDate => InvoiceDate.ToDateTime(TimeOnly.MinValue);
-    public string Module => "INVOICES";
 
     // Posting decrements live stock, creates warranty records, and fires an outbox event — requires a second approver.
     public bool RequiresApproval => true;
@@ -24,7 +22,6 @@ public sealed class PostInvoiceCommandValidator : AbstractValidator<PostInvoiceC
     public PostInvoiceCommandValidator()
     {
         RuleFor(x => x.InvoiceId).NotEmpty();
-        RuleFor(x => x.InvoiceDate).NotEmpty();
         RuleFor(x => x.IdempotencyKey).NotEmpty();
     }
 }
@@ -33,11 +30,13 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ICurrentUser _currentUser;
+    private readonly IPeriodLockService _periodLock;
 
-    public PostInvoiceCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser)
+    public PostInvoiceCommandHandler(IDbConnectionFactory connectionFactory, ICurrentUser currentUser, IPeriodLockService periodLock)
     {
         _connectionFactory = connectionFactory;
         _currentUser = currentUser;
+        _periodLock = periodLock;
     }
 
     public async Task<Result<Guid>> Handle(PostInvoiceCommand request, CancellationToken cancellationToken)
@@ -83,6 +82,13 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Invoice.InvalidState", "Only confirmed invoices can be posted."));
+        }
+
+        var open = await InvoicePeriod.EnsureOpenAsync(_periodLock, connection, transaction, request.InvoiceId, cancellationToken);
+        if (open.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(open.Error);
         }
 
         var lines = (await connection.QueryAsync<PostLineRow>(

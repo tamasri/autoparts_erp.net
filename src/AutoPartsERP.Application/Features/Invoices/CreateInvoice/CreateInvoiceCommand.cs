@@ -19,10 +19,12 @@ public sealed record CreateInvoiceCommand(
     string IdempotencyKey,
     decimal? DiscountPct = null,
     decimal? DiscountAmountUsd = null)
-    : IRequest<Result<InvoiceDto>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest
+    : IRequest<Result<InvoiceDto>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IPeriodSensitiveRequest
 {
     public string RequiredPermission => PermissionCodes.Invoices.Create;
     public string AuditModule => "INVOICES";
+    public DateTimeOffset OperationDate => InvoiceDate.ToDateTime(TimeOnly.MinValue);
+    public string Module => InvoicePeriod.Module;
 }
 
 public sealed class CreateInvoiceCommandValidator : AbstractValidator<CreateInvoiceCommand>

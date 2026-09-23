@@ -165,6 +165,7 @@ builder.Services.AddSignalR();
 
 // IdempotentMinimalAPI
 builder.Services.AddApiIdempotency();
+builder.Services.AddErpRateLimits(builder.Configuration);
 
 // DI registrations
 builder.Services.AddHttpContextAccessor();
@@ -266,6 +267,7 @@ app.UseExceptionHandler();
 app.UseCors("DefaultCors");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseApiIdempotency();
 
 // health endpoints
@@ -285,9 +287,12 @@ if (!app.Environment.IsEnvironment("Testing"))
     });
 }
 
-// Scalar + OpenAPI
-app.MapOpenApi();
-app.MapScalarApiReference();
+// Scalar + OpenAPI: a map of every endpoint is a development aid, not something to serve in production.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
 
 // Carter modules
 app.MapCarter();

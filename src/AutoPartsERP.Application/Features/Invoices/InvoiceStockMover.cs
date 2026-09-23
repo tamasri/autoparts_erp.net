@@ -13,6 +13,8 @@ internal enum StockDirection
 /// <summary>
 /// Moves inventory for an invoice line. One implementation shared by posting and voiding so the two can never disagree:
 /// a sale takes stock Out, a customer return brings it In, and a void does the opposite of the original posting.
+/// The sellable stock (<c>inventory_stock</c>) and the warehouse view (<c>inventory_balances</c>, the item's un-batched AVAILABLE row)
+/// move together in the caller's transaction, so warehouse screens show a sale at once instead of after the next balances sync.
 /// </summary>
 internal static class InvoiceStockMover
 {
@@ -31,16 +33,24 @@ internal static class InvoiceStockMover
     {
         if (direction == StockDirection.Out)
         {
-            var onHand = await connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
-                "SELECT quantity_on_hand FROM inventory_stock WHERE sku_id = @skuId AND location_id = @locationId FOR UPDATE;",
-                new { skuId, locationId }, transaction, cancellationToken: cancellationToken));
-            if (onHand is null || onHand < quantity)
+            // Reserved goods are not for sale: the sale may only take what is on hand and not reserved (same rule as StockLevelWriter).
+            var taken = await connection.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE inventory_stock SET quantity_on_hand = quantity_on_hand - @quantity, updated_at = now()
+                WHERE sku_id = @skuId AND location_id = @locationId AND quantity_on_hand - @quantity >= quantity_reserved;
+                """,
+                new { quantity, skuId, locationId }, transaction, cancellationToken: cancellationToken));
+            if (taken == 0)
             {
-                return Result.Failure(new Error("Stock.InsufficientQuantity", "Insufficient stock quantity."));
+                return Result.Failure(new Error("Stock.InsufficientQuantity", "Insufficient sellable stock at the location."));
             }
 
             await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE inventory_stock SET quantity_on_hand = quantity_on_hand - @quantity, updated_at = now() WHERE sku_id = @skuId AND location_id = @locationId;",
+                """
+                UPDATE inventory_balances b SET qty = GREATEST(b.qty - @quantity, 0), updated_at = now()
+                FROM items i
+                WHERE i.sku_id = @skuId AND b.item_id = i.id AND b.location_id = @locationId AND b.batch_id IS NULL AND b.status = 'AVAILABLE';
+                """,
                 new { quantity, skuId, locationId }, transaction, cancellationToken: cancellationToken));
         }
         else
@@ -51,6 +61,14 @@ internal static class InvoiceStockMover
                 VALUES (@skuId, @locationId, @quantity, 0, now())
                 ON CONFLICT (sku_id, location_id) DO UPDATE
                     SET quantity_on_hand = inventory_stock.quantity_on_hand + EXCLUDED.quantity_on_hand, updated_at = now();
+                """,
+                new { skuId, locationId, quantity }, transaction, cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO inventory_balances (id, item_id, location_id, batch_id, status, qty, updated_at)
+                SELECT uuid_generate_v4(), i.id, @locationId, NULL, 'AVAILABLE', @quantity, now() FROM items i WHERE i.sku_id = @skuId
+                ON CONFLICT (item_id, location_id, batch_id, status) DO UPDATE SET qty = inventory_balances.qty + EXCLUDED.qty, updated_at = now();
                 """,
                 new { skuId, locationId, quantity }, transaction, cancellationToken: cancellationToken));
         }

@@ -144,7 +144,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **Accounts are referenced by their ERPNext name** ("Cash - AB"). A receivable/payable account needs a customer/supplier on the line; every other account refuses one (`EntryLineRules`). Renaming an account changes its full name in ERPNext; posted entries follow, drafts must be re-picked.
 - **Reconciliation** stores only which GL lines were cleared (`ledger_reconciliation_items`, unique per line). Amounts are always re-read from ERPNext when completing; the statement balance must equal (previously cleared + ticked). Only the latest reconciliation of an account can be undone, and an entry with a reconciled line cannot be voided.
 - **Tags** attach to a manual entry (`JOURNAL_ENTRY`, id) or any ERPNext voucher (`ERPNEXT`, `"<voucher type>|<number>"`); `TagResolver` merges both views once an entry has been booked.
-- **Period locks:** module `ACCOUNTING` (create/edit through the pipeline, post and void through `IPeriodLockService`).
+- **Period locks:** module `ACCOUNTING` (create/edit through the pipeline, post and void through `IPeriodLockService`). Sales invoices use module `INVOICES`: creation through the pipeline on the request date; every later step (lines, discount, delivery fee, confirm, post, void) through `InvoicePeriod.EnsureOpenAsync`, which reads the invoice's stored date — the endpoint never passes "today".
 - **Sections in the menu:** put related screens in one `NavItem` with `tabs` (`components/layout/navigation.ts`); do not add a menu entry per screen. Tabs inside a screen use `RoutedTabs` (`?tab=`).
 - **A paged ledger read is exact [convention]:** totals and counts come from ERPNext aggregate queries (`GetGlSummaryAsync`), the balance a page starts from from the totals of the lines skipped (`GetGlOffsetSummaryAsync`), the order is always `posting_date, creation, name`, and the arithmetic lives in `LedgerPaging` (tested). Never re-read "a page of history" to derive a balance.
 - **Period locks [enforced by tests]:** the check reads a short-lived cache; every lock/unlock must call `IPeriodLockService.InvalidateCacheAsync`. The lock/unlock commands themselves are NOT `IPeriodSensitiveRequest`. A command that is period-sensitive by request date implements `IPeriodSensitiveRequest` with that date; one that learns the date from the database checks `IPeriodLockService` in its handler — never `OperationDate = now`.
@@ -216,7 +216,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 
 ### 2.6 Testing rules
 - **UnitTests** (validators, behaviors, domain); **IntegrationTests** (API + Postgres via the `Testing` environment);
-  **E2ETests** (empty). Playwright is a devDependency with no tests yet.
+  **E2ETests** (empty). Browser checks are done by hand with the in-app browser; Playwright was removed with the other unused packages.
 - Every new command/query: a validator test and a handler/integration test covering the happy path and one governance
   failure (unauthorized / period-locked / needs approval) where relevant.
 - After any Dapper read change, exercise the endpoint against real data — type mismatches only show at runtime.
@@ -225,6 +225,9 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - Least privilege: guard endpoints with `RequiredPermission`; admin-only surfaces use the `SystemAdministrator` role.
 - Never log or return secrets; never echo tokens (redact when debugging).
 - Public surfaces (future invoice links, payment webhooks) use unguessable tokens, rate limits and no internal ids.
+- **Rate limits:** per-IP limits live in nginx (API 30 r/s, login 5/min, refresh 20/min). Behind the proxy every request reaches the API from one address, so the API limits per signed-in user: put `.RequireRateLimiting(RateLimiting.Heavy)` on anything that builds files, reads uploads or calls a model.
+- **External lookups before a create:** a failed lookup is a failure, never "not found" — otherwise a transient error creates a duplicate (ERPNext names a second party "X - 1"). `ErpNextClient.FindNameByFieldAsync` returns `Result<string?>`; the outbox retries.
+- **Stock that is sold:** sales take only `on_hand − reserved` and move `inventory_stock` and the item's un-batched AVAILABLE `inventory_balances` row in the same transaction (`InvoiceStockMover`, like `StockLevelWriter` for warehouse documents); the 5-minute sync job is a safety net, not the mechanism.
 - Changing SSH/firewall settings requires a verified working alternative first (a bad change already locked the
   owner out once).
 
