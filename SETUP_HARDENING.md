@@ -121,7 +121,7 @@ If `git pull` complains about local changes on the server, look at them (`git di
 - **Change the default ERPNext `Administrator` password (`admin`)** — pending (H-4).
 
 ### 3.4a ERPNext read access (chart of accounts, documents)
-The API user needs create/write on **Sales Person** (reps) and read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item. The accounting screens also **write**: create/write on **Account** (chart maintenance; renaming calls `erpnext.accounts.doctype.account.account.update_account_number`), and create/submit/cancel on **Journal Entry**. Reports use grouped `GL Entry` queries (`group_by`, `sum(debit)`), so the user must be allowed to read GL Entry with aggregates. If an accounting screen shows an error, read the message: it is ERPNext's own text.
+The API user needs create/write on **Sales Person** (reps), read on **Cost Center, Mode of Payment, Sales/Purchase Taxes and Charges Template, Fiscal Year, Currency Exchange** (reference lists) and read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item. The accounting screens also **write**: create/write on **Account** (chart maintenance; renaming calls `erpnext.accounts.doctype.account.account.update_account_number`), and create/submit/cancel on **Journal Entry**. Reports use grouped `GL Entry` queries (`group_by`, `sum(debit)`), so the user must be allowed to read GL Entry with aggregates. If an accounting screen shows an error, read the message: it is ERPNext's own text.
 
 ### 3.5 Firewall / network
 - `ufw` should allow only 22, 80, 443 to the world. Container → host Postgres needs `5432` from `172.16.0.0/12`.
@@ -158,6 +158,8 @@ The API user needs create/write on **Sales Person** (reps) and read on Account, 
 | A transfer stays "بانتظار الموافقة" | it needs the manager of each other warehouse involved (item 9) | give a user manager status on that warehouse (Users → warehouses), or approve as SYSTEM_ADMIN |
 | Invoice refused with "SalesRep.NotActive" | the customer's rep was deactivated | reactivate the rep, or give the customer to another rep (المندوبون → إسناد زبائن), or pick another rep on the invoice |
 | ERPNext rejects an invoice: Sales Person not found / "Sales Team" missing | the root sales-person group has another name on that server | read the error in the sync log; create "Sales Team" as a group Sales Person in ERPNext or adjust `SyncSalesPersonAsync` |
+| Consistency screen: many "أُرسل ثم اختفى" rows | documents were deleted in ERPNext, or the app was pointed at another ERPNext/company | check `Erpnext:BaseUrl` and the company; re-create what is really missing by clearing its sync-log row and running the sync |
+| Invoice refused by ERPNext: no default income account for the delivery fee | the company has no Default Income Account | set it in ERPNext (Company → Default Income Account), then "مزامنة الآن" |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
 ---

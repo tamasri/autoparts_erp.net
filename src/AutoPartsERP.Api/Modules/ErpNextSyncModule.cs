@@ -38,7 +38,7 @@ public sealed class ErpNextSyncModule : ICarterModule
             await using var connection = await connectionFactory.CreateAsync(cancellationToken);
             var rows = (await connection.QueryAsync(new CommandDefinition(
                 """
-                SELECT local_entity_type AS "localEntityType", erpnext_doctype AS "erpnextDoctype",
+                SELECT local_entity_type AS "localEntityType", local_entity_id AS "localEntityId", erpnext_doctype AS "erpnextDoctype",
                        status, erpnext_name AS "erpnextName", last_error AS "lastError",
                        attempt_count AS "attemptCount", updated_at AS "updatedAt"
                 FROM erpnext_sync_log

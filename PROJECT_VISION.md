@@ -221,6 +221,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] Sync payments to ERPNext as Payment Entry (settles the Sales Invoices it was allocated to) and cancel on reversal — backend done and verified against a mock ERPNext.
 - [x] Payments **screen** (create, partial/multiple, allocate, reverse).
 - [x] Chart of accounts and account mapping shown from ERPNext; ERPNext document browser (read-only).
+- [x] **ERPNext consistency check (2026-09-23):** local vs ERPNext per document type with every difference listed and linked; read-only cost centres, modes of payment, tax templates, fiscal years and exchange rates; delivery fee now sent to ERPNext.
 - [ ] Bank/cash accounts (ERPNext accounts) and per-account statements.
 - [x] Purchase invoices; discount on the whole sales/purchase invoice (percentage or amount, sent to ERPNext as Additional Discount) — 2026-09-23.
 - [ ] Purchase returns; quick-add supplier; bulk pay/receive; delivery fee to ERPNext.

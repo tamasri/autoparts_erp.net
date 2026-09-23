@@ -29,7 +29,7 @@ public sealed class SalesInvoiceErpNextSyncer
             """
             SELECT i.invoice_number AS InvoiceNumber, i.invoice_type AS Type, i.original_invoice_id AS OriginalInvoiceId,
                    p.id AS PartyId, p.display_name AS CustomerName, p.tax_number AS TaxNumber,
-                   i.invoice_date AS InvoiceDate, i.due_date AS DueDate, i.discount_amount_usd AS DiscountAmountUsd,
+                   i.invoice_date AS InvoiceDate, i.due_date AS DueDate, i.discount_amount_usd AS DiscountAmountUsd, i.delivery_fee_usd AS DeliveryFeeUsd,
                    r.user_id AS SalesRepId, COALESCE(NULLIF(u.full_name, ''), u.user_name) AS SalesRepName,
                    COALESCE(r.commission_pct, 0) AS SalesRepCommission, COALESCE(r.is_active, FALSE) AS SalesRepActive
             FROM invoices i
@@ -91,7 +91,8 @@ public sealed class SalesInvoiceErpNextSyncer
                     isReturn,
                     returnAgainst,
                     header.DiscountAmountUsd,
-                    header.SalesRepId is null ? null : header.SalesRepName),
+                    header.SalesRepId is null ? null : header.SalesRepName,
+                    header.DeliveryFeeUsd),
                 cancellationToken);
 
             await ErpNextSyncLogWriter.WriteAsync(
@@ -211,7 +212,7 @@ public sealed class SalesInvoiceErpNextSyncer
     }
 
     private sealed record InvoiceHeader(
-        string? InvoiceNumber, string Type, Guid? OriginalInvoiceId, Guid PartyId, string CustomerName, string? TaxNumber, DateOnly InvoiceDate, DateOnly DueDate, decimal DiscountAmountUsd,
+        string? InvoiceNumber, string Type, Guid? OriginalInvoiceId, Guid PartyId, string CustomerName, string? TaxNumber, DateOnly InvoiceDate, DateOnly DueDate, decimal DiscountAmountUsd, decimal DeliveryFeeUsd,
         Guid? SalesRepId, string? SalesRepName, decimal SalesRepCommission, bool SalesRepActive);
 
     private sealed record InvoiceLineRow(

@@ -52,6 +52,12 @@ public sealed class NullErpNextClient : IErpNextClient
     public Task<Result<IReadOnlyList<ErpNextAccountMapping>>> GetAccountMappingAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Result<IReadOnlyList<ErpNextAccountMapping>>.Failure(new Error("ErpNext.Disabled", "ERPNext integration is disabled.")));
 
+    public Task<Result<IReadOnlyList<ErpNextIndexRow>>> GetDocumentIndexAsync(string doctype, CancellationToken cancellationToken = default) =>
+        Disabled<IReadOnlyList<ErpNextIndexRow>>();
+
+    public Task<Result<ErpNextReferenceList>> GetReferenceListAsync(string kind, CancellationToken cancellationToken = default) =>
+        Disabled<ErpNextReferenceList>();
+
     public Task<Result<string>> CreateAccountAsync(ErpNextAccountCreate account, CancellationToken cancellationToken = default) => Disabled<string>();
 
     public Task<Result<string>> UpdateAccountAsync(string name, ErpNextAccountUpdate update, CancellationToken cancellationToken = default) => Disabled<string>();

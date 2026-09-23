@@ -123,25 +123,59 @@ public sealed partial class ErpNextClient : IErpNextClient
             });
         }
 
+        // Our total = lines − invoice discount + delivery fee. ERPNext takes the discount off the net total and adds "Actual" charges after it,
+        // so the fee goes in as a charge on the company's income account and both totals (and the receivable) agree.
+        JsonArray? charges = null;
+        if (invoice.DeliveryFee != 0)
+        {
+            var company = await GetCompanyAsync(cancellationToken);
+            if (company.IsFailure)
+            {
+                return Result<string>.Failure(company.Error);
+            }
+
+            if (string.IsNullOrWhiteSpace(company.Value!.IncomeAccount))
+            {
+                return Result<string>.Failure(new Error("ErpNext.AccountsMissing", $"Company '{company.Value.Name}' has no default income account for the delivery fee."));
+            }
+
+            charges = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["charge_type"] = "Actual",
+                    ["account_head"] = company.Value.IncomeAccount,
+                    ["description"] = "Delivery fee / أجور التوصيل",
+                    ["tax_amount"] = invoice.IsReturn ? -invoice.DeliveryFee : invoice.DeliveryFee
+                }
+            };
+        }
+
         // docstatus=1 inserts AND submits, which is what posts the general-ledger entries; a draft
         // Sales Invoice would sit in ERPNext without touching any account. update_stock stays 0
         // because this application, not ERPNext, is the system of record for inventory.
+        var document = new JsonObject
+        {
+            ["customer"] = invoice.CustomerName,
+            ["currency"] = _options.Currency,
+            ["posting_date"] = invoice.InvoiceDate.ToString("yyyy-MM-dd"),
+            ["set_posting_time"] = 1,
+            ["due_date"] = invoice.DueDate.ToString("yyyy-MM-dd"),
+            ["update_stock"] = 0,
+            ["remarks"] = $"AutoPartsERP invoice {invoice.InvoiceNumber}",
+            ["items"] = lines,
+            ["is_return"] = invoice.IsReturn ? 1 : 0,
+            ["docstatus"] = 1
+        }.WithReturnAgainst(invoice.ReturnAgainst).WithInvoiceDiscount(invoice.DiscountAmount, invoice.IsReturn).WithSalesPerson(invoice.SalesPerson);
+        if (charges is not null)
+        {
+            document["taxes"] = charges;
+        }
+
         return await UpsertAsync(
             "Sales Invoice",
             invoice.InvoiceNumber,
-            new JsonObject
-            {
-                ["customer"] = invoice.CustomerName,
-                ["currency"] = _options.Currency,
-                ["posting_date"] = invoice.InvoiceDate.ToString("yyyy-MM-dd"),
-                ["set_posting_time"] = 1,
-                ["due_date"] = invoice.DueDate.ToString("yyyy-MM-dd"),
-                ["update_stock"] = 0,
-                ["remarks"] = $"AutoPartsERP invoice {invoice.InvoiceNumber}",
-                ["items"] = lines,
-                ["is_return"] = invoice.IsReturn ? 1 : 0,
-                ["docstatus"] = 1
-            }.WithReturnAgainst(invoice.ReturnAgainst).WithInvoiceDiscount(invoice.DiscountAmount, invoice.IsReturn).WithSalesPerson(invoice.SalesPerson),
+            document,
             cancellationToken);
     }
 

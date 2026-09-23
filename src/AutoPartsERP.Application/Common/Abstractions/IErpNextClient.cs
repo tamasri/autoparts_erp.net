@@ -70,6 +70,12 @@ public interface IErpNextClient
     /// <summary>What each customer or supplier owes or is owed according to the ledger, up to a date.</summary>
     Task<Result<IReadOnlyList<ErpNextPartyBalance>>> GetPartyBalancesAsync(string partyType, DateOnly asOf, CancellationToken cancellationToken = default);
 
+    /// <summary>Every record of a compared doctype (customers, suppliers, items, sales/purchase invoices, payment and journal entries) with its amount and state, for the consistency check.</summary>
+    Task<Result<IReadOnlyList<ErpNextIndexRow>>> GetDocumentIndexAsync(string doctype, CancellationToken cancellationToken = default);
+
+    /// <summary>One of the fixed read-only lists (cost-centers, modes-of-payment, sales-taxes, purchase-taxes, fiscal-years, exchange-rates).</summary>
+    Task<Result<ErpNextReferenceList>> GetReferenceListAsync(string kind, CancellationToken cancellationToken = default);
+
     /// <summary>Submitted sales or purchase invoices that still have an outstanding amount, for ageing.</summary>
     Task<Result<IReadOnlyList<ErpNextOpenInvoice>>> GetOpenInvoicesAsync(string doctype, DateOnly asOf, CancellationToken cancellationToken = default);
 }
@@ -101,6 +107,11 @@ public sealed record ErpNextGlSummary(long Count, decimal Debit, decimal Credit)
 
 public sealed record ErpNextPartyBalance(string Party, decimal Debit, decimal Credit);
 
+/// <summary><c>DocStatus</c> 0 draft / 1 submitted / 2 cancelled (master data is always 0; <c>Disabled</c> says whether it is in use).</summary>
+public sealed record ErpNextIndexRow(string Name, decimal? Amount, int DocStatus, bool Disabled, bool IsTransaction);
+
+public sealed record ErpNextReferenceList(string Doctype, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyDictionary<string, string?>> Rows);
+
 public sealed record ErpNextOpenInvoice(string Name, string Party, DateOnly PostingDate, DateOnly? DueDate, decimal Outstanding);
 
 public sealed record ErpNextItemSync(Guid LocalItemId, string Code, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice);
@@ -117,7 +128,8 @@ public sealed record ErpNextSalesInvoiceSync(
     bool IsReturn = false,
     string? ReturnAgainst = null,
     decimal DiscountAmount = 0,
-    string? SalesPerson = null);
+    string? SalesPerson = null,
+    decimal DeliveryFee = 0);
 
 /// <summary>A sales rep as ERPNext's Sales Person. ERPNext names it by <c>sales_person_name</c>; the rep's full name is used.</summary>
 public sealed record ErpNextSalesPersonSync(Guid LocalUserId, string Name, decimal CommissionRate, bool Enabled);

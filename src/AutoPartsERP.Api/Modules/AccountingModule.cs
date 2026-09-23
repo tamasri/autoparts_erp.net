@@ -1,5 +1,6 @@
 using AutoPartsERP.Domain.Constants;
 using AutoPartsERP.Application.Features.Accounting;
+using AutoPartsERP.Application.Features.Accounting.Consistency;
 using AutoPartsERP.Infrastructure.Imports;
 
 namespace AutoPartsERP.Api.Modules;
@@ -21,6 +22,11 @@ public sealed class AccountingModule : ICarterModule
         MapTags(group);
         MapReports(group);
         MapReconciliation(group);
+
+        group.MapGet("/erpnext/consistency", async Task<IResult> (ISender sender, CancellationToken ct) =>
+            (await sender.Send(new GetErpNextConsistencyQuery(), ct)).ToApiResult());
+        group.MapGet("/erpnext/reference/{kind}", async Task<IResult> (string kind, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new GetErpNextReferenceQuery(kind), ct)).ToApiResult());
     }
 
     private static void MapChart(RouteGroupBuilder group)

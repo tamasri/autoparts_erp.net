@@ -163,6 +163,8 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **Invoice discount = percentage or amount** (`DocumentDiscount.Resolve`), stored positive; a RETURN's subtotal and total are negative. Line discounts stay on the lines. Only a DRAFT's discount can change.
 - **ERPNext:** send it as `apply_discount_on = "Net Total"` + `discount_amount` (`WithInvoiceDiscount`), negative on a return. For purchases the discount also lowers the item cost (factor total/subtotal) on post and on void — keep both queries identical.
 - **Numeric division in SQL:** `numeric / numeric` can return more than 28 significant digits and Dapper then throws "Numeric value does not fit in a System.Decimal". `round(..., 6)` any computed ratio you read into C#.
+- **Consistency check [enforced by tests]:** a new document type sent to ERPNext must be added to `GetErpNextConsistencyQueryHandler.Sections` (local SQL returning `LocalRecord`) and to `ErpNextClient.IndexSpecs`. The check never writes anywhere. Reading more of ERPNext means adding a named list to `ReferenceSpecs`, not a generic doctype parameter.
+- **What we send must add up to what we store:** when an amount is added to a local document (fee, discount, tax), send it to ERPNext in the same change and check the totals agree in the consistency screen.
 - Verify accounting changes with the stateful mock ledger approach: a fake ERPNext that really posts Journal Entries to an in-memory GL and answers grouped `GL Entry` queries, then check TB/BS/P&L totals by hand.
 
 ### 2.4 AI rules

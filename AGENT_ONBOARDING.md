@@ -329,3 +329,18 @@ AGENT_ONBOARDING.md                                  [MODIFY]
   Sales Person + sales_team, a rep's own scope and 403s, deactivation); both pages and the invoice picker checked in the browser.
 - **Known gaps (item 5):** a rep renamed in the users screen becomes a new Sales Person in ERPNext on the next invoice (old one stays); commission is a report, not a posted expense; no split of one
   invoice between several reps; reps are not filtered by warehouse.
+- **Item 8 — ERPNext consistency check and reference data.** What existed: the sync log (every local record ↔ its ERPNext name), the Accounting Sync screen, `GetCompanyAsync`. Built:
+  `GET /api/v1/accounting/erpnext/consistency` (`accounting:read`) compares seven sections (customers, suppliers, items, sales invoices, purchase invoices, payment entries, journal entries incl.
+  cost-of-goods and adjustment entries): counts and dollar totals on both sides, and every difference — NOT_SENT (with the last error), MISSING_IN_ERPNEXT, ONLY_IN_ERPNEXT, CANCELLED_IN_ERPNEXT_ONLY,
+  NOT_CANCELLED_IN_ERPNEXT, AMOUNT_DIFFERS. The decision is `ConsistencyComparer` (pure, 6 tests); ERPNext is read through `IErpNextClient.GetDocumentIndexAsync` for a fixed set of doctypes. Nothing is fixed
+  automatically; the existing sync job re-sends failures. `GET /accounting/erpnext/reference/{kind}` returns fixed read-only lists (cost-centers, modes-of-payment, sales-taxes, purchase-taxes, fiscal-years,
+  exchange-rates with our own rate for the same day) — deliberately not a document browser (unknown kinds are 400). UI: tabs on «مزامنة المحاسبة» (log / consistency / reference); every difference and every
+  sync-log row links to its local record (`features/accounting/erpnextLinks.ts`).
+- **Gap closed:** the delivery fee now reaches ERPNext as an "Actual" charge on the company's income account (after the invoice discount), so a Sales Invoice's grand total equals ours; before, ERPNext's
+  receivable was lower by the fee on every invoice that had one.
+- **Verified:** unit 129; live 27/27 against a mock that stores what it receives (`scratchpad/mock_erp2.js`): matched invoice (62 = 62 incl. fee and discount), deleted / changed amount / cancelled
+  only there / voided only here / stranger in ERPNext, FAILED listed with its error, COGS entries matched, reference lists and the same-day rate, 400 for other doctypes, 403 without `accounting:read`,
+  accountant allowed; screen checked in the browser.
+- **Known gaps (item 8):** the comparison reads every record of each doctype on each run (fine for thousands, not for hundreds of thousands — add date filters then); stock-adjustment entries are compared
+  by existence only (they were valued at the cost of the day they were sent); parties deactivated here stay enabled in ERPNext and are reported as such; the "only in ERPNext" list cannot tell a
+  document made directly in ERPNext from one whose sync-log row was lost.
