@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
+import { Alert, Box, Button, Chip, Collapse, Link, List, ListItemButton, ListItemText, Paper, Stack, TextField, Typography } from '@mui/material';
 import { fxRatesApi } from '../../api/endpoints/fxRates';
 import { unwrapList, unwrapNode } from '../../api/apiData';
 import { toast, extractApiError } from '../../lib/toast';
+import { formatSyp } from '../../lib/format';
 
 export type FxRate = { id: string; rateDate: string; currencyFrom: string; currencyTo: string; buyRate: number; sellRate: number; midRate: number; isActive: boolean };
 
@@ -10,11 +12,11 @@ type Props = {
   /** Selected fx_rates id ('' until the latest rate has loaded). */
   value: string;
   onChange: (id: string, rate: FxRate | null) => void;
-  /** Invoice date, used to warn when the selected rate is older than the document. */
+  /** Document date, used to warn when the selected rate is older than the document. */
   documentDate?: string;
 };
 
-const fmt = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
+const rateText = (v: number): string => formatSyp(v);
 
 /**
  * Exchange rate for a document. It is taken automatically from the latest rate saved in the system settings
@@ -51,10 +53,7 @@ export default function FxRateField({ value, onChange, documentDate }: Props): J
 
   async function openEdit(): Promise<void> {
     setEditing(true);
-    try {
-      const res = await fxRatesApi.getList(1, 30);
-      setRecent(unwrapList<FxRate>(res.data));
-    } catch { setRecent([]); }
+    try { setRecent(unwrapList<FxRate>((await fxRatesApi.getList(1, 30)).data)); } catch { setRecent([]); }
   }
 
   function select(rate: FxRate): void {
@@ -68,64 +67,53 @@ export default function FxRateField({ value, onChange, documentDate }: Props): J
     if (!(form.midRate > 0) || !(form.buyRate > 0) || !(form.sellRate > 0)) { toast.error('أدخل أسعار الشراء والبيع والوسط'); return; }
     setBusy(true);
     try {
-      const res = await fxRatesApi.create(form);
-      const created = unwrapNode<FxRate>(res.data);
+      const created = unwrapNode<FxRate>((await fxRatesApi.create(form)).data);
       if (created) { toast.success('تم حفظ سعر الصرف'); select(created); }
     } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر حفظ سعر الصرف')); }
     finally { setBusy(false); }
   }
 
-  if (loading) return <div className="vex-input" style={{ color: 'var(--txt-muted)' }}>جارٍ تحميل سعر الصرف...</div>;
-
+  if (loading) return <Typography variant="body2" color="text.secondary">جارٍ تحميل سعر الصرف...</Typography>;
   if (!current) {
-    return (
-      <div className="vex-input" style={{ color: 'var(--clr-danger)' }}>
-        لا يوجد سعر صرف في الإعدادات — <Link to="/fx-rates">أضف سعراً أولاً</Link>
-      </div>
-    );
+    return <Alert severity="error">لا يوجد سعر صرف في الإعدادات — <Link component={RouterLink} to="/fx-rates">أضف سعراً أولاً</Link></Alert>;
   }
 
   const isLatest = latest?.id === current.id;
-  const stale = documentDate && current.rateDate < documentDate;
+  const stale = Boolean(documentDate && current.rateDate < documentDate);
 
   return (
-    <div>
-      <div className="vex-input" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minHeight: 42 }}>
-        <span>
-          <strong><bdi dir="ltr">1 {current.currencyFrom} = {fmt(current.midRate)} {current.currencyTo}</bdi></strong>
-          <span style={{ color: 'var(--txt-muted)', fontSize: 12 }}> · بيع <bdi dir="ltr">{fmt(current.sellRate)}</bdi> · <bdi dir="ltr">{current.rateDate}</bdi></span>
-          <span className={`badge ${isLatest ? 'badge--success' : 'badge--warning'}`} style={{ marginInlineStart: 8 }}>{isLatest ? 'تلقائي' : 'معدّل'}</span>
-        </span>
-        <button type="button" className="btn-ghost" style={{ padding: '2px 10px', fontSize: 12 }} onClick={() => (editing ? setEditing(false) : void openEdit())}>
-          {editing ? 'إغلاق' : 'تعديل'}
-        </button>
-      </div>
-      {stale ? <div style={{ fontSize: 12, color: 'var(--clr-warning)', marginTop: 4 }}>⚠ سعر الصرف أقدم من تاريخ الفاتورة — حدّثه من الإعدادات إن لزم.</div> : null}
+    <Box>
+      <Paper variant="outlined" sx={{ px: 1.5, py: 1, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Typography fontWeight={700}><bdi dir="ltr">1 {current.currencyFrom}</bdi> = {rateText(current.midRate)}</Typography>
+        <Typography variant="caption" color="text.secondary">بيع {rateText(current.sellRate)} · <bdi dir="ltr">{current.rateDate}</bdi></Typography>
+        <Chip size="small" color={isLatest ? 'success' : 'warning'} variant="outlined" label={isLatest ? 'تلقائي' : 'معدّل'} />
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" onClick={() => (editing ? setEditing(false) : void openEdit())}>{editing ? 'إغلاق' : 'تغيير'}</Button>
+      </Paper>
+      {stale ? <Typography variant="caption" color="warning.main">⚠ سعر الصرف أقدم من تاريخ المستند — حدّثه من الإعدادات إن لزم.</Typography> : null}
 
-      {editing ? (
-        <div className="vex-card" style={{ marginTop: 8, padding: 12 }}>
-          <div style={{ fontSize: 12, color: 'var(--txt-secondary)', marginBottom: 6 }}>اختر سعراً محفوظاً:</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+      <Collapse in={editing}>
+        <Paper variant="outlined" sx={{ mt: 1, p: 1.5, borderRadius: 2 }}>
+          <Typography variant="caption" color="text.secondary">اختر سعراً محفوظاً:</Typography>
+          <List dense sx={{ maxHeight: 180, overflowY: 'auto' }}>
             {recent.map((r) => (
-              <button key={r.id} type="button" className={r.id === current.id ? 'btn-primary' : 'btn-ghost'} style={{ textAlign: 'right', padding: '6px 10px', fontSize: 13 }} onClick={() => select(r)}>
-                {r.rateDate} — {fmt(r.midRate)} {r.currencyTo}
-              </button>
+              <ListItemButton key={r.id} selected={r.id === current.id} onClick={() => select(r)}>
+                <ListItemText primary={`${r.rateDate} — ${rateText(r.midRate)}`} />
+              </ListItemButton>
             ))}
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <button type="button" className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setCreating((c) => !c)}>{creating ? '✕ إلغاء' : '＋ سعر جديد'}</button>
-          </div>
-          {creating ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginTop: 10 }}>
-              <label className="vex-label">التاريخ<input type="date" className="vex-input" value={form.rateDate} onChange={(e) => setForm({ ...form, rateDate: e.target.value })} /></label>
-              <label className="vex-label">شراء<input type="number" className="vex-input" value={form.buyRate} onChange={(e) => setForm({ ...form, buyRate: Number(e.target.value) })} /></label>
-              <label className="vex-label">بيع<input type="number" className="vex-input" value={form.sellRate} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} /></label>
-              <label className="vex-label">وسط<input type="number" className="vex-input" value={form.midRate} onChange={(e) => setForm({ ...form, midRate: Number(e.target.value) })} /></label>
-              <div style={{ alignSelf: 'end' }}><button type="button" className="btn-primary" disabled={busy} onClick={() => void createRate()}>{busy ? '...' : 'حفظ واعتماد'}</button></div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+          </List>
+          <Button size="small" onClick={() => setCreating((c) => !c)}>{creating ? '✕ إلغاء' : '＋ سعر جديد'}</Button>
+          <Collapse in={creating}>
+            <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center" sx={{ mt: 1 }}>
+              <TextField size="small" type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.rateDate} onChange={(e) => setForm({ ...form, rateDate: e.target.value })} />
+              <TextField size="small" type="number" label="شراء" sx={{ width: 120 }} value={form.buyRate} onChange={(e) => setForm({ ...form, buyRate: Number(e.target.value) })} />
+              <TextField size="small" type="number" label="بيع" sx={{ width: 120 }} value={form.sellRate} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} />
+              <TextField size="small" type="number" label="وسط" sx={{ width: 120 }} value={form.midRate} onChange={(e) => setForm({ ...form, midRate: Number(e.target.value) })} />
+              <Button variant="contained" size="small" disabled={busy} onClick={() => void createRate()}>{busy ? '...' : 'حفظ واعتماد'}</Button>
+            </Stack>
+          </Collapse>
+        </Paper>
+      </Collapse>
+    </Box>
   );
 }

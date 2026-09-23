@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
+import { Box, Button, IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import type { PickItem } from '../../api/endpoints/lookups';
+import { formatQty } from '../../lib/format';
 import ItemPickerModal, { type PickedLine } from '../pickers/ItemPickerModal';
 import LocationSelect from '../pickers/LocationSelect';
 
@@ -77,33 +79,33 @@ export default function WmsLinesEditor({
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center' }}>
-        <button type="button" className="btn-primary" onClick={() => setOpen(true)}>🔍 إضافة أصناف</button>
-        <span style={{ fontSize: 12, color: 'var(--txt-muted)' }}>{lines.length} سطر</span>
-      </div>
+    <Box>
+      <Stack direction="row" gap={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+        <Button variant="contained" size="small" onClick={() => setOpen(true)}>🔍 إضافة أصناف</Button>
+        <Typography variant="caption" color="text.secondary">{lines.length} سطر</Typography>
+      </Stack>
 
       {lines.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '28px 0', color: 'var(--txt-muted)', border: '1px dashed var(--clr-border)', borderRadius: 'var(--radius-md)' }}>{emptyText}</div>
+        <Paper variant="outlined" sx={{ textAlign: 'center', py: 3.5, color: 'text.secondary', borderStyle: 'dashed', borderRadius: 2 }}>{emptyText}</Paper>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table" style={{ minWidth: 720 }}>
-            <thead>
-              <tr>
-                <th>#</th><th>الصنف</th><th style={{ minWidth: 190 }}>{locationLabel}</th><th style={{ width: 110 }}>{qtyLabel}</th>
-                {extraColumns.map((c) => <th key={c.key} style={c.width ? { width: c.width } : undefined}>{c.label}</th>)}
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+          <Table size="small" sx={{ minWidth: 720 }}>
+            <TableHead>
+              <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
+                <TableCell>#</TableCell><TableCell>الصنف</TableCell><TableCell sx={{ minWidth: 190 }}>{locationLabel}</TableCell><TableCell sx={{ width: 120 }}>{qtyLabel}</TableCell>
+                {extraColumns.map((c) => <TableCell key={c.key} sx={c.width ? { width: c.width } : undefined}>{c.label}</TableCell>)}
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {lines.map((l, i) => (
-                <tr key={l.key}>
-                  <td>{i + 1}</td>
-                  <td>
-                    <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{l.code}</div>
-                    <div style={{ fontSize: 13 }}>{l.name}</div>
-                  </td>
-                  <td>
+                <TableRow key={l.key}>
+                  <TableCell>{i + 1}</TableCell>
+                  <TableCell>
+                    <Typography sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{l.code}</Typography>
+                    <Typography variant="body2">{l.name}</Typography>
+                  </TableCell>
+                  <TableCell>
                     <LocationSelect
                       value={l.locationId}
                       allowEmpty={false}
@@ -112,20 +114,21 @@ export default function WmsLinesEditor({
                         patch(l.key, { locationId: id, ...(derived ?? {}) });
                       }}
                     />
-                  </td>
-                  <td>
-                    <input type="number" min={0} className="vex-input" value={l.qty} onChange={(e) => patch(l.key, { qty: Number(e.target.value) })} />
-                    {showAvailable ? <div style={{ fontSize: 11, color: Number(l.qty) > availableAt(l) ? 'var(--clr-warning)' : 'var(--txt-muted)' }}>متاح {availableAt(l).toLocaleString('en-US')}</div> : null}
-                  </td>
+                  </TableCell>
+                  <TableCell>
+                    <TextField size="small" type="number" inputProps={{ min: 0 }} value={l.qty} onChange={(e) => patch(l.key, { qty: Number(e.target.value) })}
+                      helperText={showAvailable ? `متاح ${formatQty(availableAt(l))}` : undefined}
+                      FormHelperTextProps={{ sx: { color: Number(l.qty) > availableAt(l) ? 'warning.main' : undefined, mx: 0 } }} />
+                  </TableCell>
                   {extraColumns.map((c) => (
-                    <td key={c.key}>{c.render(l, (extra) => patch(l.key, { extra: { ...l.extra, ...extra } }))}</td>
+                    <TableCell key={c.key}>{c.render(l, (extra) => patch(l.key, { extra: { ...l.extra, ...extra } }))}</TableCell>
                   ))}
-                  <td><button type="button" className="btn-danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => onChange(lines.filter((x) => x.key !== l.key))}>✕</button></td>
-                </tr>
+                  <TableCell><IconButton size="small" color="error" aria-label="حذف السطر" onClick={() => onChange(lines.filter((x) => x.key !== l.key))}>✕</IconButton></TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
       <ItemPickerModal
@@ -136,6 +139,6 @@ export default function WmsLinesEditor({
         onPick={add}
         onClose={() => setOpen(false)}
       />
-    </div>
+    </Box>
   );
 }

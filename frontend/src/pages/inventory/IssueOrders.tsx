@@ -1,14 +1,18 @@
-import { Fragment, useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
+import {
+  Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, MenuItem, Paper, Stack, Table, TableBody,
+  TableCell, TableHead, TableRow, TextField, Typography,
+} from '@mui/material';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import StatusChip from '../../components/ui/StatusChip';
+import { formatQty } from '../../lib/format';
 import { issueOrdersApi } from '../../api/endpoints/issueOrders';
 import { unwrapNode } from '../../api/apiData';
 import { usePagedList } from '../../hooks/usePagedList';
 import { useLocationNames } from '../../hooks/useLocationNames';
 import { toast, extractApiError } from '../../lib/toast';
 import { notifyResult } from '../../lib/notify';
-import Pagination from '../../components/common/Pagination';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import StatusBadge from '../../components/common/StatusBadge';
 import DocumentViewButton from '../../components/ui/DocumentViewButton';
 import { issueOrderDocument } from '../../lib/wmsDocuments';
 import LocationSelect from '../../components/pickers/LocationSelect';
@@ -89,107 +93,96 @@ export default function IssueOrders(): JSX.Element {
   }
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">أوامر الصرف</h1>
-          <div className="vex-page-header__breadcrumb">أمر ← مهام سحب ← تحقق ← صرف من المخزون</div>
-        </div>
-        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ أمر صرف'}
-        </button>
-      </div>
-
-      {list.error ? <ErrorBanner message={list.error} /> : null}
+    <Box>
+      <PageHeader
+        title="أوامر الصرف" subtitle="أمر ← مهام سحب ← تحقق ← صرف من المخزون"
+        actions={<Button variant={showForm ? 'outlined' : 'contained'} onClick={() => setShowForm((s) => !s)}>{showForm ? '✕ إلغاء' : '＋ أمر صرف'}</Button>}
+      />
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
 
       {showForm ? (
-        <div className="vex-card" style={{ marginBottom: 20 }}>
-          <h2 className="vex-section-title">أمر صرف جديد</h2>
-          {formError ? <ErrorBanner message={formError} /> : null}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
-            <label className="vex-label">نوع المصدر
-              <select value={sourceType} onChange={(e) => setSourceType(e.target.value)} className="vex-select">
-                {SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </label>
-            <label className="vex-label">المستودع *<LocationSelect type="WAREHOUSE" value={warehouseId} onChange={(id) => setWarehouseId(id)} /></label>
-          </div>
-          <WmsLinesEditor lines={lines} onChange={setLines} warehouseId={warehouseId} locationLabel="السحب من موقع" qtyLabel="الكمية المطلوبة" showAvailable pickerTitle="اختيار الأصناف المراد صرفها" />
-          <div style={{ marginTop: 14 }}>
-            <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 حفظ الأمر</button>
-          </div>
-        </div>
+        <Card variant="outlined" sx={{ borderRadius: 3, mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>أمر صرف جديد</Typography>
+            {formError ? <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert> : null}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 2, mb: 2 }}>
+              <TextField select size="small" label="نوع المصدر" value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
+                {SOURCES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+              </TextField>
+              <LocationSelect type="WAREHOUSE" label="المستودع *" value={warehouseId} onChange={(id) => setWarehouseId(id)} />
+            </Box>
+            <WmsLinesEditor lines={lines} onChange={setLines} warehouseId={warehouseId} locationLabel="السحب من موقع" qtyLabel="الكمية المطلوبة" showAvailable pickerTitle="اختيار الأصناف المراد صرفها" />
+            <Button variant="contained" sx={{ mt: 2 }} disabled={busy === 'create'} onClick={() => void create()}>💾 حفظ الأمر</Button>
+          </CardContent>
+        </Card>
       ) : null}
 
-      <div className="vex-card vex-card--no-pad" style={{ opacity: list.loading ? 0.6 : 1 }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead><tr><th>رقم الأمر</th><th>المصدر</th><th>المستودع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-            <tbody>
-              {list.items.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد أوامر صرف</td></tr>
-              ) : list.items.map((o) => (
-                <Fragment key={o.id}>
-                  <tr>
-                    <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{o.orderNo}</td>
-                    <td>{SOURCES.find((s) => s.value === o.sourceType)?.label ?? o.sourceType}</td>
-                    <td>{names.label(o.warehouseId)}</td>
-                    <td><StatusBadge status={o.status} type="invoice" /></td>
-                    <td style={{ whiteSpace: 'nowrap' }}><DocumentViewButton load={() => issueOrderDocument(o.id, names.label)} />{' '}<button type="button" className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12 }} onClick={() => toggle(o.id)}>{openId === o.id ? '▲ إخفاء' : '▼ التفاصيل والسحب'}</button></td>
-                  </tr>
-                  {openId === o.id ? (
-                    <tr>
-                      <td colSpan={5} style={{ background: 'var(--clr-surface-2)', padding: '14px 20px' }}>
-                        {actionError ? <ErrorBanner message={actionError} /> : null}
-                        {detailLoading || !detail ? <LoadingSpinner /> : (
-                          <>
-                            <table className="vex-table" style={{ background: '#fff', marginBottom: 12 }}>
-                              <thead><tr><th>الصنف</th><th>مطلوب</th><th>مسحوب</th><th>مُتحقَّق</th><th>مصروف</th></tr></thead>
-                              <tbody>
-                                {detail.lines.map((l) => (
-                                  <tr key={l.id}>
-                                    <td><span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{l.itemCode}</span> {l.itemName}</td>
-                                    <td>{l.requestedQty}</td><td>{l.pickedQty}</td><td>{l.verifiedQty}</td><td>{l.issuedQty}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+      <DataTable
+        rows={list.items} getKey={(o) => o.id} loading={list.loading} empty="لا توجد أوامر صرف"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+        columns={[
+          { header: 'رقم الأمر', render: (o) => <Typography fontWeight={700} color="primary">{o.orderNo}</Typography>, nowrap: true },
+          { header: 'المصدر', render: (o) => SOURCES.find((s) => s.value === o.sourceType)?.label ?? o.sourceType },
+          { header: 'المستودع', render: (o) => names.label(o.warehouseId) },
+          { header: 'الحالة', render: (o) => <StatusChip status={o.status} /> },
+          {
+            header: 'إجراءات', nowrap: true,
+            render: (o) => (
+              <Stack direction="row" gap={1} alignItems="center">
+                <DocumentViewButton load={() => issueOrderDocument(o.id, names.label)} />
+                <Button size="small" variant="outlined" onClick={() => toggle(o.id)}>التفاصيل والسحب</Button>
+              </Stack>
+            ),
+          },
+        ]}
+      />
 
-                            {detail.pickTasks.length > 0 ? (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 6 }}>مهام السحب</div>
-                                {detail.pickTasks.map((t) => (
-                                  <div key={t.id} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '8px 12px', marginBottom: 6, background: '#fff', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)', flexWrap: 'wrap' }}>
-                                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{t.itemCode}</span>
-                                    <span style={{ fontSize: 13 }}>من <strong>{t.locationCode}</strong> · الكمية <strong>{t.qty}</strong></span>
-                                    <StatusBadge status={t.status} type="invoice" />
-                                    {t.status === 'PENDING' ? <button type="button" disabled={busy === t.id} className="btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => void step(o.id, () => issueOrdersApi.completePick(o.id, t.id), 'تم السحب', 'تعذر إتمام السحب')}>تم السحب</button> : null}
-                                    {t.status === 'PICKED' ? <button type="button" disabled={busy === t.id} className="btn-success" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => void step(o.id, () => issueOrdersApi.verifyPick(o.id, t.id), 'تم التحقق', 'تعذر التحقق')}>تحقّق</button> : null}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
+      <Dialog open={Boolean(openId)} onClose={() => setOpenId('')} fullWidth maxWidth="md">
+        <DialogTitle>أمر الصرف {detail?.order.orderNo ?? ''} {detail ? <StatusChip status={detail.order.status} /> : null}</DialogTitle>
+        <DialogContent dividers>
+          {actionError ? <Alert severity="error" sx={{ mb: 2 }}>{actionError}</Alert> : null}
+          {detailLoading || !detail ? <LinearProgress /> : (
+            <Stack spacing={2}>
+              <Table size="small">
+                <TableHead><TableRow sx={{ '& th': { fontWeight: 700 } }}><TableCell>الصنف</TableCell><TableCell align="left">مطلوب</TableCell><TableCell align="left">مسحوب</TableCell><TableCell align="left">مُتحقَّق</TableCell><TableCell align="left">مصروف</TableCell></TableRow></TableHead>
+                <TableBody>
+                  {detail.lines.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell><Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{l.itemCode}</Typography> {l.itemName}</TableCell>
+                      <TableCell align="left">{formatQty(l.requestedQty)}</TableCell><TableCell align="left">{formatQty(l.pickedQty)}</TableCell>
+                      <TableCell align="left">{formatQty(l.verifiedQty)}</TableCell><TableCell align="left">{formatQty(l.issuedQty)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-                            <div style={{ display: 'flex', gap: 10 }}>
-                              {detail.order.status === 'DRAFT' ? (
-                                <button type="button" disabled={busy === o.id} className="btn-primary" onClick={() => void step(o.id, () => issueOrdersApi.generatePickTasks(o.id), 'تم توليد مهام السحب', 'تعذر توليد المهام')}>⚙ توليد مهام السحب</button>
-                              ) : null}
-                              {detail.order.status !== 'ISSUED' && detail.pickTasks.length > 0 && detail.pickTasks.every((t) => t.status === 'VERIFIED') ? (
-                                <button type="button" disabled={busy === o.id} className="btn-success" onClick={() => void step(o.id, () => issueOrdersApi.issue(o.id), 'تم صرف الأمر من المخزون', 'تعذر صرف الأمر')}>✓ صرف من المخزون</button>
-                              ) : null}
-                            </div>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
-    </div>
+              {detail.pickTasks.length > 0 ? (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>مهام السحب</Typography>
+                  {detail.pickTasks.map((t) => (
+                    <Paper key={t.id} variant="outlined" sx={{ p: 1, mt: 1, borderRadius: 2, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Typography sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{t.itemCode}</Typography>
+                      <Typography variant="body2">من <b>{t.locationCode}</b> · الكمية <b>{formatQty(t.qty)}</b></Typography>
+                      <StatusChip status={t.status} />
+                      {t.status === 'PENDING' ? <Button size="small" variant="contained" disabled={busy === detail.order.id} onClick={() => void step(detail.order.id, () => issueOrdersApi.completePick(detail.order.id, t.id), 'تم السحب', 'تعذر إتمام السحب')}>تم السحب</Button> : null}
+                      {t.status === 'PICKED' ? <Button size="small" variant="contained" color="success" disabled={busy === detail.order.id} onClick={() => void step(detail.order.id, () => issueOrdersApi.verifyPick(detail.order.id, t.id), 'تم التحقق', 'تعذر التحقق')}>تحقّق</Button> : null}
+                    </Paper>
+                  ))}
+                </Box>
+              ) : null}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {detail && detail.order.status === 'DRAFT' ? (
+            <Button variant="contained" disabled={busy === detail.order.id} onClick={() => void step(detail.order.id, () => issueOrdersApi.generatePickTasks(detail.order.id), 'تم توليد مهام السحب', 'تعذر توليد المهام')}>⚙ توليد مهام السحب</Button>
+          ) : null}
+          {detail && detail.order.status !== 'ISSUED' && detail.pickTasks.length > 0 && detail.pickTasks.every((t) => t.status === 'VERIFIED') ? (
+            <Button variant="contained" color="success" disabled={busy === detail.order.id} onClick={() => void step(detail.order.id, () => issueOrdersApi.issue(detail.order.id), 'تم صرف الأمر من المخزون', 'تعذر صرف الأمر')}>✓ صرف من المخزون</Button>
+          ) : null}
+          <Button onClick={() => setOpenId('')}>إغلاق</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { lookupsApi, type PickItem } from '../../api/endpoints/lookups';
 import { usePagedList } from '../../hooks/usePagedList';
 import { useLocations } from '../../hooks/useLocations';
-import Pagination from '../common/Pagination';
+import {
+  Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Table, TableBody, TableCell,
+  TableContainer, TableHead, TablePagination, TableRow, TextField, Typography,
+} from '@mui/material';
+import { ARABIC_PAGINATION } from '../../lib/tablePagination';
+import { formatQty } from '../../lib/format';
+import Money from '../ui/Money';
 import LocationSelect from './LocationSelect';
 
 /** What the dialog hands back for one chosen item — everything a document line needs, already resolved. */
@@ -45,9 +51,8 @@ type Props = {
 type RowState = { locationId: string; batchId: string; qty: string };
 
 const rowKey = (it: PickItem): string => it.skuId ?? it.itemId ?? it.code;
-const num = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
 
-export default function ItemPickerModal({ open, mode, title, initialLocationId = '', initialSearch = '', enforceStock = true, onPick, onClose }: Props): JSX.Element | null {
+export default function ItemPickerModal({ open, mode, title, initialLocationId = '', initialSearch = '', enforceStock = true, onPick, onClose }: Props): JSX.Element {
   const [locationFilter, setLocationFilter] = useState(initialLocationId);
   const [inStockOnly, setInStockOnly] = useState(mode === 'sales' && enforceStock);
   const pickAnyLocation = mode === 'warehouse' || !enforceStock;
@@ -89,13 +94,6 @@ export default function ItemPickerModal({ open, mode, title, initialLocationId =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.loading, list.items, list.search]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   const stateFor = (it: PickItem): RowState => {
     const existing = rowStates[rowKey(it)];
     if (existing) return existing;
@@ -131,7 +129,7 @@ export default function ItemPickerModal({ open, mode, title, initialLocationId =
     if (!st.locationId) return pickAnyLocation ? 'اختر الموقع' : 'لا يوجد مخزون متاح';
     if (!(qty > 0)) return 'أدخل كمية صحيحة';
     if (it.isBatchTracked && mode === 'sales' && enforceStock && !st.batchId) return 'اختر الدفعة';
-    if (mode === 'sales' && enforceStock && qty > availableAt(it, st)) return `الكمية تتجاوز المتاح (${num(availableAt(it, st))})`;
+    if (mode === 'sales' && enforceStock && qty > availableAt(it, st)) return `الكمية تتجاوز المتاح (${formatQty(availableAt(it, st))})`;
     return '';
   }
 
@@ -166,145 +164,122 @@ export default function ItemPickerModal({ open, mode, title, initialLocationId =
 
   const stats = useMemo(() => ({ count: added.length }), [added]);
 
-  if (!open) return null;
-
   return (
-    <div className="vex-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="vex-modal" role="dialog" aria-modal="true" aria-label={title ?? 'اختيار الأصناف'}>
-        <div className="vex-modal__header">
-          <h2 className="vex-section-title" style={{ margin: 0 }}>{title ?? (mode === 'sales' ? 'اختيار الأصناف للفاتورة' : 'اختيار الأصناف')}</h2>
-          <button type="button" className="btn-ghost" onClick={onClose} aria-label="إغلاق">✕</button>
-        </div>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" aria-label={title ?? 'اختيار الأصناف'}>
+      <DialogTitle>{title ?? (mode === 'sales' ? 'اختيار الأصناف للفاتورة' : 'اختيار الأصناف')}</DialogTitle>
+      <DialogContent dividers>
+        <Stack direction="row" gap={1.5} flexWrap="wrap" alignItems="center" sx={{ mb: 1.5 }}>
+          <TextField
+            inputRef={searchRef}
+            size="small"
+            sx={{ flex: '1 1 320px' }}
+            value={list.searchInput}
+            placeholder="ابحث بالاسم أو رقم القطعة أو الباركود أو الاسم البديل… (امسح الباركود ثم Enter)"
+            onChange={(e) => list.setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, list.items.length - 1)); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+              else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (list.search !== list.searchInput.trim() || list.loading) pendingEnter.current = true;
+                else if (list.items[active]) addRow(list.items[active]);
+              }
+            }}
+          />
+          <Box sx={{ minWidth: 220 }}><LocationSelect value={locationFilter} onChange={(id) => setLocationFilter(id)} placeholder="كل المواقع" /></Box>
+          <FormControlLabel control={<Checkbox size="small" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} />} label="المتوفر فقط" />
+        </Stack>
 
-        <div className="vex-modal__body">
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-            <input
-              ref={searchRef}
-              className="vex-input"
-              style={{ flex: '1 1 320px' }}
-              value={list.searchInput}
-              placeholder="ابحث بالاسم أو رقم القطعة أو الباركود أو الاسم البديل… (امسح الباركود ثم Enter)"
-              onChange={(e) => list.setSearchInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, list.items.length - 1)); }
-                else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-                else if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (list.search !== list.searchInput.trim() || list.loading) pendingEnter.current = true;
-                  else if (list.items[active]) addRow(list.items[active]);
-                }
-              }}
-            />
-            <div style={{ minWidth: 220 }}>
-              <LocationSelect value={locationFilter} onChange={(id) => setLocationFilter(id)} placeholder="كل المواقع" />
-            </div>
-            <label style={{ fontSize: 13, color: 'var(--txt-secondary)', whiteSpace: 'nowrap' }}>
-              <input type="checkbox" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} /> المتوفر فقط
-            </label>
-          </div>
+        {list.error ? <Alert severity="error" sx={{ mb: 1 }}>{list.error}</Alert> : null}
 
-          {list.error ? <div className="badge badge--danger" style={{ marginBottom: 10 }}>{list.error}</div> : null}
-
-          <div style={{ overflowX: 'auto', opacity: list.loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
-            <table className="vex-table">
-              <thead>
-                <tr>
-                  <th>الصنف</th>
-                  {mode === 'sales' ? <th>السعر</th> : null}
-                  <th>{mode === 'sales' ? 'الموقع (المتاح)' : 'الموقع'}</th>
-                  {mode === 'sales' ? <th>الدفعة</th> : null}
-                  <th style={{ width: 90 }}>الكمية</th>
-                  <th style={{ width: 120 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '28px 0' }}>{list.loading ? 'جارٍ البحث...' : 'لا توجد أصناف مطابقة'}</td></tr>
-                ) : list.items.map((it, idx) => {
-                  const st = stateFor(it);
-                  const reason = blockReason(it, st);
-                  const stockHere = it.stock.filter((s) => (pickAnyLocation ? true : s.available > 0));
-                  const batchesHere = it.batches.filter((b) => b.locationId === st.locationId);
-                  return (
-                    <tr key={rowKey(it)} className={idx === active ? 'vex-row--active' : undefined} onMouseEnter={() => setActive(idx)}>
-                      <td>
-                        <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{it.code}</div>
-                        <div style={{ fontWeight: 600 }}>{it.nameAr}</div>
-                        <div style={{ fontSize: 12, color: 'var(--txt-muted)', direction: 'ltr', textAlign: 'right' }}>{it.name}{it.brand ? ` · ${it.brand}` : ''}</div>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                          {it.isStopShip ? <span className="badge badge--danger">موقوف الشحن</span> : null}
-                          {it.hasWarranty ? <span className="badge badge--success">ضمان</span> : null}
-                          {it.isBatchTracked ? <span className="badge badge--draft">دفعات</span> : null}
-                          {mode === 'sales' && it.totalAvailable <= 0 ? <span className="badge badge--warning">نافد</span> : null}
-                          {it.barcode ? <span style={{ fontSize: 11, color: 'var(--txt-muted)', fontFamily: 'monospace' }}>{it.barcode}</span> : null}
-                        </div>
-                      </td>
-                      {mode === 'sales' ? (
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 700 }}>${num(it.sellingPriceUsd)}</div>
-                          <div style={{ fontSize: 12, color: 'var(--txt-secondary)' }}>{num(it.sellingPriceSyp)} ل.س</div>
-                          {it.minSellingPriceUsd > 0 ? <div style={{ fontSize: 11, color: 'var(--txt-muted)' }}>الأدنى ${num(it.minSellingPriceUsd)}</div> : null}
-                        </td>
-                      ) : null}
-                      <td>
-                        {pickAnyLocation ? (
-                          <LocationSelect value={st.locationId} onChange={(id) => patchRow(it, { locationId: id })} allowEmpty />
-                        ) : stockHere.length === 0 ? (
-                          <span style={{ color: 'var(--txt-muted)' }}>لا مخزون</span>
-                        ) : (
-                          <select className="vex-select" value={st.locationId} onChange={(e) => patchRow(it, { locationId: e.target.value })}>
-                            {stockHere.map((s) => (
-                              <option key={s.locationId} value={s.locationId}>{s.locationCode} ({num(s.available)})</option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      {mode === 'sales' ? (
-                        <td>
-                          {it.isBatchTracked ? (
-                            batchesHere.length === 0 ? <span style={{ color: 'var(--txt-muted)' }}>—</span> : (
-                              <select className="vex-select" value={st.batchId} onChange={(e) => patchRow(it, { batchId: e.target.value })}>
-                                {batchesHere.map((b) => (
-                                  <option key={b.id} value={b.id}>{b.batchNumber} ({num(b.quantity)}){b.expiryDate ? ` · ${b.expiryDate}` : ''}</option>
-                                ))}
-                              </select>
-                            )
-                          ) : <span style={{ color: 'var(--txt-muted)' }}>—</span>}
-                        </td>
-                      ) : null}
-                      <td>
-                        <input
-                          type="number"
-                          min={0}
-                          className="vex-input"
-                          value={st.qty}
-                          onChange={(e) => patchRow(it, { qty: e.target.value })}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addRow(it); } }}
-                        />
-                      </td>
-                      <td>
-                        <button type="button" className="btn-primary" style={{ padding: '6px 14px', fontSize: 13, width: '100%' }} disabled={Boolean(reason)} title={reason} onClick={() => addRow(it)}>
-                          ＋ إضافة
-                        </button>
-                        {reason ? <div style={{ fontSize: 11, color: 'var(--clr-danger)', marginTop: 3 }}>{reason}</div> : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} />
-        </div>
-
-        <div className="vex-modal__footer">
-          <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
-            {stats.count > 0 ? <>✓ أُضيف {stats.count} — <span style={{ fontFamily: 'monospace' }}>{added.slice(-3).join('، ')}</span></> : 'اختر الصنف والموقع والكمية ثم اضغط إضافة — تبقى النافذة مفتوحة لإضافة المزيد. ↑↓ للتنقل، Enter للإضافة، Esc للإغلاق.'}
-          </div>
-          <button type="button" className="btn-primary" onClick={onClose}>تم</button>
-        </div>
-      </div>
-    </div>
+        <TableContainer sx={{ opacity: list.loading ? 0.6 : 1, transition: 'opacity 120ms' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
+                <TableCell>الصنف</TableCell>
+                {mode === 'sales' ? <TableCell>السعر</TableCell> : null}
+                <TableCell>{mode === 'sales' ? 'الموقع (المتاح)' : 'الموقع'}</TableCell>
+                {mode === 'sales' ? <TableCell>الدفعة</TableCell> : null}
+                <TableCell sx={{ width: 100 }}>الكمية</TableCell>
+                <TableCell sx={{ width: 130 }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {list.items.length === 0 ? (
+                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>{list.loading ? 'جارٍ البحث...' : 'لا توجد أصناف مطابقة'}</TableCell></TableRow>
+              ) : list.items.map((it, idx) => {
+                const st = stateFor(it);
+                const reason = blockReason(it, st);
+                const stockHere = it.stock.filter((s) => (pickAnyLocation ? true : s.available > 0));
+                const batchesHere = it.batches.filter((b) => b.locationId === st.locationId);
+                return (
+                  <TableRow key={rowKey(it)} hover selected={idx === active} onMouseEnter={() => setActive(idx)}>
+                    <TableCell>
+                      <Typography sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{it.code}</Typography>
+                      <Typography variant="body2" fontWeight={600}>{it.nameAr}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr', display: 'block', textAlign: 'right' }}>{it.name}{it.brand ? ` · ${it.brand}` : ''}</Typography>
+                      <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
+                        {it.isStopShip ? <Chip size="small" color="error" label="موقوف الشحن" /> : null}
+                        {it.hasWarranty ? <Chip size="small" color="success" variant="outlined" label="ضمان" /> : null}
+                        {it.isBatchTracked ? <Chip size="small" variant="outlined" label="دفعات" /> : null}
+                        {mode === 'sales' && it.totalAvailable <= 0 ? <Chip size="small" color="warning" label="نافد" /> : null}
+                        {it.barcode ? <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{it.barcode}</Typography> : null}
+                      </Stack>
+                    </TableCell>
+                    {mode === 'sales' ? (
+                      <TableCell>
+                        <Money usd={it.sellingPriceUsd} syp={it.sellingPriceSyp} fontWeight={700} />
+                        {it.minSellingPriceUsd > 0 ? <Typography variant="caption" color="text.secondary" component="div">الأدنى <Money usd={it.minSellingPriceUsd} syp={it.minSellingPriceSyp} inline variant="caption" /></Typography> : null}
+                      </TableCell>
+                    ) : null}
+                    <TableCell sx={{ minWidth: 170 }}>
+                      {pickAnyLocation ? (
+                        <LocationSelect value={st.locationId} onChange={(id) => patchRow(it, { locationId: id })} allowEmpty />
+                      ) : stockHere.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">لا مخزون</Typography>
+                      ) : (
+                        <TextField select size="small" fullWidth value={st.locationId} onChange={(e) => patchRow(it, { locationId: e.target.value })}>
+                          {stockHere.map((s) => <MenuItem key={s.locationId} value={s.locationId}>{s.locationCode} ({formatQty(s.available)})</MenuItem>)}
+                        </TextField>
+                      )}
+                    </TableCell>
+                    {mode === 'sales' ? (
+                      <TableCell sx={{ minWidth: 150 }}>
+                        {it.isBatchTracked && batchesHere.length > 0 ? (
+                          <TextField select size="small" fullWidth value={st.batchId} onChange={(e) => patchRow(it, { batchId: e.target.value })}>
+                            {batchesHere.map((b) => <MenuItem key={b.id} value={b.id}>{b.batchNumber} ({formatQty(b.quantity)}){b.expiryDate ? ` · ${b.expiryDate}` : ''}</MenuItem>)}
+                          </TextField>
+                        ) : '—'}
+                      </TableCell>
+                    ) : null}
+                    <TableCell>
+                      <TextField
+                        size="small" type="number" inputProps={{ min: 0 }} value={st.qty}
+                        onChange={(e) => patchRow(it, { qty: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addRow(it); } }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="contained" size="small" fullWidth disabled={Boolean(reason)} title={reason} onClick={() => addRow(it)}>＋ إضافة</Button>
+                      {reason ? <Typography variant="caption" color="error" component="div">{reason}</Typography> : null}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <TablePagination
+          component="div" count={list.totalCount} page={Math.max(0, list.page - 1)} rowsPerPage={list.pageSize} rowsPerPageOptions={[list.pageSize]}
+          onPageChange={(_, p) => list.setPage(p + 1)} {...ARABIC_PAGINATION}
+        />
+      </DialogContent>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+        <Typography variant="body2" color="text.secondary">
+          {stats.count > 0 ? <>✓ أُضيف {stats.count} — <span style={{ fontFamily: 'monospace' }}>{added.slice(-3).join('، ')}</span></> : 'اختر الصنف والموقع والكمية ثم اضغط إضافة — تبقى النافذة مفتوحة لإضافة المزيد. ↑↓ للتنقل، Enter للإضافة، Esc للإغلاق.'}
+        </Typography>
+        <Button variant="contained" onClick={onClose}>تم</Button>
+      </DialogActions>
+    </Dialog>
   );
 }

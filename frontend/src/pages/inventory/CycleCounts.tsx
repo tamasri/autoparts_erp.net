@@ -1,14 +1,18 @@
-import { Fragment, useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
+import {
+  Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, MenuItem, Stack, Table, TableBody,
+  TableCell, TableHead, TableRow, TextField, Typography,
+} from '@mui/material';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import StatusChip from '../../components/ui/StatusChip';
+import { formatQty } from '../../lib/format';
 import { cycleCountsApi } from '../../api/endpoints/cycleCounts';
 import { unwrapNode } from '../../api/apiData';
 import { usePagedList } from '../../hooks/usePagedList';
 import { useLocationNames } from '../../hooks/useLocationNames';
 import { toast, extractApiError } from '../../lib/toast';
 import { notifyResult } from '../../lib/notify';
-import Pagination from '../../components/common/Pagination';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import StatusBadge from '../../components/common/StatusBadge';
 import DocumentViewButton from '../../components/ui/DocumentViewButton';
 import { cycleCountDocument } from '../../lib/wmsDocuments';
 import LocationSelect from '../../components/pickers/LocationSelect';
@@ -95,105 +99,93 @@ export default function CycleCounts(): JSX.Element {
   }
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">الجرد الدوري</h1>
-          <div className="vex-page-header__breadcrumb">خطة الجرد تُولَّد أسطرها من الأرصدة الحالية؛ أدخل الكميات المعدودة ثم اعتمد الفروقات</div>
-        </div>
-        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ خطة جرد'}
-        </button>
-      </div>
-
-      {list.error ? <ErrorBanner message={list.error} /> : null}
+    <Box>
+      <PageHeader
+        title="الجرد الدوري" subtitle="خطة الجرد تُولَّد أسطرها من الأرصدة الحالية؛ أدخل الكميات المعدودة ثم اعتمد الفروقات"
+        actions={<Button variant={showForm ? 'outlined' : 'contained'} onClick={() => setShowForm((s) => !s)}>{showForm ? '✕ إلغاء' : '＋ خطة جرد'}</Button>}
+      />
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
 
       {showForm ? (
-        <div className="vex-card" style={{ marginBottom: 20 }}>
-          <h2 className="vex-section-title">خطة جرد جديدة</h2>
-          {formError ? <ErrorBanner message={formError} /> : null}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
-            <label className="vex-label">المستودع *<LocationSelect type="WAREHOUSE" value={warehouseId} onChange={(id) => setWarehouseId(id)} /></label>
-            <label className="vex-label">نطاق الجرد
-              <select value={scopeType} onChange={(e) => setScopeType(e.target.value)} className="vex-select">
-                {SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </label>
-            <label className="vex-label">تاريخ التنفيذ<input type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} className="vex-input" /></label>
-          </div>
-          <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 حفظ الخطة</button>
-        </div>
+        <Card variant="outlined" sx={{ borderRadius: 3, mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>خطة جرد جديدة</Typography>
+            {formError ? <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert> : null}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 2, mb: 2 }}>
+              <LocationSelect type="WAREHOUSE" label="المستودع *" value={warehouseId} onChange={(id) => setWarehouseId(id)} />
+              <TextField select size="small" label="نطاق الجرد" value={scopeType} onChange={(e) => setScopeType(e.target.value)}>
+                {SCOPES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+              </TextField>
+              <TextField size="small" type="date" label="تاريخ التنفيذ" InputLabelProps={{ shrink: true }} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+            </Box>
+            <Button variant="contained" disabled={busy === 'create'} onClick={() => void create()}>💾 حفظ الخطة</Button>
+          </CardContent>
+        </Card>
       ) : null}
 
-      <div className="vex-card vex-card--no-pad" style={{ opacity: list.loading ? 0.6 : 1 }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead><tr><th>المستودع</th><th>النطاق</th><th>التاريخ</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-            <tbody>
-              {list.items.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد خطط جرد</td></tr>
-              ) : list.items.map((p) => (
-                <Fragment key={p.id}>
-                  <tr>
-                    <td style={{ fontWeight: 600 }}>{names.label(p.warehouseId)}</td>
-                    <td>{SCOPES.find((s) => s.value === p.scopeType)?.label ?? p.scopeType}</td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{p.scheduledFor ?? '-'}</td>
-                    <td><StatusBadge status={p.status} type="invoice" /></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <DocumentViewButton load={() => cycleCountDocument(p.id, names.label)} />{' '}
-                      <button type="button" onClick={() => togglePlan(p.id)} className="btn-secondary" style={{ padding: '5px 12px', fontSize: 12, marginLeft: 6 }}>
-                        {openId === p.id ? '▲ إخفاء' : '📋 أسطر الجرد'}
-                      </button>
-                      {p.status === 'PENDING_APPROVAL' ? (
-                        <button type="button" disabled={busy === p.id} onClick={() => void approve(p.id)} className="btn-success" style={{ padding: '5px 12px', fontSize: 12 }}>✓ اعتماد الفروقات</button>
-                      ) : null}
-                    </td>
-                  </tr>
-                  {openId === p.id ? (
-                    <tr>
-                      <td colSpan={5} style={{ background: 'var(--clr-surface-2)', padding: '14px 20px' }}>
-                        {actionError ? <ErrorBanner message={actionError} /> : null}
-                        {detailLoading || !detail ? <LoadingSpinner /> : (
-                          <>
-                            <table className="vex-table" style={{ background: '#fff' }}>
-                              <thead><tr><th>الصنف</th><th>الموقع</th><th>رصيد النظام</th><th style={{ width: 130 }}>الكمية المعدودة</th><th>الفرق</th></tr></thead>
-                              <tbody>
-                                {detail.lines.length === 0 ? (
-                                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: 20 }}>لا توجد أرصدة في هذا المستودع لتُجرد</td></tr>
-                                ) : detail.lines.map((l) => {
-                                  const raw = counts[l.id];
-                                  const variance = raw === '' || raw === undefined ? null : Number(raw) - l.systemQty;
-                                  return (
-                                    <tr key={l.id}>
-                                      <td><span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{l.itemCode}</span> <span style={{ color: 'var(--txt-secondary)' }}>{l.itemName}</span></td>
-                                      <td>{l.locationCode}</td>
-                                      <td>{l.systemQty.toLocaleString('en-US')}</td>
-                                      <td><input type="number" min={0} className="vex-input" value={raw ?? ''} disabled={detail.status === 'POSTED'} onChange={(e) => setCounts({ ...counts, [l.id]: e.target.value })} /></td>
-                                      <td style={{ fontWeight: 700, color: variance === null || variance === 0 ? 'var(--txt-muted)' : variance > 0 ? 'var(--clr-success)' : 'var(--clr-danger)' }}>
-                                        {variance === null ? '—' : (variance > 0 ? '+' : '') + variance.toLocaleString('en-US')}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                            {detail.status !== 'POSTED' && detail.lines.length > 0 ? (
-                              <div style={{ marginTop: 12 }}>
-                                <button type="button" disabled={busy === detail.id} onClick={() => void submitCounts()} className="btn-primary">📤 حفظ نتائج الجرد</button>
-                              </div>
-                            ) : null}
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
-    </div>
+      <DataTable
+        rows={list.items} getKey={(p) => p.id} loading={list.loading} empty="لا توجد خطط جرد"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+        columns={[
+          { header: 'المستودع', render: (p) => <Typography fontWeight={600}>{names.label(p.warehouseId)}</Typography> },
+          { header: 'النطاق', render: (p) => SCOPES.find((s) => s.value === p.scopeType)?.label ?? p.scopeType },
+          { header: 'التاريخ', render: (p) => p.scheduledFor ?? '—', nowrap: true },
+          { header: 'الحالة', render: (p) => <StatusChip status={p.status} /> },
+          {
+            header: 'إجراءات', nowrap: true,
+            render: (p) => (
+              <Stack direction="row" gap={1} alignItems="center">
+                <DocumentViewButton load={() => cycleCountDocument(p.id, names.label)} />
+                <Button size="small" variant="outlined" onClick={() => togglePlan(p.id)}>📋 أسطر الجرد</Button>
+                {p.status === 'PENDING_APPROVAL' ? <Button size="small" variant="contained" color="success" disabled={busy === p.id} onClick={() => void approve(p.id)}>✓ اعتماد الفروقات</Button> : null}
+              </Stack>
+            ),
+          },
+        ]}
+      />
+
+      <Dialog open={Boolean(openId)} onClose={() => setOpenId('')} fullWidth maxWidth="md">
+        <DialogTitle>أسطر الجرد {detail ? <>— {names.label(detail.warehouseId)} <StatusChip status={detail.status} /></> : null}</DialogTitle>
+        <DialogContent dividers>
+          {actionError ? <Alert severity="error" sx={{ mb: 2 }}>{actionError}</Alert> : null}
+          {detailLoading || !detail ? <LinearProgress /> : (
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ '& th': { fontWeight: 700 } }}>
+                  <TableCell>الصنف</TableCell><TableCell>الموقع</TableCell><TableCell align="left">رصيد النظام</TableCell><TableCell sx={{ width: 140 }}>الكمية المعدودة</TableCell><TableCell align="left">الفرق</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {detail.lines.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} align="center" sx={{ color: 'text.secondary', py: 3 }}>لا توجد أرصدة في هذا المستودع لتُجرد</TableCell></TableRow>
+                ) : detail.lines.map((l) => {
+                  const raw = counts[l.id];
+                  const variance = raw === '' || raw === undefined ? null : Number(raw) - l.systemQty;
+                  return (
+                    <TableRow key={l.id}>
+                      <TableCell><Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{l.itemCode}</Typography> <Typography component="span" variant="body2" color="text.secondary">{l.itemName}</Typography></TableCell>
+                      <TableCell>{l.locationCode}</TableCell>
+                      <TableCell align="left">{formatQty(l.systemQty)}</TableCell>
+                      <TableCell><TextField size="small" type="number" inputProps={{ min: 0 }} value={raw ?? ''} disabled={detail.status === 'POSTED'} onChange={(e) => setCounts({ ...counts, [l.id]: e.target.value })} /></TableCell>
+                      <TableCell align="left">
+                        <Typography fontWeight={700} color={variance === null || variance === 0 ? 'text.secondary' : variance > 0 ? 'success.main' : 'error.main'}>
+                          {variance === null ? '—' : (variance > 0 ? '+' : '') + formatQty(variance)}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {detail && detail.status !== 'POSTED' && detail.lines.length > 0 ? (
+            <Button variant="contained" disabled={busy === detail.id} onClick={() => void submitCounts()}>📤 حفظ نتائج الجرد</Button>
+          ) : null}
+          <Button onClick={() => setOpenId('')}>إغلاق</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

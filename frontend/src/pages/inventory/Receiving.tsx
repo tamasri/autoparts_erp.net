@@ -1,4 +1,12 @@
-import { Fragment, useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
+import {
+  Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, MenuItem, Paper, Stack, Table, TableBody,
+  TableCell, TableHead, TableRow, TextField, Typography,
+} from '@mui/material';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import StatusChip from '../../components/ui/StatusChip';
+import { formatQty } from '../../lib/format';
 import { receivingApi, type ReceivingLine } from '../../api/endpoints/receiving';
 import { partiesApi } from '../../api/endpoints/parties';
 import { unwrapList, unwrapNode, unwrapPaged } from '../../api/apiData';
@@ -6,10 +14,6 @@ import { usePagedList } from '../../hooks/usePagedList';
 import { useLocationNames } from '../../hooks/useLocationNames';
 import { toast, extractApiError } from '../../lib/toast';
 import { notifyResult } from '../../lib/notify';
-import Pagination from '../../components/common/Pagination';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import StatusBadge from '../../components/common/StatusBadge';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
 import DocumentViewButton from '../../components/ui/DocumentViewButton';
 import { receivingDocument } from '../../lib/wmsDocuments';
@@ -53,14 +57,14 @@ function ReceivingLinesEditor({ lines, onChange, warehouseId }: { lines: WmsLine
       defaultExtra={() => ({ expected: '', rejected: 0, condition: 'GOOD' })}
       pickerTitle="اختيار الأصناف المستلمة"
       extraColumns={[
-        { key: 'expected', label: 'المتوقعة', width: 100, render: (l, patch) => <input type="number" min={0} className="vex-input" value={l.extra.expected ?? ''} onChange={(e) => patch({ expected: e.target.value })} /> },
-        { key: 'rejected', label: 'المرفوضة', width: 100, render: (l, patch) => <input type="number" min={0} className="vex-input" value={Number(l.extra.rejected ?? 0)} onChange={(e) => patch({ rejected: Number(e.target.value) })} /> },
+        { key: 'expected', label: 'المتوقعة', width: 110, render: (l, patch) => <TextField size="small" type="number" inputProps={{ min: 0 }} value={l.extra.expected ?? ''} onChange={(e) => patch({ expected: e.target.value })} /> },
+        { key: 'rejected', label: 'المرفوضة', width: 110, render: (l, patch) => <TextField size="small" type="number" inputProps={{ min: 0 }} value={Number(l.extra.rejected ?? 0)} onChange={(e) => patch({ rejected: Number(e.target.value) })} /> },
         {
-          key: 'condition', label: 'الحالة', width: 120,
+          key: 'condition', label: 'الحالة', width: 130,
           render: (l, patch) => (
-            <select className="vex-select" value={String(l.extra.condition ?? 'GOOD')} onChange={(e) => patch({ condition: e.target.value })}>
-              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
+            <TextField select size="small" fullWidth value={String(l.extra.condition ?? 'GOOD')} onChange={(e) => patch({ condition: e.target.value })}>
+              {CONDITIONS.map((c) => <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>)}
+            </TextField>
           ),
         },
       ]}
@@ -158,117 +162,111 @@ export default function Receiving(): JSX.Element {
   }
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">الاستلام والتخزين</h1>
-          <div className="vex-page-header__breadcrumb">استلام البضاعة من الموردين وتخزينها</div>
-        </div>
-        <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-          {showForm ? '✕ إلغاء' : '＋ مستند استلام'}
-        </button>
-      </div>
-
-      {list.error ? <ErrorBanner message={list.error} /> : null}
+    <Box>
+      <PageHeader
+        title="الاستلام والتخزين" subtitle="استلام البضاعة من الموردين وتخزينها"
+        actions={<Button variant={showForm ? 'outlined' : 'contained'} onClick={() => setShowForm((s) => !s)}>{showForm ? '✕ إلغاء' : '＋ مستند استلام'}</Button>}
+      />
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
 
       {showForm ? (
-        <div className="vex-card" style={{ marginBottom: 20 }}>
-          <h2 className="vex-section-title">مستند استلام جديد</h2>
-          {formError ? <ErrorBanner message={formError} /> : null}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, marginBottom: 20 }}>
-            <label className="vex-label">المستودع *<LocationSelect type="WAREHOUSE" value={warehouseId} onChange={(id) => setWarehouseId(id)} /></label>
-            <label className="vex-label">المورّد<EntityPicker value={vendor} onChange={setVendor} search={searchVendors} placeholder="ابحث باسم المورّد..." /></label>
-            <label className="vex-label">مرجع أمر الشراء<input value={poRef} onChange={(e) => setPoRef(e.target.value)} className="vex-input" /></label>
-            <label className="vex-label">ملاحظات<input value={notes} onChange={(e) => setNotes(e.target.value)} className="vex-input" /></label>
-          </div>
-          <ReceivingLinesEditor lines={lines} onChange={setLines} warehouseId={warehouseId} />
-          <div style={{ marginTop: 14 }}>
-            <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 حفظ المستند</button>
-          </div>
-        </div>
+        <Card variant="outlined" sx={{ borderRadius: 3, mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>مستند استلام جديد</Typography>
+            {formError ? <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert> : null}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 2, mb: 2 }}>
+              <LocationSelect type="WAREHOUSE" label="المستودع *" value={warehouseId} onChange={(id) => setWarehouseId(id)} />
+              <EntityPicker label="المورّد" value={vendor} onChange={setVendor} search={searchVendors} placeholder="ابحث باسم المورّد..." />
+              <TextField size="small" label="مرجع أمر الشراء" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
+              <TextField size="small" label="ملاحظات" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </Box>
+            <ReceivingLinesEditor lines={lines} onChange={setLines} warehouseId={warehouseId} />
+            <Button variant="contained" sx={{ mt: 2 }} disabled={busy === 'create'} onClick={() => void create()}>💾 حفظ المستند</Button>
+          </CardContent>
+        </Card>
       ) : null}
 
-      <div className="vex-card vex-card--no-pad" style={{ opacity: list.loading ? 0.6 : 1 }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead><tr><th>رقم المستند</th><th>المستودع</th><th>مرجع الشراء</th><th>الحالة</th><th>تاريخ الترحيل</th><th>إجراءات</th></tr></thead>
-            <tbody>
-              {list.items.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد مستندات</td></tr>
-              ) : list.items.map((d) => (
-                <Fragment key={d.id}>
-                  <tr>
-                    <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{d.documentNo}</td>
-                    <td>{names.label(d.warehouseId)}</td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{d.purchaseOrderRef || '-'}</td>
-                    <td><StatusBadge status={d.status} type="invoice" /></td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{d.postedAt ? new Date(d.postedAt).toLocaleDateString('ar') : '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}><DocumentViewButton load={() => receivingDocument(d.id, names.label)} />{' '}<button type="button" onClick={() => toggle(d.id)} className="btn-secondary" style={{ padding: '5px 14px', fontSize: 12 }}>{openId === d.id ? '▲ إخفاء' : '▼ الأسطر والتخزين'}</button></td>
-                  </tr>
-                  {openId === d.id ? (
-                    <tr>
-                      <td colSpan={6} style={{ background: 'var(--clr-surface-2)', padding: '14px 20px' }}>
-                        {actionError ? <ErrorBanner message={actionError} /> : null}
-                        {detailLoading || !detail ? <LoadingSpinner /> : (
-                          <>
-                            <table className="vex-table" style={{ background: '#fff', marginBottom: 12 }}>
-                              <thead><tr><th>الصنف</th><th>المتوقعة</th><th>المستلمة</th><th>المرفوضة</th><th>الحالة</th><th>موقع التخزين</th></tr></thead>
-                              <tbody>
-                                {detail.lines.length === 0 ? (
-                                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: 16 }}>لا توجد أسطر بعد</td></tr>
-                                ) : detail.lines.map((l) => (
-                                  <tr key={l.id}>
-                                    <td><span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{l.itemCode}</span> {l.itemName}</td>
-                                    <td>{l.expectedQty ?? '-'}</td><td>{l.receivedQty}</td><td>{l.rejectedQty}</td>
-                                    <td>{conditionLabel(l.conditionStatus)}</td>
-                                    <td>{l.assignedLocationId ? names.label(l.assignedLocationId) : '-'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+      <DataTable
+        rows={list.items} getKey={(d) => d.id} loading={list.loading} empty="لا توجد مستندات"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+        columns={[
+          { header: 'رقم المستند', render: (d) => <Typography fontWeight={700} color="primary">{d.documentNo}</Typography>, nowrap: true },
+          { header: 'المستودع', render: (d) => names.label(d.warehouseId) },
+          { header: 'مرجع الشراء', render: (d) => d.purchaseOrderRef || '—' },
+          { header: 'الحالة', render: (d) => <StatusChip status={d.status} /> },
+          { header: 'تاريخ الترحيل', render: (d) => (d.postedAt ? new Date(d.postedAt).toLocaleDateString('en-CA') : '—'), nowrap: true },
+          {
+            header: 'إجراءات', nowrap: true,
+            render: (d) => (
+              <Stack direction="row" gap={1} alignItems="center">
+                <DocumentViewButton load={() => receivingDocument(d.id, names.label)} />
+                <Button size="small" variant="outlined" onClick={() => toggle(d.id)}>الأسطر والتخزين</Button>
+              </Stack>
+            ),
+          },
+        ]}
+      />
 
-                            {detail.status !== 'POSTED' ? (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 6 }}>إضافة أسطر</div>
-                                <ReceivingLinesEditor lines={extraLines} onChange={setExtraLines} warehouseId={detail.warehouseId} />
-                                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                                  <button type="button" disabled={busy === d.id} className="btn-secondary" onClick={() => void addLines(d.id)}>＋ إضافة للمستند</button>
-                                  <button type="button" disabled={busy === d.id || detail.lines.length === 0} className="btn-success" onClick={() => void post(d.id)}>✓ ترحيل المستند</button>
-                                </div>
-                              </div>
-                            ) : null}
+      <Dialog open={Boolean(openId)} onClose={() => setOpenId('')} fullWidth maxWidth="lg">
+        <DialogTitle>مستند الاستلام {detail?.documentNo ?? ''} {detail ? <StatusChip status={detail.status} /> : null}</DialogTitle>
+        <DialogContent dividers>
+          {actionError ? <Alert severity="error" sx={{ mb: 2 }}>{actionError}</Alert> : null}
+          {detailLoading || !detail ? <LinearProgress /> : (
+            <Stack spacing={2}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ '& th': { fontWeight: 700 } }}>
+                    <TableCell>الصنف</TableCell><TableCell align="left">المتوقعة</TableCell><TableCell align="left">المستلمة</TableCell><TableCell align="left">المرفوضة</TableCell><TableCell>الحالة</TableCell><TableCell>موقع التخزين</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {detail.lines.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} align="center" sx={{ color: 'text.secondary', py: 2 }}>لا توجد أسطر بعد</TableCell></TableRow>
+                  ) : detail.lines.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell><Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{l.itemCode}</Typography> {l.itemName}</TableCell>
+                      <TableCell align="left">{l.expectedQty !== undefined && l.expectedQty !== null ? formatQty(l.expectedQty) : '—'}</TableCell>
+                      <TableCell align="left">{formatQty(l.receivedQty)}</TableCell><TableCell align="left">{formatQty(l.rejectedQty)}</TableCell>
+                      <TableCell>{conditionLabel(l.conditionStatus)}</TableCell>
+                      <TableCell>{l.assignedLocationId ? names.label(l.assignedLocationId) : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-                            {tasks.length > 0 ? (
-                              <div>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 6 }}>مهام التخزين</div>
-                                {tasks.map((t) => (
-                                  <div key={t.id} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '8px 12px', marginBottom: 6, background: '#fff', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)', flexWrap: 'wrap' }}>
-                                    <span style={{ fontSize: 13 }}>الكمية: <strong>{t.qty}</strong></span>
-                                    <StatusBadge status={t.status} type="invoice" />
-                                    {t.status !== 'COMPLETED' ? (
-                                      <>
-                                        <div style={{ minWidth: 220 }}>
-                                          <LocationSelect value={taskTargets[t.id] ?? ''} allowEmpty={false} onChange={(id) => setTaskTargets({ ...taskTargets, [t.id]: id })} />
-                                        </div>
-                                        <button type="button" disabled={busy === t.id} onClick={() => void completeTask(d.id, t)} className="btn-primary" style={{ padding: '4px 12px', fontSize: 12 }}>إتمام التخزين</button>
-                                      </>
-                                    ) : null}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
-    </div>
+              {detail.status !== 'POSTED' && detail.status !== 'COMPLETED' ? (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>إضافة أسطر</Typography>
+                  <ReceivingLinesEditor lines={extraLines} onChange={setExtraLines} warehouseId={detail.warehouseId} />
+                  <Stack direction="row" gap={1} sx={{ mt: 1 }}>
+                    <Button variant="outlined" disabled={busy === detail.id} onClick={() => void addLines(detail.id)}>＋ إضافة للمستند</Button>
+                    <Button variant="contained" color="success" disabled={busy === detail.id || detail.lines.length === 0} onClick={() => void post(detail.id)}>✓ ترحيل المستند</Button>
+                  </Stack>
+                </Box>
+              ) : null}
+
+              {tasks.length > 0 ? (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>مهام التخزين</Typography>
+                  {tasks.map((t) => (
+                    <Paper key={t.id} variant="outlined" sx={{ p: 1, mt: 1, borderRadius: 2, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Typography variant="body2">الكمية: <b>{formatQty(t.qty)}</b></Typography>
+                      <StatusChip status={t.status} />
+                      {t.status !== 'COMPLETED' ? (
+                        <>
+                          <Box sx={{ minWidth: 220 }}><LocationSelect value={taskTargets[t.id] ?? ''} allowEmpty={false} onChange={(id) => setTaskTargets({ ...taskTargets, [t.id]: id })} /></Box>
+                          <Button size="small" variant="contained" disabled={busy === t.id} onClick={() => void completeTask(detail.id, t)}>إتمام التخزين</Button>
+                        </>
+                      ) : null}
+                    </Paper>
+                  ))}
+                </Box>
+              ) : null}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setOpenId('')}>إغلاق</Button></DialogActions>
+      </Dialog>
+    </Box>
   );
 }
