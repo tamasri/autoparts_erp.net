@@ -1,5 +1,6 @@
 using AutoPartsERP.Application.Features.Inventory;
 using AutoPartsERP.Application.Common.Messaging;
+using AutoPartsERP.Application.Common.Pricing;
 using Dapper;
 
 namespace AutoPartsERP.Application.Features.Purchasing;
@@ -31,6 +32,9 @@ public sealed class CreatePurchaseInvoiceCommandValidator : AbstractValidator<Cr
             line.RuleFor(l => l.UnitCostUsd).GreaterThanOrEqualTo(0);
             line.RuleFor(l => l.DiscountPct).InclusiveBetween(0, 100);
         });
+        RuleFor(x => x.Request).Must(r => r.DiscountPct is null || r.DiscountAmountUsd is null).WithMessage("Give the invoice discount as a percentage or as an amount, not both.");
+        RuleFor(x => x.Request.DiscountPct).InclusiveBetween(0, 100).When(x => x.Request.DiscountPct is not null);
+        RuleFor(x => x.Request.DiscountAmountUsd).GreaterThanOrEqualTo(0).When(x => x.Request.DiscountAmountUsd is not null);
     }
 }
 
@@ -76,20 +80,27 @@ public sealed class CreatePurchaseInvoiceCommandHandler : IRequestHandler<Create
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var id = Guid.NewGuid();
         var lines = request.Lines.Select((l, i) => (Line: l, Number: i + 1, Total: Math.Round(l.Quantity * l.UnitCostUsd * (1 - l.DiscountPct / 100m), 4))).ToList();
+        var subtotal = lines.Sum(l => l.Total);
+        var discount = DocumentDiscount.Resolve(subtotal, request.DiscountPct, request.DiscountAmountUsd);
+        if (discount.IsFailure)
+        {
+            return Result<Guid>.Failure(discount.Error);
+        }
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO purchase_invoices (
                 id, bill_number, supplier_party_id, supplier_ref, bill_date, due_date, warehouse_id, status, fx_rate_id,
-                total_usd, paid_usd, balance_usd, notes, created_by)
+                subtotal_usd, discount_pct, discount_amount_usd, total_usd, paid_usd, balance_usd, notes, created_by)
             VALUES (
                 @id, 'PUR-' || to_char(@BillDate, 'YYYY') || '-' || lpad(nextval('purchase_invoice_seq')::text, 5, '0'),
-                @SupplierPartyId, @SupplierRef, @BillDate, @DueDate, @WarehouseId, 'DRAFT', @FxRateId, @Total, 0, 0, @Notes, @By);
+                @SupplierPartyId, @SupplierRef, @BillDate, @DueDate, @WarehouseId, 'DRAFT', @FxRateId, @Subtotal, @DiscountPct, @DiscountAmount, @Total, 0, 0, @Notes, @By);
             """,
             new
             {
                 id, request.SupplierPartyId, SupplierRef = request.SupplierRef?.Trim(), request.BillDate, request.DueDate, request.WarehouseId,
-                request.FxRateId, Total = lines.Sum(l => l.Total), Notes = request.Notes?.Trim(), By = _currentUser.UserId
+                request.FxRateId, Subtotal = subtotal, DiscountPct = discount.Value!.Percent, DiscountAmount = discount.Value.Amount,
+                Total = subtotal - discount.Value.Amount, Notes = request.Notes?.Trim(), By = _currentUser.UserId
             },
             transaction, cancellationToken: cancellationToken));
 
@@ -182,7 +193,8 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
 
     private sealed record Header(
         Guid Id, string BillNumber, Guid SupplierPartyId, string SupplierName, string? SupplierRef, DateOnly BillDate, DateOnly DueDate, string Status,
-        decimal TotalUsd, decimal PaidUsd, decimal BalanceUsd, Guid WarehouseId, string? Notes, string? VoidReason, DateTimeOffset? PostedAt);
+        decimal TotalUsd, decimal PaidUsd, decimal BalanceUsd, Guid WarehouseId, string? Notes, string? VoidReason, DateTimeOffset? PostedAt,
+        decimal SubtotalUsd, decimal? DiscountPct, decimal DiscountAmountUsd);
 
     public async Task<Result<PurchaseInvoiceDetailDto>> Handle(GetPurchaseInvoiceByIdQuery request, CancellationToken cancellationToken)
     {
@@ -192,7 +204,8 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
             SELECT p.id AS Id, p.bill_number AS BillNumber, p.supplier_party_id AS SupplierPartyId,
                    COALESCE(NULLIF(pa.display_name_ar, ''), pa.display_name) AS SupplierName, p.supplier_ref AS SupplierRef,
                    p.bill_date AS BillDate, p.due_date AS DueDate, p.status AS Status, p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd,
-                   p.balance_usd AS BalanceUsd, p.warehouse_id AS WarehouseId, p.notes AS Notes, p.void_reason AS VoidReason, p.posted_at AS PostedAt
+                   p.balance_usd AS BalanceUsd, p.warehouse_id AS WarehouseId, p.notes AS Notes, p.void_reason AS VoidReason, p.posted_at AS PostedAt,
+                   p.subtotal_usd AS SubtotalUsd, p.discount_pct AS DiscountPct, p.discount_amount_usd AS DiscountAmountUsd
             FROM purchase_invoices p INNER JOIN parties pa ON pa.id = p.supplier_party_id
             WHERE p.id = @Id;
             """,
@@ -213,7 +226,7 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
             new { request.Id }, cancellationToken: cancellationToken))).ToArray();
 
         var list = new PurchaseInvoiceListDto(h.Id, h.BillNumber, h.SupplierPartyId, h.SupplierName, h.SupplierRef, h.BillDate, h.DueDate, h.Status, h.TotalUsd, h.PaidUsd, h.BalanceUsd);
-        return Result<PurchaseInvoiceDetailDto>.Success(new PurchaseInvoiceDetailDto(list, h.WarehouseId, h.Notes, h.VoidReason, h.PostedAt, lines));
+        return Result<PurchaseInvoiceDetailDto>.Success(new PurchaseInvoiceDetailDto(list, h.WarehouseId, h.Notes, h.VoidReason, h.PostedAt, lines, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountUsd));
     }
 }
 
@@ -279,8 +292,11 @@ public sealed class PostPurchaseInvoiceCommandHandler : IRequestHandler<PostPurc
 
         var lines = (await connection.QueryAsync<(Guid ItemId, Guid SkuId, decimal Qty, decimal NetCost)>(new CommandDefinition(
             """
-            SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty, l.unit_cost_usd * (1 - l.discount_pct / 100) AS NetCost
-            FROM purchase_invoice_lines l INNER JOIN items i ON i.id = l.item_id
+            SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty,
+                   round(l.unit_cost_usd * (1 - l.discount_pct / 100) * CASE WHEN p.subtotal_usd = 0 THEN 1 ELSE p.total_usd / p.subtotal_usd END, 6) AS NetCost
+            FROM purchase_invoice_lines l
+            INNER JOIN items i ON i.id = l.item_id
+            INNER JOIN purchase_invoices p ON p.id = l.purchase_invoice_id
             WHERE l.purchase_invoice_id = @Id;
             """,
             new { request.Id }, transaction, cancellationToken: cancellationToken))).ToList();
@@ -402,7 +418,14 @@ public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurc
         {
             // The goods leave again; if some were already sold or moved, the bill cannot be voided.
             var lines = (await connection.QueryAsync<(Guid ItemId, Guid SkuId, decimal Qty, decimal NetCost)>(new CommandDefinition(
-                "SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty, l.unit_cost_usd * (1 - l.discount_pct / 100) AS NetCost FROM purchase_invoice_lines l INNER JOIN items i ON i.id = l.item_id WHERE l.purchase_invoice_id = @Id;",
+                """
+                SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty,
+                       round(l.unit_cost_usd * (1 - l.discount_pct / 100) * CASE WHEN p.subtotal_usd = 0 THEN 1 ELSE p.total_usd / p.subtotal_usd END, 6) AS NetCost
+                FROM purchase_invoice_lines l
+                INNER JOIN items i ON i.id = l.item_id
+                INNER JOIN purchase_invoices p ON p.id = l.purchase_invoice_id
+                WHERE l.purchase_invoice_id = @Id;
+                """,
                 new { request.Id }, transaction, cancellationToken: cancellationToken))).ToList();
 
             foreach (var line in lines)

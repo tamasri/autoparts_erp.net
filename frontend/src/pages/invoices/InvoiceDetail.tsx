@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { invoicesApi } from '../../api/endpoints/invoices';
+import { invoicesApi, type InvoiceAmounts } from '../../api/endpoints/invoices';
 import { unwrapNode } from '../../api/apiData';
 import { toast, extractApiError } from '../../lib/toast';
 import ErrorBanner from '../../components/common/ErrorBanner';
@@ -31,9 +31,7 @@ type InvoiceDetail = {
   customerName?: string;
   invoiceDate?: string;
   dueDate?: string;
-  subtotalSyp?: number;
-  discountAmountSyp?: number;
-  deliveryFeeSyp?: number;
+  amounts?: InvoiceAmounts;
   totalSyp?: number;
   totalUsd?: number;
   totalSypInWords?: string;
@@ -52,6 +50,8 @@ export default function InvoiceDetail(): JSX.Element {
   const [error, setError] = useState('');
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  const [discountMode, setDiscountMode] = useState<'pct' | 'usd'>('pct');
+  const [discountValue, setDiscountValue] = useState('');
 
   async function load(): Promise<void> {
     if (!id) return;
@@ -119,6 +119,22 @@ export default function InvoiceDetail(): JSX.Element {
     }
   }
 
+  async function saveDiscount(): Promise<void> {
+    if (!id) return;
+    const v = Number(discountValue || 0);
+    setBusy(true);
+    try {
+      await invoicesApi.setDiscount(id, discountMode === 'pct' ? { discountPct: v > 0 ? v : null } : { discountAmountUsd: v > 0 ? v : null });
+      toast.success(v > 0 ? 'تم تطبيق خصم الفاتورة' : 'أُزيل خصم الفاتورة');
+      setDiscountValue('');
+      await load();
+    } catch (e: unknown) {
+      toast.error(extractApiError(e, 'تعذر تطبيق الخصم'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function downloadPdf(): Promise<void> {
     if (!id) return;
     setBusy(true);
@@ -142,6 +158,8 @@ export default function InvoiceDetail(): JSX.Element {
   const status = (invoice?.status ?? '').toUpperCase();
   const lines = useMemo(() => invoice?.lines ?? [], [invoice?.lines]);
   const payments = useMemo(() => invoice?.payments ?? [], [invoice?.payments]);
+  const amounts = invoice?.amounts;
+  const n = (v?: number | null): string => Math.abs(Number(v ?? 0)).toLocaleString('en-US');
 
   if (loading) return <LoadingSpinner />;
 
@@ -330,22 +348,32 @@ export default function InvoiceDetail(): JSX.Element {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
                 <span>الإجمالي الفرعي</span>
                 <span style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
-                  {Number(invoice?.subtotalSyp ?? 0).toLocaleString('en-US')} ل.س
+                  {n(amounts?.subtotalSyp)} ل.س
                 </span>
               </div>
-              {Number(invoice?.discountAmountSyp ?? 0) > 0 && (
+              {Number(amounts?.discountAmountUsd ?? 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
-                  <span>الخصم</span>
+                  <span>خصم الفاتورة{amounts?.discountPct ? ` ${amounts.discountPct}%` : ''}</span>
                   <span style={{ fontWeight: 600, color: 'var(--clr-danger)' }}>
-                    −{Number(invoice?.discountAmountSyp ?? 0).toLocaleString('en-US')} ل.س
+                    −{n(amounts?.discountAmountSyp)} ل.س <span style={{ fontSize: 11, color: 'var(--txt-muted)' }}>(${n(amounts?.discountAmountUsd)})</span>
                   </span>
                 </div>
               )}
-              {Number(invoice?.deliveryFeeSyp ?? 0) > 0 && (
+              {status === 'DRAFT' && (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                  <select className="vex-select" style={{ width: 90 }} value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')}>
+                    <option value="pct">خصم %</option>
+                    <option value="usd">خصم $</option>
+                  </select>
+                  <input className="vex-input" type="number" min={0} style={{ width: 90 }} placeholder="0" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                  <button type="button" className="btn-secondary" disabled={busy} onClick={() => void saveDiscount()}>تطبيق</button>
+                </div>
+              )}
+              {Number(amounts?.deliveryFeeSyp ?? 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
                   <span>رسوم التوصيل</span>
                   <span style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
-                    {Number(invoice?.deliveryFeeSyp ?? 0).toLocaleString('en-US')} ل.س
+                    {n(amounts?.deliveryFeeSyp)} ل.س
                   </span>
                 </div>
               )}

@@ -28,6 +28,8 @@ export default function PurchaseInvoiceDialog({ open, onClose, onSaved }: { open
   const [supplierRef, setSupplierRef] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
+  const [discountMode, setDiscountMode] = useState<'pct' | 'usd'>('pct');
+  const [discountValue, setDiscountValue] = useState(0);
   const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -37,7 +39,10 @@ export default function PurchaseInvoiceDialog({ open, onClose, onSaved }: { open
     return unwrapPaged<PartyRow>(res.data).items.map((p) => ({ id: p.id, label: p.displayNameAr || p.displayName || p.id.slice(0, 8), sublabel: p.code }));
   }, []);
 
-  const total = useMemo(() => lines.reduce((a, l) => a + lineTotal(l), 0), [lines]);
+  const subtotal = useMemo(() => lines.reduce((a, l) => a + lineTotal(l), 0), [lines]);
+  // The bill discount lowers the cost of every item on it proportionally when the bill is posted.
+  const discount = discountMode === 'pct' ? subtotal * Math.min(Math.max(discountValue, 0), 100) / 100 : Math.max(discountValue, 0);
+  const total = subtotal - discount;
   const patch = (key: string, change: Partial<Line>): void => setLines((all) => all.map((l) => (l.key === key ? { ...l, ...change } : l)));
 
   function addPicked(p: PickedLine): void {
@@ -48,7 +53,7 @@ export default function PurchaseInvoiceDialog({ open, onClose, onSaved }: { open
   }
 
   function reset(): void {
-    setSupplier(null); setWarehouseId(''); setBillDate(today()); setDueDate(today()); setSupplierRef(''); setNotes(''); setLines([]); setError('');
+    setSupplier(null); setWarehouseId(''); setBillDate(today()); setDueDate(today()); setSupplierRef(''); setNotes(''); setLines([]); setDiscountValue(0); setError('');
   }
 
   async function save(): Promise<void> {
@@ -56,11 +61,14 @@ export default function PurchaseInvoiceDialog({ open, onClose, onSaved }: { open
     if (!warehouseId) { setError('اختر المستودع المستلِم'); return; }
     if (lines.length === 0) { setError('أضف صنفاً واحداً على الأقل'); return; }
     if (lines.some((l) => !(l.quantity > 0) || l.unitCostUsd < 0)) { setError('تحقق من الكميات والتكاليف'); return; }
+    if (discountMode === 'pct' ? discountValue > 100 : discountValue > subtotal) { setError('خصم الفاتورة أكبر من مجموع البنود'); return; }
     setSaving(true); setError('');
     try {
       await purchasingApi.createInvoice({
         supplierPartyId: supplier.id, billDate, dueDate, warehouseId, supplierRef: supplierRef.trim() || undefined, notes: notes.trim() || undefined,
         lines: lines.map(({ itemId, quantity, unitCostUsd, discountPct }) => ({ itemId, quantity, unitCostUsd, discountPct })),
+        discountPct: discountMode === 'pct' && discountValue > 0 ? discountValue : undefined,
+        discountAmountUsd: discountMode === 'usd' && discountValue > 0 ? discountValue : undefined,
       });
       toast.success('تم حفظ فاتورة الشراء كمسودة');
       reset(); onSaved(); onClose();
@@ -110,9 +118,19 @@ export default function PurchaseInvoiceDialog({ open, onClose, onSaved }: { open
               ))}
             </TableBody>
           </Table>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
             <Button variant="outlined" onClick={() => setPicking(true)}>＋ إضافة أصناف</Button>
-            <Typography variant="h6" fontWeight={800}>الإجمالي: ${money(total)}</Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField select size="small" label="خصم على الفاتورة" value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')} SelectProps={{ native: true }} sx={{ width: 150 }}>
+                <option value="pct">نسبة %</option>
+                <option value="usd">مبلغ $</option>
+              </TextField>
+              <TextField size="small" type="number" inputProps={{ min: 0, max: discountMode === 'pct' ? 100 : undefined, step: '0.01' }} value={discountValue} onChange={(e) => setDiscountValue(Number(e.target.value))} sx={{ width: 110 }} />
+            </Stack>
+            <Box textAlign="left">
+              {discount > 0 ? <Typography variant="body2" color="text.secondary">مجموع البنود ${money(subtotal)} − خصم ${money(discount)}</Typography> : null}
+              <Typography variant="h6" fontWeight={800}>الإجمالي: ${money(total)}</Typography>
+            </Box>
           </Stack>
         </Stack>
         <ItemPickerModal open={picking} mode="warehouse" title="اختيار الأصناف المشتراة" initialLocationId={warehouseId} onPick={addPicked} onClose={() => setPicking(false)} />

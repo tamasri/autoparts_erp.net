@@ -14,7 +14,9 @@ public sealed record CreateInvoiceCommand(
     decimal DeliveryFeeSyp,
     decimal DeliveryFeeUsd,
     IReadOnlyCollection<CreateInvoiceLineRequest> Lines,
-    string IdempotencyKey)
+    string IdempotencyKey,
+    decimal? DiscountPct = null,
+    decimal? DiscountAmountUsd = null)
     : IRequest<Result<InvoiceDto>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest
 {
     public string RequiredPermission => PermissionCodes.Invoices.Create;
@@ -33,6 +35,9 @@ public sealed class CreateInvoiceCommandValidator : AbstractValidator<CreateInvo
         RuleFor(x => x.DeliveryFeeSyp).GreaterThanOrEqualTo(0);
         RuleFor(x => x.DeliveryFeeUsd).GreaterThanOrEqualTo(0);
         RuleFor(x => x.Lines).NotNull().Must(x => x.Count > 0).WithMessage("At least one invoice line is required.");
+        RuleFor(x => x).Must(x => x.DiscountPct is null || x.DiscountAmountUsd is null).WithMessage("Give the invoice discount as a percentage or as an amount, not both.");
+        RuleFor(x => x.DiscountPct).InclusiveBetween(0, 100).When(x => x.DiscountPct is not null);
+        RuleFor(x => x.DiscountAmountUsd).GreaterThanOrEqualTo(0).When(x => x.DiscountAmountUsd is not null);
         RuleForEach(x => x.Lines).ChildRules(line =>
         {
             line.RuleFor(x => x.SkuId).NotEmpty();
@@ -196,22 +201,14 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
         }
 
         // Lines were inserted directly, so roll the header totals up now (a draft used to be saved with total 0).
-        await connection.ExecuteAsync(new CommandDefinition(
-            """
-            UPDATE invoices
-            SET subtotal_syp = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
-                subtotal_usd = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0),
-                total_syp = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * (COALESCE((SELECT SUM(line_total_syp) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_syp + delivery_fee_syp + tax_amount_syp),
-                total_usd = CASE WHEN invoice_type = 'RETURN' THEN -1 ELSE 1 END * (COALESCE((SELECT SUM(line_total_usd) FROM invoice_lines WHERE invoice_id = @InvoiceId), 0) - discount_amount_usd + delivery_fee_usd + tax_amount_usd),
-                updated_at = now(),
-                updated_by = @UpdatedBy
-            WHERE id = @InvoiceId;
-            """,
-            new { InvoiceId = invoiceId, UpdatedBy = _currentUser.UserId },
-            transaction,
-            cancellationToken: cancellationToken));
+        var discount = await InvoiceTotals.ApplyDiscountAsync(connection, transaction, invoiceId, request.DiscountPct, request.DiscountAmountUsd, cancellationToken);
+        if (discount.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<InvoiceDto>.Failure(discount.Error);
+        }
 
-        var invoice = await LoadInvoiceAsync(connection, transaction, invoiceId, cancellationToken);
+        var invoice = await InvoiceReader.LoadAsync(connection, transaction, invoiceId, cancellationToken);
         if (invoice is null)
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -220,85 +217,5 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
 
         await transaction.CommitAsync(cancellationToken);
         return Result<InvoiceDto>.Success(invoice);
-    }
-
-    private static async Task<InvoiceDto?> LoadInvoiceAsync(DbConnection connection, DbTransaction transaction, Guid invoiceId, CancellationToken cancellationToken)
-    {
-        var header = await connection.QuerySingleOrDefaultAsync<InvoiceHeaderRow>(
-            new CommandDefinition(
-                """
-                SELECT
-                    i.id AS Id,
-                    i.invoice_number AS InvoiceNumber,
-                    i.status AS Status,
-                    i.invoice_type AS Type,
-                    i.customer_id AS CustomerId,
-                    c.code AS CustomerCode,
-                    c.name AS CustomerName,
-                    i.invoice_date AS InvoiceDate,
-                    i.due_date AS DueDate,
-                    i.total_syp AS TotalSyp,
-                    i.total_usd AS TotalUsd,
-                    i.paid_syp AS PaidSyp,
-                    i.paid_usd AS PaidUsd
-                FROM invoices i
-                INNER JOIN customers c ON c.id = i.customer_id
-                WHERE i.id = @InvoiceId;
-                """,
-                new { InvoiceId = invoiceId },
-                transaction,
-                cancellationToken: cancellationToken));
-
-        if (header is null)
-        {
-            return null;
-        }
-
-        var lines = (await connection.QueryAsync<InvoiceLineDto>(
-            new CommandDefinition(
-                """
-                SELECT
-                    il.id AS Id,
-                    il.line_number AS LineNumber,
-                    il.sku_id AS SkuId,
-                    s.code AS SkuCode,
-                    s.name AS SkuName,
-                    il.batch_id AS BatchId,
-                    il.location_id AS LocationId,
-                    il.quantity AS Quantity,
-                    il.unit_price_syp AS UnitPriceSyp,
-                    il.unit_price_usd AS UnitPriceUsd,
-                    il.discount_pct AS DiscountPct,
-                    il.line_total_syp AS LineTotalSyp,
-                    il.line_total_usd AS LineTotalUsd,
-                    il.quantity * il.cost_price_syp AS GrossMarginSyp,
-                    il.quantity * il.cost_price_usd AS GrossMarginUsd,
-                    CASE WHEN il.line_total_syp = 0 THEN 0 ELSE ((il.line_total_syp - (il.quantity * il.cost_price_syp)) / il.line_total_syp) * 100 END AS GrossMarginPct,
-                    il.is_price_override AS IsPriceOverride,
-                    il.price_override_reason AS OverrideReason
-                FROM invoice_lines il
-                INNER JOIN skus s ON s.id = il.sku_id
-                WHERE il.invoice_id = @InvoiceId
-                ORDER BY il.line_number;
-                """,
-                new { InvoiceId = invoiceId },
-                transaction,
-                cancellationToken: cancellationToken))).ToArray();
-
-        return InvoiceMappings.ToInvoiceDto(
-            header.Id,
-            header.InvoiceNumber ?? string.Empty,
-            header.Status,
-            header.Type,
-            header.CustomerId,
-            header.CustomerCode,
-            header.CustomerName,
-            header.InvoiceDate,
-            header.DueDate,
-            header.TotalSyp,
-            header.TotalUsd,
-            header.PaidSyp,
-            header.PaidUsd,
-            lines);
     }
 }

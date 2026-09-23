@@ -56,7 +56,9 @@ public sealed class InvoicesModule : ICarterModule
                     request.DeliveryFeeSyp,
                     request.DeliveryFeeUsd,
                     request.Lines,
-                    EndpointRequestHelpers.GetIdempotencyKey(httpContext)), cancellationToken);
+                    EndpointRequestHelpers.GetIdempotencyKey(httpContext),
+                    request.DiscountPct,
+                    request.DiscountAmountUsd), cancellationToken);
                 return result.ToApiResult();
             })
             .WithIdempotency();
@@ -78,6 +80,9 @@ public sealed class InvoicesModule : ICarterModule
                 return result.ToApiResult();
             })
             .WithIdempotency();
+
+        group.MapPut("/{id:guid}/discount", async Task<IResult> (Guid id, SetInvoiceDiscountRequest request, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new SetInvoiceDiscountCommand(id, request.DiscountPct, request.DiscountAmountUsd), cancellationToken)).ToApiResult());
 
         group.MapPost("/{id:guid}/confirm", async Task<IResult> (Guid id, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {

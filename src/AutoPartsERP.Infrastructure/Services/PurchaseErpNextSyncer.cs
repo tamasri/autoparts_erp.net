@@ -37,7 +37,7 @@ public sealed class PurchaseErpNextSyncer
         var bill = await connection.QuerySingleOrDefaultAsync<BillRow>(new CommandDefinition(
             """
             SELECT p.bill_number AS BillNumber, pa.id AS PartyId, COALESCE(NULLIF(pa.display_name, ''), pa.display_name_ar) AS SupplierName,
-                   pa.tax_number AS TaxNumber, p.bill_date AS BillDate, p.due_date AS DueDate
+                   pa.tax_number AS TaxNumber, p.bill_date AS BillDate, p.due_date AS DueDate, p.discount_amount_usd AS DiscountAmountUsd
             FROM purchase_invoices p INNER JOIN parties pa ON pa.id = p.supplier_party_id
             WHERE p.id = @billId AND p.status = 'POSTED';
             """,
@@ -68,7 +68,8 @@ public sealed class PurchaseErpNextSyncer
         var result = await _erpNextClient.SyncPurchaseInvoiceAsync(
             new ErpNextPurchaseInvoiceSync(
                 billId, bill.BillNumber, bill.SupplierName, bill.BillDate, bill.DueDate, false,
-                lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitCost, l.DiscountPercent)).ToList()),
+                lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitCost, l.DiscountPercent)).ToList(),
+                bill.DiscountAmountUsd),
             cancellationToken);
 
         await ErpNextSyncLogWriter.WriteAsync(connection, InvoiceEntity, billId, InvoiceDoctype, result.IsSuccess ? result.Value : null,
@@ -215,7 +216,7 @@ public sealed class PurchaseErpNextSyncer
         return Result.Success();
     }
 
-    private sealed record BillRow(string BillNumber, Guid PartyId, string SupplierName, string? TaxNumber, DateOnly BillDate, DateOnly DueDate);
+    private sealed record BillRow(string BillNumber, Guid PartyId, string SupplierName, string? TaxNumber, DateOnly BillDate, DateOnly DueDate, decimal DiscountAmountUsd);
 
     private sealed record BillLineRow(Guid SkuId, string ItemCode, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice, decimal Quantity, decimal UnitCost, decimal DiscountPercent);
 

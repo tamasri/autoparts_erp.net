@@ -72,7 +72,7 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~30 Carter modules; 19 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
+- ~30 Carter modules; 21 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
@@ -297,3 +297,22 @@ AGENT_ONBOARDING.md                                  [MODIFY]
   warehouses and warehouse-manager approval of transfers (design: `user_warehouses(user_id → asp_net_users, warehouse_id → locations, is_manager)`; approvers resolved in one service used by `MakerCheckerBehavior` and
   `GovernanceService`; both the source and destination manager must approve; SYSTEM_ADMIN exempt; do not change who may approve other requests), 10 ERPNext-grade KPIs.
 - **Verified locally:** ~60 API checks on Postgres + the stateful mock ledger (230 vouchers paged and stitched, dual approval incl. replay, period locks, users); 84 unit + 33 integration tests; `tsc` and build clean.
+
+### 2026-09-23 — Claude (items 9 and 6: warehouse-manager approval, invoice-level discount)
+- **Item 9 — per-user warehouses and transfer approval** (`7bf61b0`). What existed: `IMakerCheckerRequest`, `MakerCheckerBehavior` (SYSTEM_ADMIN exempt), `GovernanceService`. Built on them:
+  migration 20 (`user_warehouses(user_id, warehouse_id → top-level locations, is_manager, assigned_by/at)`, `approval_requests.scope_warehouse_ids uuid[]`); marker `IWarehouseTransferRequest` on ship-transfer,
+  direct stock transfer and transfer request; `IWarehouseAccess` resolves the two top-level warehouses of a transfer (recursive CTE; a shelf move inside one warehouse needs no approval);
+  `TransferApprovalPolicy` (pure, 15 tests) decides who may approve and when it completes. Rules: the requester's own managed side counts as consent; every other side needs one of its managers;
+  a manager of any warehouse on the transfer may approve (owner decision §5.4-2); the general APPROVER role does not approve transfers; SYSTEM_ADMIN approves anything. A duplicate pending request is 409.
+  Assigning warehouses: `GET/PUT /users/{id}/warehouses` (`users.manage-roles`, governed, no self-change). New role `WAREHOUSE` (25 permissions). Bug fixed: an order already in transit could be shipped again.
+- **Item 6 — discount on the whole invoice** (sales, returns, purchase bills), on top of each line's discount. Migration 21: `invoices.discount_pct`, `purchase_invoices.subtotal_usd/discount_pct/discount_amount_usd`,
+  SQL function `recalc_invoice_totals(uuid)` = the only place a sales invoice's totals are computed (it replaced three copies; one ignored the sign of returns). Rule in `DocumentDiscount` (tested):
+  a percentage of the lines **or** a dollar amount, never both, never more than the lines; a percentage follows the lines when they change. API: `discountPct`/`discountAmountUsd` on create (sales and purchase),
+  `PUT /invoices/{id}/discount` (draft only). `InvoiceDto.amounts` shows subtotal, discount, delivery. ERPNext: `apply_discount_on = "Net Total"` + `discount_amount` (negative on a return).
+  Purchase: the bill discount lowers each unit's cost proportionally (factor total/subtotal) in the weighted average on post and in the reversal on void.
+- **Bugs found on the way:** the invoice detail page read `subtotalSyp/discountAmountSyp/deliveryFeeSyp` that the API never returned (now `amounts`); dividing Postgres numerics gives more digits than .NET `decimal`
+  holds (500 on posting a discounted bill) — round in SQL before Dapper reads it.
+- **Verified locally:** unit 112, integration 33; live against Postgres + mock ERPNext: item 9 31/31, item 6 30/30 (totals in both currencies, percent following lines, delivery change, refusals, draft-only,
+  PDF, ERPNext payloads for sale/return/no-discount/bill, weighted cost at the discounted price and its exact reversal); discount applied and removed in the browser on a draft invoice.
+- **Known gaps:** the delivery fee is still not sent to ERPNext (its Sales Invoice total is lower than ours by the fee); a RETURN is not linked to the invoice it returns, so it carries its own discount;
+  stock lists are not yet filtered by the user's warehouses (only approvals and assignment are); no purchase returns.

@@ -12,7 +12,9 @@ public sealed record CreatePurchaseInvoiceRequest(
     string? SupplierRef,
     Guid? FxRateId,
     string? Notes,
-    IReadOnlyList<PurchaseLineRequest> Lines);
+    IReadOnlyList<PurchaseLineRequest> Lines,
+    decimal? DiscountPct = null,
+    decimal? DiscountAmountUsd = null);
 
 public sealed record VoidPurchaseInvoiceRequest(string Reason);
 
@@ -61,7 +63,10 @@ public sealed record PurchaseInvoiceDetailDto(
     string? Notes,
     string? VoidReason,
     DateTimeOffset? PostedAt,
-    IReadOnlyCollection<PurchaseLineDto> Lines);
+    IReadOnlyCollection<PurchaseLineDto> Lines,
+    decimal SubtotalUsd,
+    decimal? DiscountPct,
+    decimal DiscountAmountUsd);
 
 public sealed record SupplierPaymentDto(
     Guid Id,

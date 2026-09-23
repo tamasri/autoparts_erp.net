@@ -58,4 +58,18 @@ public sealed record InvoiceDto(
     string DueDateDisplay,
     string TotalSypInWords,
     string TotalUsdInWords,
-    IReadOnlyCollection<InvoiceLineDto> Lines);
+    IReadOnlyCollection<InvoiceLineDto> Lines,
+    InvoiceAmountsDto Amounts);
+
+/// <summary>
+/// How an invoice's total is made up: lines (after their own discounts), minus the invoice discount, plus the delivery fee.
+/// <c>DiscountPct</c> is set when the discount is a percentage of the lines; otherwise it is the fixed amount shown.
+/// </summary>
+public sealed record InvoiceAmountsDto(
+    decimal SubtotalSyp,
+    decimal SubtotalUsd,
+    decimal? DiscountPct,
+    decimal DiscountAmountSyp,
+    decimal DiscountAmountUsd,
+    decimal DeliveryFeeSyp,
+    decimal DeliveryFeeUsd);

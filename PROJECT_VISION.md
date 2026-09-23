@@ -222,7 +222,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] Payments **screen** (create, partial/multiple, allocate, reverse).
 - [x] Chart of accounts and account mapping shown from ERPNext; ERPNext document browser (read-only).
 - [ ] Bank/cash accounts (ERPNext accounts) and per-account statements.
-- [ ] Purchase invoices, purchase returns, discounts (ERPNext Purchase Invoice); quick-add supplier; bulk pay/receive.
+- [x] Purchase invoices; discount on the whole sales/purchase invoice (percentage or amount, sent to ERPNext as Additional Discount) — 2026-09-23.
+- [ ] Purchase returns; quick-add supplier; bulk pay/receive; delivery fee to ERPNext.
 - [ ] Financial reports read from ERPNext: trial balance, P&L, balance sheet, AR/AP aging, general ledger.
 - [ ] Taxes (ERPNext tax templates) and currency handling on top of `fx_rates` (company currency USD).
 - [ ] Remove `monthly_pl_summary` / `RefreshMonthlyPlJob` once the ERPNext-backed reports replace them.
@@ -243,6 +244,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] **Menu restructured:** related screens are one menu entry with section tabs (sales documents, stock, warehouse operations, users and roles); the raw ERPNext document browser and the duplicate ERPNext-documents screen were removed.
 - [x] Purchasing roles (ACCOUNTANT, PURCHASER), supplier statement, cost restored when a bill is voided, period locks per module (SALES / PURCHASES / PAYMENTS).
 - [x] Credit limit kept in USD only (lira shown from the latest saved rate); "العميل" is "الزبون" in every Arabic label.
+- [x] **Per-user warehouses (2026-09-23):** admin assigns warehouses and manager status; transfers between warehouses wait for the managers of the warehouses involved (SYSTEM_ADMIN exempt). Stock lists are not filtered by warehouse yet.
 - [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
 - [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 
@@ -263,7 +265,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       salesperson points; date + tag filters; Excel export everywhere (ClosedXML is in place).
 
 #### PHASE 5 — Security & administration  · `Status: Not Started`
-- [ ] Role-permission editor (the users editor is done, 2026-09-21), user ↔ warehouse scoping, one-click database backup (scheduled
+- [ ] Role-permission editor (the users editor is done, 2026-09-21), user ↔ warehouse scoping of stock lists (assignment and transfer approval done), one-click database backup (scheduled
       `pg_dump`, rotation, admin-only download), catalog categories, batches, warranty and reason-code screens.
 
 #### PHASE 6 — Real AI  · `Status: Not Started`
@@ -292,7 +294,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 
 ### 5.4 Decisions from the owner (2026-09-22)
 1. **Company currency — display layer only.** No data or ERPNext-currency change. Every amount keeps its USD value in `*_usd` columns and in ERPNext; the UI shows the lira equivalent (from `useFxMid`) in small type next to the USD figure everywhere an amount appears. Still open: build this (item 2 of the D16-adjacent task list) — a shared `Money`-style component used across invoices, payments, purchasing, receivables/payables, statements, reports, dashboard, stock value.
-2. **Warehouse-manager approval scope.** A warehouse manager may approve a transfer **into or out of any warehouse they manage** — not only the two warehouses on that specific transfer. Manager status on a warehouse is granted only by an administrator (via the user's warehouse assignment), never self-service. SYSTEM_ADMIN needs no approval. A manager's authority is scoped to transfers; it does not extend to other governed request types. Still open: build `user_warehouses` (migration 21), the approver-resolution service, and wire it into `MakerCheckerBehavior`/`GovernanceService` in one place (item 9).
+2. **Warehouse-manager approval scope.** A warehouse manager may approve a transfer **into or out of any warehouse they manage** — not only the two warehouses on that specific transfer. Manager status on a warehouse is granted only by an administrator (via the user's warehouse assignment), never self-service. SYSTEM_ADMIN needs no approval. A manager's authority is scoped to transfers; it does not extend to other governed request types. **Done 2026-09-23** (migration 20, `IWarehouseAccess` + `TransferApprovalPolicy`, wired in `MakerCheckerBehavior`/`GovernanceService`).
 
 ## 6. AI layer — truthful status
 

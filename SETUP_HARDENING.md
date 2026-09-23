@@ -95,6 +95,8 @@ password (generates one if it is still a placeholder) → checks Postgres reacha
 files → **builds the frontend into `frontend/dist`** → `docker compose down/up --build` → waits for `/health` → checks
 the HTTPS edge.
 
+Migrations run when the API starts (20 = user warehouses, 21 = invoice discounts, 2026-09-23); nothing to run by hand.
+
 **Do not** run `docker compose up` by hand:
 - it does not rebuild `frontend/dist` (the UI would stay stale);
 - without `--env-file .env.vps` the api boots with **blank** configuration and nginx returns 502.
@@ -152,6 +154,8 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 | "The ticked lines do not match the statement" | statement balance ≠ previously cleared + ticked lines | tick the lines that are on the statement; the difference is shown live |
 | API stops at start-up with "Database:ConnectionString is not configured" (or Redis) | outside Development the app no longer falls back to a local default | set the missing value in `.env.vps` (production) or run `scripts/init-dev-settings.ps1` (development) |
 | A locked period still accepts entries for a few minutes / a locked month cannot be unlocked | (fixed 2026-09-21) the lock answer was cached for 10 minutes and never invalidated; the lock commands were gated by the lock they manage | deploy the fix; nothing to do in the data |
+| 500 "Numeric value does not fit in a System.Decimal" | a SQL division returned more digits than .NET decimal holds | round the expression in SQL (fixed for purchase bill posting, 2026-09-23) |
+| A transfer stays "بانتظار الموافقة" | it needs the manager of each other warehouse involved (item 9) | give a user manager status on that warehouse (Users → warehouses), or approve as SYSTEM_ADMIN |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
 ---

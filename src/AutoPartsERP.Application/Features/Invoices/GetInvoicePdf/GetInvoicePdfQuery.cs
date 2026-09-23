@@ -39,6 +39,9 @@ public sealed class GetInvoicePdfQueryHandler : IRequestHandler<GetInvoicePdfQue
                 new ExportField("الزبون", $"{invoice.CustomerName} ({invoice.CustomerCode})"),
                 new ExportField("تاريخ الفاتورة", invoice.InvoiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
                 new ExportField("تاريخ الاستحقاق", invoice.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                new ExportField("مجموع البنود ($)", N(Math.Abs(invoice.Amounts.SubtotalUsd))),
+                new ExportField(invoice.Amounts.DiscountPct is { } pct ? $"خصم الفاتورة {N(pct)}% ($)" : "خصم الفاتورة ($)", invoice.Amounts.DiscountAmountUsd == 0 ? null : N(invoice.Amounts.DiscountAmountUsd)),
+                new ExportField("أجور التوصيل ($)", invoice.Amounts.DeliveryFeeUsd == 0 ? null : N(invoice.Amounts.DeliveryFeeUsd)),
                 new ExportField("الإجمالي (ل.س)", N(invoice.TotalSyp)),
                 new ExportField("الإجمالي ($)", N(invoice.TotalUsd)),
                 new ExportField("المتبقي ($)", N(invoice.BalanceUsd))

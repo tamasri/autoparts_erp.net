@@ -20,7 +20,12 @@ public sealed record CreateInvoiceRequest(
     Guid? SalesRepId,
     decimal DeliveryFeeSyp,
     decimal DeliveryFeeUsd,
-    IReadOnlyCollection<CreateInvoiceLineRequest> Lines);
+    IReadOnlyCollection<CreateInvoiceLineRequest> Lines,
+    decimal? DiscountPct = null,
+    decimal? DiscountAmountUsd = null);
+
+/// <summary>The discount on the whole invoice: a percentage of the lines or a dollar amount (not both); neither removes it.</summary>
+public sealed record SetInvoiceDiscountRequest(decimal? DiscountPct, decimal? DiscountAmountUsd);
 
 public sealed record AddInvoiceLineRequest(
     Guid InvoiceId,

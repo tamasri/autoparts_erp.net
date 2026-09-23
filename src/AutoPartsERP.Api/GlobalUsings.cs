@@ -46,6 +46,7 @@ global using AutoPartsERP.Application.Features.Inventory.TransferStock;
 global using AutoPartsERP.Application.Features.InventoryAlerts;
 global using AutoPartsERP.Application.Features.Items;
 global using AutoPartsERP.Application.Features.Invoices.AddInvoiceLine;
+global using AutoPartsERP.Application.Features.Invoices.SetInvoiceDiscount;
 global using AutoPartsERP.Application.Features.Invoices.ConfirmInvoice;
 global using AutoPartsERP.Application.Features.Invoices.CreateInvoice;
 global using AutoPartsERP.Application.Features.Invoices.GetInvoiceById;

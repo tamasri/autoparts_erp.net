@@ -29,7 +29,7 @@ public sealed class SalesInvoiceErpNextSyncer
             """
             SELECT i.invoice_number AS InvoiceNumber, i.invoice_type AS Type, i.original_invoice_id AS OriginalInvoiceId,
                    p.id AS PartyId, p.display_name AS CustomerName, p.tax_number AS TaxNumber,
-                   i.invoice_date AS InvoiceDate, i.due_date AS DueDate
+                   i.invoice_date AS InvoiceDate, i.due_date AS DueDate, i.discount_amount_usd AS DiscountAmountUsd
             FROM invoices i
             INNER JOIN customers c ON c.id = i.customer_id
             INNER JOIN parties p ON p.id = c.party_id
@@ -85,7 +85,8 @@ public sealed class SalesInvoiceErpNextSyncer
                     header.DueDate,
                     lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitPrice, l.DiscountPercent)).ToList(),
                     isReturn,
-                    returnAgainst),
+                    returnAgainst,
+                    header.DiscountAmountUsd),
                 cancellationToken);
 
             await ErpNextSyncLogWriter.WriteAsync(
@@ -193,7 +194,7 @@ public sealed class SalesInvoiceErpNextSyncer
     }
 
     private sealed record InvoiceHeader(
-        string? InvoiceNumber, string Type, Guid? OriginalInvoiceId, Guid PartyId, string CustomerName, string? TaxNumber, DateOnly InvoiceDate, DateOnly DueDate);
+        string? InvoiceNumber, string Type, Guid? OriginalInvoiceId, Guid PartyId, string CustomerName, string? TaxNumber, DateOnly InvoiceDate, DateOnly DueDate, decimal DiscountAmountUsd);
 
     private sealed record InvoiceLineRow(
         Guid SkuId, string ItemCode, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice,

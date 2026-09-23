@@ -12,6 +12,9 @@ export type CreatePurchaseInvoice = {
   supplierRef?: string;
   notes?: string;
   lines: PurchaseLineInput[];
+  /** Discount on the whole bill: a percentage of the lines or a dollar amount, never both. */
+  discountPct?: number;
+  discountAmountUsd?: number;
 };
 
 export type CreateSupplierPayment = {
@@ -34,6 +37,7 @@ export type PurchaseInvoiceRow = {
 export type PurchaseInvoiceDetail = {
   invoice: PurchaseInvoiceRow; warehouseId: string; notes?: string | null; voidReason?: string | null; postedAt?: string | null;
   lines: Array<{ id: string; lineNumber: number; itemCode: string; itemName: string; quantity: number; unitCostUsd: number; discountPct: number; lineTotalUsd: number }>;
+  subtotalUsd: number; discountPct: number | null; discountAmountUsd: number;
 };
 
 export type SupplierPaymentRow = {

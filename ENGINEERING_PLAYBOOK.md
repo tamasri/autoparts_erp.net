@@ -150,6 +150,13 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **Period locks [enforced by tests]:** the check reads a short-lived cache; every lock/unlock must call `IPeriodLockService.InvalidateCacheAsync`. The lock/unlock commands themselves are NOT `IPeriodSensitiveRequest`. A command that is period-sensitive by request date implements `IPeriodSensitiveRequest` with that date; one that learns the date from the database checks `IPeriodLockService` in its handler — never `OperationDate = now`.
 - **Governed commands never carry secrets [convention]:** an approval stores the request as JSON in `approval_requests`. Passwords and keys go through ungoverned, audited commands (e.g. admin password reset).
 - **Approval exemptions live in one place [convention]:** SYSTEM_ADMIN's exemption is in `MakerCheckerBehavior`; approver resolution (who may approve what) must be one service used by `GovernanceService`, not per handler.
+- **Transfers between warehouses [enforced by tests]:** a command that moves stock between warehouses implements `IWarehouseTransferRequest` and is resolved in `WarehouseAccess.ResolveTransferAsync`; the decision is `TransferApprovalPolicy` (pure). Do not check warehouse managers anywhere else. A warehouse is a top-level location; moves inside one warehouse are not transfers.
+
+### 2.3f Invoice totals and discounts
+- **One formula.** A sales invoice's subtotal/discount/total are written only by `recalc_invoice_totals(id)` (via `InvoiceTotals`); any code that changes lines, the fee or the discount calls it. Never update `total_*` by hand.
+- **Invoice discount = percentage or amount** (`DocumentDiscount.Resolve`), stored positive; a RETURN's subtotal and total are negative. Line discounts stay on the lines. Only a DRAFT's discount can change.
+- **ERPNext:** send it as `apply_discount_on = "Net Total"` + `discount_amount` (`WithInvoiceDiscount`), negative on a return. For purchases the discount also lowers the item cost (factor total/subtotal) on post and on void — keep both queries identical.
+- **Numeric division in SQL:** `numeric / numeric` can return more than 28 significant digits and Dapper then throws "Numeric value does not fit in a System.Decimal". `round(..., 6)` any computed ratio you read into C#.
 - Verify accounting changes with the stateful mock ledger approach: a fake ERPNext that really posts Journal Entries to an in-memory GL and answers grouped `GL Entry` queries, then check TB/BS/P&L totals by hand.
 
 ### 2.4 AI rules

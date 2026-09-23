@@ -43,8 +43,6 @@ public sealed class UpdateDeliveryFeeCommandHandler : IRequestHandler<UpdateDeli
             UPDATE invoices
             SET delivery_fee_syp = @DeliveryFeeSyp,
                 delivery_fee_usd = @DeliveryFeeUsd,
-                total_syp = subtotal_syp - discount_amount_syp + @DeliveryFeeSyp + tax_amount_syp,
-                total_usd = subtotal_usd - discount_amount_usd + @DeliveryFeeUsd + tax_amount_usd,
                 updated_at = now(),
                 updated_by = @UpdatedBy
             WHERE id = @InvoiceId
@@ -59,8 +57,12 @@ public sealed class UpdateDeliveryFeeCommandHandler : IRequestHandler<UpdateDeli
             },
             cancellationToken: cancellationToken));
 
-        return updated == 0
-            ? Result<Guid>.Failure(new Error("Invoice.InvalidState", "Delivery fee can only be updated on draft invoices."))
-            : Result<Guid>.Success(request.InvoiceId);
+        if (updated == 0)
+        {
+            return Result<Guid>.Failure(new Error("Invoice.InvalidState", "Delivery fee can only be updated on draft invoices."));
+        }
+
+        await InvoiceTotals.RecalculateAsync(connection, null, request.InvoiceId, cancellationToken);
+        return Result<Guid>.Success(request.InvoiceId);
     }
 }

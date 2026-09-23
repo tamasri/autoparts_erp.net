@@ -102,6 +102,9 @@ export default function InvoiceWorkspace(): JSX.Element {
   const [deliveryFeeSyp, setDeliveryFeeSyp] = useState(0);
   const [deliveryFeeUsd, setDeliveryFeeUsd] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
+  // Discount on the whole invoice, on top of each line's own discount.
+  const [discountMode, setDiscountMode] = useState<'pct' | 'usd'>('pct');
+  const [discountValue, setDiscountValue] = useState(0);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
@@ -210,10 +213,22 @@ export default function InvoiceWorkspace(): JSX.Element {
     }
   }
 
-  const totals = useMemo(() => lines.reduce((acc, l) => {
+  const subtotal = useMemo(() => lines.reduce((acc, l) => {
     const t = lineTotals(l);
     return { syp: acc.syp + t.syp, usd: acc.usd + t.usd };
-  }, { syp: Number(deliveryFeeSyp), usd: Number(deliveryFeeUsd) }), [lines, deliveryFeeSyp, deliveryFeeUsd]);
+  }, { syp: 0, usd: 0 }), [lines]);
+
+  // Same rule as the server: a percentage follows the lines; a dollar amount is converted at the invoice's rate.
+  const discount = useMemo(() => {
+    const v = Math.max(Number(discountValue) || 0, 0);
+    if (discountMode === 'pct') return { syp: subtotal.syp * Math.min(v, 100) / 100, usd: subtotal.usd * Math.min(v, 100) / 100 };
+    return { syp: v * Number(fxRate?.midRate ?? 0), usd: v };
+  }, [discountMode, discountValue, subtotal, fxRate]);
+
+  const totals = useMemo(() => ({
+    syp: subtotal.syp - discount.syp + Number(deliveryFeeSyp),
+    usd: subtotal.usd - discount.usd + Number(deliveryFeeUsd),
+  }), [subtotal, discount, deliveryFeeSyp, deliveryFeeUsd]);
 
   // The credit limit is kept in dollars; what the customer already owes comes from their statement.
   const [owedUsd, setOwedUsd] = useState(0);
@@ -242,6 +257,8 @@ export default function InvoiceWorkspace(): JSX.Element {
       if (!isReturn && l.item.isBatchTracked && !l.batchId) return `اختر الدفعة للصنف ${l.code}`;
       if (belowMinimum(l) && !l.overrideReason.trim()) return `السعر أقل من الحد الأدنى للصنف ${l.code} — اكتب سبب التجاوز`;
     }
+    if (discountMode === 'pct' && Number(discountValue) > 100) return 'نسبة خصم الفاتورة لا تتجاوز 100%';
+    if (discountMode === 'usd' && Number(discountValue) > subtotal.usd) return 'خصم الفاتورة أكبر من مجموع البنود';
     return '';
   }
 
@@ -273,6 +290,8 @@ export default function InvoiceWorkspace(): JSX.Element {
         salesRepId: customerRecord?.assignedSalesRep || undefined,
         deliveryFeeSyp: Number(deliveryFeeSyp),
         deliveryFeeUsd: Number(deliveryFeeUsd),
+        discountPct: discountMode === 'pct' && Number(discountValue) > 0 ? Number(discountValue) : undefined,
+        discountAmountUsd: discountMode === 'usd' && Number(discountValue) > 0 ? Number(discountValue) : undefined,
         lines: lines.map((l) => ({
           skuId: l.skuId,
           batchId: l.batchId || undefined,
@@ -448,6 +467,24 @@ export default function InvoiceWorkspace(): JSX.Element {
               </div>
             )}
 
+            <div style={{ marginTop: 20, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <label className="vex-label" style={{ minWidth: 160 }}>
+                خصم على الفاتورة
+                <select id="invoice-discount-mode" className="vex-select" value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')}>
+                  <option value="pct">نسبة %</option>
+                  <option value="usd">مبلغ $</option>
+                </select>
+              </label>
+              <label className="vex-label" style={{ width: 140 }}>
+                {discountMode === 'pct' ? 'النسبة %' : 'المبلغ $'}
+                <input id="invoice-discount-value" type="number" min={0} max={discountMode === 'pct' ? 100 : undefined} className="vex-input" value={discountValue} onChange={(e) => setDiscountValue(Number(e.target.value))} />
+              </label>
+              <span style={{ fontSize: 13, color: 'var(--txt-secondary)', paddingBottom: 10 }}>
+                مجموع البنود {fmt(subtotal.syp)} ل.س · ${fmt(subtotal.usd)}
+                {discount.usd > 0 ? <> — الخصم {fmt(discount.syp)} ل.س · ${fmt(discount.usd)}</> : null}
+              </span>
+            </div>
+
             <div style={{ marginTop: 20, padding: '16px 20px', background: 'var(--clr-primary-light)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--clr-primary-dark)' }}>الإجمالي التقديري (شامل رسوم التوصيل)</span>
               <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--clr-primary)' }}>
@@ -478,6 +515,8 @@ export default function InvoiceWorkspace(): JSX.Element {
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-primary-dark)', marginBottom: 10 }}>الملخص المالي</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
                   <Row label="عدد الأسطر" value={String(lines.length)} />
+                  <Row label="مجموع البنود" value={`${fmt(subtotal.syp)} ل.س · $${fmt(subtotal.usd)}`} />
+                  {discount.usd > 0 ? <Row label={discountMode === 'pct' ? `خصم الفاتورة ${fmt(discountValue)}%` : 'خصم الفاتورة'} value={`− ${fmt(discount.syp)} ل.س · $${fmt(discount.usd)}`} /> : null}
                   <Row label="رسوم التوصيل" value={`${fmt(deliveryFeeSyp)} ل.س · $${fmt(deliveryFeeUsd)}`} />
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #a5a0ff', paddingTop: 8, marginTop: 4 }}>
                     <span style={{ fontWeight: 700, color: 'var(--clr-primary-dark)' }}>الإجمالي</span>

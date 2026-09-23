@@ -18,45 +18,30 @@ internal static class InvoiceMappings
         return $"{sign}{wholeWords} {currencyName}{fractionPart} فقط لا غير";
     }
 
-    public static InvoiceDto ToInvoiceDto(
-        Guid id,
-        string invoiceNumber,
-        string status,
-        string type,
-        Guid customerId,
-        string customerCode,
-        string customerName,
-        DateOnly invoiceDate,
-        DateOnly dueDate,
-        decimal totalSyp,
-        decimal totalUsd,
-        decimal paidSyp,
-        decimal paidUsd,
-        IReadOnlyCollection<InvoiceLineDto> lines)
-    {
-        return new InvoiceDto(
-            id,
-            invoiceNumber,
-            status,
-            type,
-            customerId,
-            customerCode,
-            customerName,
-            invoiceDate,
-            dueDate,
-            totalSyp,
-            totalUsd,
-            paidSyp,
-            paidUsd,
-            totalSyp - paidSyp,
-            totalUsd - paidUsd,
-            status.Humanize(LetterCasing.Title),
-            type.Humanize(LetterCasing.Title),
-            GetDueDateDisplay(dueDate),
-            ToArabicWords(totalSyp, "ليرة سورية"),
-            ToArabicWords(totalUsd, "دولار أمريكي"),
-            lines);
-    }
+    public static InvoiceDto ToInvoiceDto(InvoiceHeaderRow h, IReadOnlyCollection<InvoiceLineDto> lines) =>
+        new(
+            h.Id,
+            h.InvoiceNumber ?? string.Empty,
+            h.Status,
+            h.Type,
+            h.CustomerId,
+            h.CustomerCode,
+            h.CustomerName,
+            h.InvoiceDate,
+            h.DueDate,
+            h.TotalSyp,
+            h.TotalUsd,
+            h.PaidSyp,
+            h.PaidUsd,
+            h.TotalSyp - h.PaidSyp,
+            h.TotalUsd - h.PaidUsd,
+            h.Status.Humanize(LetterCasing.Title),
+            h.Type.Humanize(LetterCasing.Title),
+            GetDueDateDisplay(h.DueDate),
+            ToArabicWords(h.TotalSyp, "ليرة سورية"),
+            ToArabicWords(h.TotalUsd, "دولار أمريكي"),
+            lines,
+            new InvoiceAmountsDto(h.SubtotalSyp, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountSyp, h.DiscountAmountUsd, h.DeliveryFeeSyp, h.DeliveryFeeUsd));
 
     public static string GetDueDateDisplay(DateOnly dueDate)
     {

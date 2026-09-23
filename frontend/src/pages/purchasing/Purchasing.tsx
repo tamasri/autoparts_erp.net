@@ -32,6 +32,9 @@ async function billDocument(id: string): Promise<ExportDocument> {
     fields: [
       { label: 'المورّد', value: i.supplierName }, { label: 'رقم فاتورة المورّد', value: i.supplierRef }, { label: 'التاريخ', value: ymd(i.billDate) },
       { label: 'الاستحقاق', value: ymd(i.dueDate) }, { label: 'المدفوع ($)', value: money(i.paidUsd) }, { label: 'المتبقي ($)', value: money(i.balanceUsd) },
+      ...(d.discountAmountUsd > 0
+        ? [{ label: 'مجموع البنود ($)', value: money(d.subtotalUsd) }, { label: d.discountPct ? `خصم الفاتورة ${d.discountPct}% ($)` : 'خصم الفاتورة ($)', value: money(d.discountAmountUsd) }]
+        : []),
     ],
     tables: [{
       title: 'الأصناف', columns: ['#', 'الرمز', 'الصنف', 'الكمية', 'التكلفة ($)', 'الخصم %', 'الإجمالي ($)'],

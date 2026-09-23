@@ -141,7 +141,7 @@ public sealed partial class ErpNextClient : IErpNextClient
                 ["items"] = lines,
                 ["is_return"] = invoice.IsReturn ? 1 : 0,
                 ["docstatus"] = 1
-            }.WithReturnAgainst(invoice.ReturnAgainst),
+            }.WithReturnAgainst(invoice.ReturnAgainst).WithInvoiceDiscount(invoice.DiscountAmount, invoice.IsReturn),
             cancellationToken);
     }
 
@@ -304,7 +304,7 @@ public sealed partial class ErpNextClient : IErpNextClient
                 ["remarks"] = $"AutoPartsERP purchase invoice {bill.BillNumber}",
                 ["items"] = items,
                 ["docstatus"] = 1
-            },
+            }.WithInvoiceDiscount(bill.DiscountAmount, bill.IsReturn),
             cancellationToken);
     }
 
@@ -633,6 +633,21 @@ internal static class ErpNextJsonExtensions
         if (!string.IsNullOrWhiteSpace(returnAgainst))
         {
             doc["return_against"] = returnAgainst;
+        }
+
+        return doc;
+    }
+
+    /// <summary>
+    /// The discount on the whole invoice, taken off the net total the way ERPNext's own "Additional Discount" does
+    /// (a return carries it negative, like its quantities). Nothing is added when there is no discount.
+    /// </summary>
+    public static JsonObject WithInvoiceDiscount(this JsonObject doc, decimal discountAmount, bool isReturn)
+    {
+        if (discountAmount != 0)
+        {
+            doc["apply_discount_on"] = "Net Total";
+            doc["discount_amount"] = isReturn ? -discountAmount : discountAmount;
         }
 
         return doc;
