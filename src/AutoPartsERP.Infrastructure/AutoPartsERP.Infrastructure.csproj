@@ -23,7 +23,7 @@
     <PackageReference Include="Dapper" Version="2.*" />
     <PackageReference Include="Npgsql" Version="9.*" />
     <!-- Audit.NET - replaces all custom audit code -->
-    <PackageReference Include="Audit.NET" Version="26.*" />
+    <PackageReference Include="Audit.NET" Version="33.*" />
     <PackageReference Include="Audit.EntityFramework.Core" Version="26.*" />
     <PackageReference Include="Audit.NET.PostgreSql" Version="26.*" />
     <!-- Background jobs - replaces custom Channel<T> + HostedService -->
