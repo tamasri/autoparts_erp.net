@@ -83,5 +83,12 @@ jobs:
             cd /opt/autoparts-erp
             docker load < api.tar.gz
             docker compose -f docker-compose.prod.yml up -d --no-deps api
-            docker compose -f docker-compose.prod.yml exec api dotnet ef database update || true
             rm api.tar.gz
+            # The API applies migrations itself on start-up and stops if one fails, so a healthy API is the success signal.
+            for i in $(seq 1 30); do
+              if docker compose -f docker-compose.prod.yml exec -T api wget -qO- http://localhost:8080/health/ready >/dev/null 2>&1; then
+                echo "API healthy"; exit 0
+              fi
+              sleep 5
+            done
+            echo "API did not become healthy (check: docker compose -f docker-compose.prod.yml logs api)"; exit 1

@@ -263,6 +263,20 @@ var app = builder.Build();
 // middleware pipeline
 app.UseSerilogRequestLogging();
 app.UseMiddleware<CorrelationIdMiddleware>();
+// API answers carry customer, price and ledger data: never keep them in a browser or proxy cache.
+app.Use((context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            return Task.CompletedTask;
+        });
+    }
+
+    return next(context);
+});
 app.UseExceptionHandler();
 app.UseCors("DefaultCors");
 app.UseAuthentication();

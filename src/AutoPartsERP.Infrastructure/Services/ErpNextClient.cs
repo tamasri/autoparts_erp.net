@@ -586,7 +586,7 @@ public sealed partial class ErpNextClient : IErpNextClient
         var lookup = await FindNameByFieldAsync(doctype, nameField, name, cancellationToken);
         if (lookup.IsFailure)
         {
-            // Creating on a failed lookup would add a second "X - 1" party when the first already exists; the outbox retries later.
+            // Creating on a failed lookup would add a second "X - 1" party when the first already exists; the sync log records FAILED and the 30-minute catalog job retries.
             return Result<string>.Failure(lookup.Error);
         }
 

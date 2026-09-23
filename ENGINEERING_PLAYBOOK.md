@@ -226,7 +226,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - Never log or return secrets; never echo tokens (redact when debugging).
 - Public surfaces (future invoice links, payment webhooks) use unguessable tokens, rate limits and no internal ids.
 - **Rate limits:** per-IP limits live in nginx (API 30 r/s, login 5/min, refresh 20/min). Behind the proxy every request reaches the API from one address, so the API limits per signed-in user: put `.RequireRateLimiting(RateLimiting.Heavy)` on anything that builds files, reads uploads or calls a model.
-- **External lookups before a create:** a failed lookup is a failure, never "not found" — otherwise a transient error creates a duplicate (ERPNext names a second party "X - 1"). `ErpNextClient.FindNameByFieldAsync` returns `Result<string?>`; the outbox retries.
+- **External lookups before a create:** a failed lookup is a failure, never "not found" — otherwise a transient error creates a duplicate (ERPNext names a second party "X - 1"). `ErpNextClient.FindNameByFieldAsync` returns `Result<string?>`. The failure is written to `erpnext_sync_log` as FAILED and `SyncCatalogToErpNextJob` (every 30 min) retries it — the outbox message itself is marked processed, because syncers report failures as results, not exceptions.
 - **Stock that is sold:** sales take only `on_hand − reserved` and move `inventory_stock` and the item's un-batched AVAILABLE `inventory_balances` row in the same transaction (`InvoiceStockMover`, like `StockLevelWriter` for warehouse documents); the 5-minute sync job is a safety net, not the mechanism.
 - Changing SSH/firewall settings requires a verified working alternative first (a bad change already locked the
   owner out once).
