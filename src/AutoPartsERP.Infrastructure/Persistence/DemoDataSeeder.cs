@@ -1,5 +1,10 @@
 namespace AutoPartsERP.Infrastructure.Persistence;
 
+/// <summary>
+/// Sample data for trying the system out (customers, items, stock with its opening movements, invoices, payments). Runs only in
+/// Development or with Seed:DemoData=true (see Program.cs) and only on a database that has none of it yet.
+/// Reference data that every installation needs is in <see cref="ReferenceDataSeeder"/>.
+/// </summary>
 public static class DemoDataSeeder
 {
     private static readonly Guid SystemUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -110,6 +115,18 @@ public static class DemoDataSeeder
             new { CreatedBy = adminId },
             tx);
 
+        // The demo customers and invoices name the admin as their sales rep; since migration 22 that must be a sales_reps row
+        // (without it every fresh development database failed at start-up on fk_customers_sales_rep).
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO sales_reps (user_id, commission_pct, monthly_target_usd, is_active, created_at, created_by, notes)
+            SELECT u.id, 2.5, 5000, TRUE, now(), u.id, 'Demo sales rep'
+            FROM asp_net_users u WHERE u.id = @CreatedBy
+            ON CONFLICT (user_id) DO NOTHING;
+            """,
+            new { CreatedBy = adminId },
+            tx);
+
         await connection.ExecuteAsync(
             """
             INSERT INTO customers (
@@ -187,6 +204,19 @@ public static class DemoDataSeeder
 
         await connection.ExecuteAsync(
             """
+            INSERT INTO inventory_movements (id, item_id, location_id, batch_id, movement_type, qty, direction, from_status, to_status,
+                                             reference_type, reference_id, performed_by, correlation_id, notes, created_at)
+            SELECT uuid_generate_v4(), i.id, st.location_id, NULL, 'OPENING', st.quantity_on_hand, 'IN', NULL, 'AVAILABLE',
+                   'OPENING', NULL, @CreatedBy, uuid_generate_v4(), 'Demo opening stock', now()
+            FROM inventory_stock st JOIN items i ON i.sku_id = st.sku_id
+            WHERE st.quantity_on_hand > 0
+              AND NOT EXISTS (SELECT 1 FROM inventory_movements m WHERE m.item_id = i.id AND m.location_id = st.location_id);
+            """,
+            new { CreatedBy = adminId },
+            tx);
+
+        await connection.ExecuteAsync(
+            """
             INSERT INTO invoices (
                 id, invoice_type, status, customer_id, invoice_date, due_date,
                 subtotal_syp, subtotal_usd, discount_amount_syp, discount_amount_usd,
@@ -194,11 +224,11 @@ public static class DemoDataSeeder
                 total_syp, total_usd, paid_syp, paid_usd, fx_rate_id, fx_rate_snapshot,
                 sales_rep_id, posted_at, posted_by, created_at, created_by)
             VALUES
-                ('27000000-0000-0000-0000-000000000001', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000001', @Inv1Date, @Inv1Due, 260000, 19.26, 0, 0, 0, 0, 0, 0, 260000, 19.26, 260000, 19.26, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy),
-                ('27000000-0000-0000-0000-000000000002', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000002', @Inv2Date, @Inv2Due, 436000, 32.30, 0, 0, 0, 0, 0, 0, 436000, 32.30,      0,  0.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy),
-                ('27000000-0000-0000-0000-000000000003', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000003', @Inv3Date, @Inv3Due, 375000, 27.78, 0, 0, 0, 0, 0, 0, 375000, 27.78,      0,  0.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy),
-                ('27000000-0000-0000-0000-000000000004', 'SALE', 'DRAFT',  '25000000-0000-0000-0000-000000000005', @Inv4Date, @Inv4Due, 108000,  8.00, 0, 0, 0, 0, 0, 0, 108000,  8.00,      0,  0.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, NULL,  NULL,     now(), @CreatedBy),
-                ('27000000-0000-0000-0000-000000000005', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000001', @Inv5Date, @Inv5Due, 325000, 24.07, 0, 0, 0, 0, 0, 0, 325000, 24.07, 100000,  7.41, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy)
+                ('27000000-0000-0000-0000-000000000001', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000001', @Inv1Date, @Inv1Due, 260000, 19.00, 0, 0, 0, 0, 0, 0, 260000, 19.00, 260000, 19.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy),
+                ('27000000-0000-0000-0000-000000000002', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000002', @Inv2Date, @Inv2Due, 436000, 31.84, 0, 0, 0, 0, 0, 0, 436000, 31.84,      0,  0.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy),
+                ('27000000-0000-0000-0000-000000000003', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000003', @Inv3Date, @Inv3Due, 375000, 27.30, 0, 0, 0, 0, 0, 0, 375000, 27.30,      0,  0.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy),
+                ('27000000-0000-0000-0000-000000000004', 'SALE', 'DRAFT',  '25000000-0000-0000-0000-000000000005', @Inv4Date, @Inv4Due, 108000,  7.80, 0, 0, 0, 0, 0, 0, 108000,  7.80,      0,  0.00, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, NULL,  NULL,     now(), @CreatedBy),
+                ('27000000-0000-0000-0000-000000000005', 'SALE', 'POSTED', '25000000-0000-0000-0000-000000000001', @Inv5Date, @Inv5Due, 325000, 23.80, 0, 0, 0, 0, 0, 0, 325000, 23.80, 100000,  7.41, '21000000-0000-0000-0000-000000000001', 13500, @CreatedBy, now(), @CreatedBy, now(), @CreatedBy)
             ON CONFLICT (id) DO NOTHING;
             """,
             new
@@ -242,7 +272,7 @@ public static class DemoDataSeeder
                 id, payment_type, customer_id, payment_date, payment_method,
                 amount_syp, amount_usd, allocated_syp, allocated_usd, fx_rate_id, received_by, created_at, created_by)
             VALUES
-                ('28000000-0000-0000-0000-000000000001', 'RECEIPT', '25000000-0000-0000-0000-000000000001', @PaymentDate1, 'CASH', 260000, 19.26, 260000, 19.26, '21000000-0000-0000-0000-000000000001', @CreatedBy, now(), @CreatedBy),
+                ('28000000-0000-0000-0000-000000000001', 'RECEIPT', '25000000-0000-0000-0000-000000000001', @PaymentDate1, 'CASH', 260000, 19.00, 260000, 19.00, '21000000-0000-0000-0000-000000000001', @CreatedBy, now(), @CreatedBy),
                 ('28000000-0000-0000-0000-000000000002', 'RECEIPT', '25000000-0000-0000-0000-000000000001', @PaymentDate2, 'CASH', 100000,  7.41, 100000,  7.41, '21000000-0000-0000-0000-000000000001', @CreatedBy, now(), @CreatedBy)
             ON CONFLICT (id) DO NOTHING;
             """,
@@ -253,42 +283,11 @@ public static class DemoDataSeeder
             """
             INSERT INTO payment_allocations (id, payment_id, invoice_id, allocated_syp, allocated_usd, allocation_date, created_at, created_by)
             VALUES
-                ('28010000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-000000000001', '27000000-0000-0000-0000-000000000001', 260000, 19.26, @AllocDate1, now(), @CreatedBy),
+                ('28010000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-000000000001', '27000000-0000-0000-0000-000000000001', 260000, 19.00, @AllocDate1, now(), @CreatedBy),
                 ('28010000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000002', '27000000-0000-0000-0000-000000000005', 100000,  7.41, @AllocDate2, now(), @CreatedBy)
             ON CONFLICT (payment_id, invoice_id) DO NOTHING;
             """,
             new { CreatedBy = adminId, AllocDate1 = today.AddDays(-4), AllocDate2 = today.AddDays(-18) },
-            tx);
-
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO reason_codes (
-                id, category, code, description, requires_comment, applies_to, is_active, created_at_utc, updated_at_utc)
-            VALUES
-                (uuid_generate_v4(), 'PRICE_OVERRIDE', 'COMP-MATCH',  'مطابقة سعر المنافس', TRUE,  'MEDIUM', TRUE, now(), NULL),
-                (uuid_generate_v4(), 'PRICE_OVERRIDE', 'LOYAL-CUST',  'عميل مخلص',           FALSE, 'LOW',    TRUE, now(), NULL),
-                (uuid_generate_v4(), 'VOID_INVOICE',   'ENTRY-ERR',   'خطأ في الإدخال',      TRUE,  'HIGH',   TRUE, now(), NULL),
-                (uuid_generate_v4(), 'VOID_INVOICE',   'CUST-CANCEL', 'إلغاء العميل',         TRUE,  'MEDIUM', TRUE, now(), NULL),
-                (uuid_generate_v4(), 'STOCK_ADJUST',   'DAMAGE',      'تلف',                  TRUE,  'HIGH',   TRUE, now(), NULL),
-                (uuid_generate_v4(), 'STOCK_ADJUST',   'COUNT-DIFF',  'فرق جرد',              TRUE,  'MEDIUM', TRUE, now(), NULL)
-            ON CONFLICT (code) DO NOTHING;
-            """,
-            transaction: tx);
-
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO kpi_definitions (
-                id, key, domain, title, title_ar, unit, direction, description, is_active, created_at, created_by)
-            VALUES
-                (uuid_generate_v4(), 'sales.total_invoiced_today', 'SALES', 'Today Invoiced', 'مبيعات اليوم', 'SYP', 'UP', NULL, TRUE, now(), @CreatedBy),
-                (uuid_generate_v4(), 'sales.active_workshops', 'SALES', 'Active Workshops', 'ورش نشطة', 'COUNT', 'UP', NULL, TRUE, now(), @CreatedBy),
-                (uuid_generate_v4(), 'sales.overdue_amount', 'SALES', 'Overdue Receivables', 'متأخرات التحصيل', 'SYP', 'DOWN', NULL, TRUE, now(), @CreatedBy),
-                (uuid_generate_v4(), 'inventory.items_below_rop', 'INVENTORY', 'Items Below ROP', 'مواد تحت الحد', 'COUNT', 'DOWN', NULL, TRUE, now(), @CreatedBy),
-                (uuid_generate_v4(), 'inventory.stockout_count', 'INVENTORY', 'Stockout Count', 'نفاد المخزون', 'COUNT', 'DOWN', NULL, TRUE, now(), @CreatedBy),
-                (uuid_generate_v4(), 'finance.outstanding_ar', 'FINANCE', 'Outstanding AR', 'ذمم مدينة', 'SYP', 'DOWN', NULL, TRUE, now(), @CreatedBy)
-            ON CONFLICT (key) DO NOTHING;
-            """,
-            new { CreatedBy = adminId },
             tx);
 
         await tx.CommitAsync();

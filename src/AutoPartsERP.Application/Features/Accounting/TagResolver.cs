@@ -27,8 +27,10 @@ internal static class TagResolver
         var journalNames = keys.Where(k => k.StartsWith(JournalDoctype + "|", StringComparison.Ordinal)).Select(k => k[(JournalDoctype.Length + 1)..]).ToArray();
         var localByName = (await connection.QueryAsync<(string Name, Guid Id)>(new CommandDefinition(
             """
-            SELECT erpnext_name AS Name, local_entity_id AS Id FROM erpnext_sync_log
-            WHERE local_entity_type = 'JournalEntry' AND erpnext_doctype = 'Journal Entry' AND erpnext_name = ANY(@journalNames);
+            -- One local entry per ERPNext name even if the name was ever recorded twice (e.g. after an ERPNext restore): the live link wins.
+            SELECT DISTINCT ON (erpnext_name) erpnext_name AS Name, local_entity_id AS Id FROM erpnext_sync_log
+            WHERE local_entity_type = 'JournalEntry' AND erpnext_doctype = 'Journal Entry' AND erpnext_name = ANY(@journalNames)
+            ORDER BY erpnext_name, (status = 'SYNCED') DESC, updated_at DESC;
             """,
             new { journalNames }, cancellationToken: cancellationToken))).ToDictionary(x => x.Name, x => x.Id, StringComparer.Ordinal);
 
@@ -55,8 +57,9 @@ internal static class TagResolver
 
         var nameById = (await connection.QueryAsync<(Guid Id, string Name)>(new CommandDefinition(
             """
-            SELECT local_entity_id AS Id, erpnext_name AS Name FROM erpnext_sync_log
-            WHERE local_entity_type = 'JournalEntry' AND erpnext_doctype = 'Journal Entry' AND erpnext_name IS NOT NULL AND local_entity_id = ANY(@ids);
+            SELECT DISTINCT ON (erpnext_name) local_entity_id AS Id, erpnext_name AS Name FROM erpnext_sync_log
+            WHERE local_entity_type = 'JournalEntry' AND erpnext_doctype = 'Journal Entry' AND erpnext_name IS NOT NULL AND local_entity_id = ANY(@ids)
+            ORDER BY erpnext_name, (status = 'SYNCED') DESC, updated_at DESC;
             """,
             new { ids }, cancellationToken: cancellationToken))).ToDictionary(x => VoucherKey(JournalDoctype, x.Name), x => x.Id, StringComparer.Ordinal);
 

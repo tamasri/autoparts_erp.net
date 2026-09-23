@@ -34,8 +34,6 @@ public interface IErpNextClient
 
     Task<Result<string>> SyncSupplierPaymentAsync(ErpNextSupplierPaymentSync payment, CancellationToken cancellationToken = default);
 
-    /// <summary>Renames a document (ERPNext identifies customers/suppliers by name); links to it follow automatically.</summary>
-    Task<Result<string>> RenameDocumentAsync(string doctype, string oldName, string newName, CancellationToken cancellationToken = default);
 
     /// <summary>Cancels a submitted ERPNext document (Sales Invoice, Payment Entry, ...) by its ERPNext name.</summary>
     Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default);
@@ -116,7 +114,14 @@ public sealed record ErpNextOpenInvoice(string Name, string Party, DateOnly Post
 
 public sealed record ErpNextItemSync(Guid LocalItemId, string Code, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice);
 
-public sealed record ErpNextPartySync(Guid LocalPartyId, string Name, string PartyType, string? TaxId);
+/// <summary>
+/// A customer or supplier to create or update in ERPNext. Identity is the ERPNext record (<see cref="KnownName"/>), never the
+/// display name: two local parties may share a name. <see cref="TakenNames"/> are ERPNext records already linked to OTHER local
+/// parties, which must not be adopted; <see cref="Code"/> tells a same-named new record apart ("Name (CODE)").
+/// </summary>
+public sealed record ErpNextPartySync(
+    Guid LocalPartyId, string Name, string PartyType, string? TaxId,
+    string? Code = null, string? KnownName = null, IReadOnlyCollection<string>? TakenNames = null);
 
 public sealed record ErpNextSalesInvoiceSync(
     Guid LocalInvoiceId,

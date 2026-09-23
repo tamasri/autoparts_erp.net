@@ -75,33 +75,23 @@ public sealed partial class ErpNextClient : IErpNextClient
 
         if (isCustomer)
         {
-            return UpsertPartyAsync(
-                "Customer",
-                "customer_name",
-                party.Name,
-                new JsonObject
-                {
-                    ["customer_name"] = party.Name,
-                    ["customer_group"] = "Commercial",
-                    ["territory"] = "Rest Of The World",
-                    ["customer_type"] = "Individual",
-                    ["tax_id"] = party.TaxId
-                },
-                cancellationToken);
+            return LinkPartyAsync("Customer", "customer_name", party, display => new JsonObject
+            {
+                ["customer_name"] = display,
+                ["customer_group"] = "Commercial",
+                ["territory"] = "Rest Of The World",
+                ["customer_type"] = "Individual",
+                ["tax_id"] = party.TaxId
+            }, cancellationToken);
         }
 
-        return UpsertPartyAsync(
-            "Supplier",
-            "supplier_name",
-            party.Name,
-            new JsonObject
-            {
-                ["supplier_name"] = party.Name,
-                ["supplier_group"] = "Local",
-                ["supplier_type"] = "Individual",
-                ["tax_id"] = party.TaxId
-            },
-            cancellationToken);
+        return LinkPartyAsync("Supplier", "supplier_name", party, display => new JsonObject
+        {
+            ["supplier_name"] = display,
+            ["supplier_group"] = "Local",
+            ["supplier_type"] = "Individual",
+            ["tax_id"] = party.TaxId
+        }, cancellationToken);
     }
 
     public async Task<Result<string>> SyncSalesInvoiceAsync(ErpNextSalesInvoiceSync invoice, CancellationToken cancellationToken = default)
@@ -409,23 +399,6 @@ public sealed partial class ErpNextClient : IErpNextClient
         return await UpsertAsync("Payment Entry", payment.LocalPaymentId.ToString(), doc, cancellationToken);
     }
 
-    public async Task<Result<string>> RenameDocumentAsync(string doctype, string oldName, string newName, CancellationToken cancellationToken = default)
-    {
-        var response = await _httpClient.PostAsJsonAsync(
-            "api/method/frappe.client.rename_doc",
-            new JsonObject { ["doctype"] = doctype, ["old_name"] = oldName, ["new_name"] = newName, ["merge"] = false },
-            cancellationToken);
-
-        if (response.IsSuccessStatusCode)
-        {
-            return Result<string>.Success(newName);
-        }
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        _logger.LogWarning("ERPNext rename failed for {Doctype} {Old}->{New}: {Status} {Body}", doctype, oldName, newName, response.StatusCode, body);
-        return Result<string>.Failure(new Error("ErpNext.RenameFailed", $"{response.StatusCode}: {Truncate(body)}"));
-    }
-
     /// <summary>The account that carries inventory value while this application (not ERPNext) owns the stock; created on first use.</summary>
     private async Task<Result<string>> EnsureInventoryAccountAsync(CompanyInfo company, CancellationToken cancellationToken)
     {
@@ -455,7 +428,7 @@ public sealed partial class ErpNextClient : IErpNextClient
         }
 
         var body = await created.Content.ReadAsStringAsync(cancellationToken);
-        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"Could not create the inventory account '{name}': {created.StatusCode}: {Truncate(body)}"));
+        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"Could not create the inventory account '{name}': {Explain(created.StatusCode, body)}"));
     }
 
     /// <summary>
@@ -538,7 +511,7 @@ public sealed partial class ErpNextClient : IErpNextClient
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         _logger.LogWarning("ERPNext cancel failed for {Doctype} {Name}: {Status} {Body}", doctype, name, response.StatusCode, body);
-        return Result<string>.Failure(new Error("ErpNext.CancelFailed", $"{response.StatusCode}: {Truncate(body)}"));
+        return Result<string>.Failure(new Error("ErpNext.CancelFailed", $"{Explain(response.StatusCode, body)}"));
     }
 
     private sealed record CompanyInfo(string Name, string Abbr, string? ReceivableAccount, string? PayableAccount, string? CashAccount, string? BankAccount, string? CogsAccount, string? IncomeAccount = null);
@@ -558,7 +531,7 @@ public sealed partial class ErpNextClient : IErpNextClient
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            return Result<CompanyInfo>.Failure(new Error("ErpNext.CompanyLookupFailed", $"{response.StatusCode}: {Truncate(body)}"));
+            return Result<CompanyInfo>.Failure(new Error("ErpNext.CompanyLookupFailed", $"{Explain(response.StatusCode, body)}"));
         }
 
         try
@@ -581,56 +554,95 @@ public sealed partial class ErpNextClient : IErpNextClient
     /// it "X - 1", "X - 2", ... so the create-then-update-on-duplicate flow used for items would add a new record on every sync.
     /// The party is therefore looked up by its name first and updated in place when it exists.
     /// </summary>
-    private async Task<Result<string>> UpsertPartyAsync(string doctype, string nameField, string name, JsonObject payload, CancellationToken cancellationToken)
+    /// <summary>
+    /// Links one local customer/supplier to exactly one ERPNext record and returns that record's name — the only value documents may
+    /// use to refer to the party (display names are not unique here, and ERPNext may name records by series, e.g. CUST-00001).
+    /// <list type="number">
+    /// <item>Already linked (<see cref="ErpNextPartySync.KnownName"/>): update that record in place. A changed display name only changes
+    /// its <c>customer_name</c>/<c>supplier_name</c>; the record keeps its name, so every invoice and payment stays attached.</item>
+    /// <item>Not linked yet: adopt a record with this display name that no other local party owns (an earlier attempt whose answer was
+    /// lost, or data entered in ERPNext first).</item>
+    /// <item>Otherwise create one. If the display name is already used by another party's record, the new one is told apart by the
+    /// local code: "Name (CODE)". Two local parties never share an ERPNext record, so their balances never merge.</item>
+    /// </list>
+    /// A failed lookup is a failure, never "not there" — guessing would create a duplicate.
+    /// </summary>
+    private async Task<Result<string>> LinkPartyAsync(string doctype, string nameField, ErpNextPartySync party, Func<string, JsonObject> payload, CancellationToken cancellationToken)
     {
-        var lookup = await FindNameByFieldAsync(doctype, nameField, name, cancellationToken);
-        if (lookup.IsFailure)
+        var resource = $"api/resource/{Uri.EscapeDataString(doctype)}";
+
+        if (!string.IsNullOrWhiteSpace(party.KnownName))
         {
-            // Creating on a failed lookup would add a second "X - 1" party when the first already exists; the sync log records FAILED and the 30-minute catalog job retries.
-            return Result<string>.Failure(lookup.Error);
+            var updated = await _httpClient.PutAsJsonAsync($"{resource}/{Uri.EscapeDataString(party.KnownName)}", payload(party.Name), cancellationToken);
+            if (updated.IsSuccessStatusCode)
+            {
+                return Result<string>.Success(party.KnownName);
+            }
+
+            var body = await updated.Content.ReadAsStringAsync(cancellationToken);
+            if (updated.StatusCode != HttpStatusCode.NotFound)
+            {
+                return Result<string>.Failure(new Error("ErpNext.SyncFailed", Explain(updated.StatusCode, body)));
+            }
+
+            _logger.LogWarning("ERPNext {Doctype} '{Name}' linked to party {PartyId} no longer exists; linking again.", doctype, party.KnownName, party.LocalPartyId);
         }
 
-        var existing = lookup.Value;
-        if (existing is null)
+        var candidates = await FindNamesByFieldAsync(doctype, nameField, party.Name, cancellationToken);
+        if (candidates.IsFailure)
         {
-            return await UpsertAsync(doctype, name, payload, cancellationToken);
+            return Result<string>.Failure(candidates.Error);
         }
 
-        var response = await _httpClient.PutAsJsonAsync($"api/resource/{Uri.EscapeDataString(doctype)}/{Uri.EscapeDataString(existing)}", payload, cancellationToken);
-        if (response.IsSuccessStatusCode)
+        var taken = new HashSet<string>(party.TakenNames ?? [], StringComparer.Ordinal);
+        if (candidates.Value!.FirstOrDefault(n => !taken.Contains(n)) is { } free)
         {
-            return Result<string>.Success(existing);
+            var adopted = await _httpClient.PutAsJsonAsync($"{resource}/{Uri.EscapeDataString(free)}", payload(party.Name), cancellationToken);
+            if (adopted.IsSuccessStatusCode)
+            {
+                return Result<string>.Success(free);
+            }
+
+            return Result<string>.Failure(new Error("ErpNext.SyncFailed", Explain(adopted.StatusCode, await adopted.Content.ReadAsStringAsync(cancellationToken))));
         }
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        _logger.LogWarning("ERPNext update failed for {Doctype} {Name}: {Status} {Body}", doctype, existing, response.StatusCode, body);
-        return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{response.StatusCode}: {Truncate(body)}"));
+        var display = candidates.Value!.Count > 0 && !string.IsNullOrWhiteSpace(party.Code) ? $"{party.Name} ({party.Code})" : party.Name;
+        var created = await _httpClient.PostAsJsonAsync(resource, payload(display), cancellationToken);
+        if (!created.IsSuccessStatusCode)
+        {
+            return Result<string>.Failure(new Error("ErpNext.SyncFailed", Explain(created.StatusCode, await created.Content.ReadAsStringAsync(cancellationToken))));
+        }
+
+        return await ExtractNameAsync(created, cancellationToken) is { Length: > 0 } name
+            ? Result<string>.Success(name)
+            : Result<string>.Failure(new Error("ErpNext.SyncFailed", $"ERPNext created the {doctype} but did not say its name."));
     }
 
     /// <summary>
-    /// The ERPNext document name whose <paramref name="field"/> equals <paramref name="value"/>: success with null when there is none,
-    /// failure when the lookup itself fails (so the caller does not mistake "unreachable" for "not there").
+    /// The ERPNext records whose <paramref name="field"/> equals <paramref name="value"/>, oldest first (empty when there are none);
+    /// failure when the lookup itself fails, so the caller does not mistake "unreachable" for "not there".
     /// </summary>
-    private async Task<Result<string?>> FindNameByFieldAsync(string doctype, string field, string value, CancellationToken cancellationToken)
+    private async Task<Result<IReadOnlyList<string>>> FindNamesByFieldAsync(string doctype, string field, string value, CancellationToken cancellationToken)
     {
         try
         {
             var filters = Uri.EscapeDataString(JsonSerializer.Serialize(new object[] { new object[] { field, "=", value } }));
-            var response = await _httpClient.GetAsync($"api/resource/{Uri.EscapeDataString(doctype)}?filters={filters}&fields=%5B%22name%22%5D&limit_page_length=1", cancellationToken);
+            var response = await _httpClient.GetAsync(
+                $"api/resource/{Uri.EscapeDataString(doctype)}?filters={filters}&fields=%5B%22name%22%5D&order_by=creation%20asc&limit_page_length=20", cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                return Result<string?>.Failure(new Error("ErpNext.LookupFailed", $"{doctype} lookup: {response.StatusCode}: {Truncate(body)}"));
+                return Result<IReadOnlyList<string>>.Failure(new Error("ErpNext.LookupFailed", $"{doctype} lookup: {Explain(response.StatusCode, body)}"));
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             var document = await JsonSerializer.DeserializeAsync<JsonDocument>(stream, cancellationToken: cancellationToken);
-            var rows = document!.RootElement.GetProperty("data");
-            return Result<string?>.Success(rows.GetArrayLength() > 0 ? rows[0].GetProperty("name").GetString() : null);
+            return Result<IReadOnlyList<string>>.Success(document!.RootElement.GetProperty("data").EnumerateArray()
+                .Select(r => r.GetProperty("name").GetString()).OfType<string>().ToList());
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or HttpRequestException or InvalidOperationException)
         {
-            return Result<string?>.Failure(new Error("ErpNext.LookupFailed", $"{doctype} lookup: {ex.Message}"));
+            return Result<IReadOnlyList<string>>.Failure(new Error("ErpNext.LookupFailed", $"{doctype} lookup: {ex.Message}"));
         }
     }
 
@@ -653,7 +665,7 @@ public sealed partial class ErpNextClient : IErpNextClient
         if (!looksLikeDuplicate)
         {
             _logger.LogWarning("ERPNext sync failed for {Doctype} {LocalName}: {Status} {Body}", doctype, localName, createResponse.StatusCode, body);
-            return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{createResponse.StatusCode}: {Truncate(body)}"));
+            return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{Explain(createResponse.StatusCode, body)}"));
         }
 
         var updateResponse = await _httpClient.PutAsJsonAsync($"api/resource/{encodedType}/{Uri.EscapeDataString(localName)}", payload, cancellationToken);
@@ -665,7 +677,7 @@ public sealed partial class ErpNextClient : IErpNextClient
 
         var updateBody = await updateResponse.Content.ReadAsStringAsync(cancellationToken);
         _logger.LogWarning("ERPNext update failed for {Doctype} {LocalName}: {Status} {Body}", doctype, localName, updateResponse.StatusCode, updateBody);
-        return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{updateResponse.StatusCode}: {Truncate(updateBody)}"));
+        return Result<string>.Failure(new Error("ErpNext.SyncFailed", $"{Explain(updateResponse.StatusCode, updateBody)}"));
     }
 
     private static async Task<string?> ExtractNameAsync(HttpResponseMessage response, CancellationToken cancellationToken)
@@ -682,7 +694,15 @@ public sealed partial class ErpNextClient : IErpNextClient
         }
     }
 
-    private static string Truncate(string value) => value.Length > 500 ? value[..500] : value;
+    /// <summary>
+    /// The readable reason for a failed ERPNext call (stored in the sync log, shown on screens). The full response body — Frappe's
+    /// traceback included — goes to the server log only.
+    /// </summary>
+    private string Explain(HttpStatusCode status, string body)
+    {
+        _logger.LogWarning("ERPNext answered {Status}: {Body}", (int)status, body.Length > 4000 ? body[..4000] : body);
+        return ErpNextErrors.Describe(status, body);
+    }
 }
 
 internal static class ErpNextJsonExtensions

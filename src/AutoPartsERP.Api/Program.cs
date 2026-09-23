@@ -87,6 +87,22 @@ builder.Services
             RoleClaimType = ClaimTypes.Role
         };
 
+        // Browsers cannot put an Authorization header on a WebSocket, so SignalR sends the access token in the query string.
+        // Read it there for the hub path only; everywhere else the header stays the only source.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (context.HttpContext.Request.Path.StartsWithSegments("/hubs")
+                    && context.Request.Query["access_token"].FirstOrDefault() is { Length: > 0 } token)
+                {
+                    context.Token = token;
+                }
+
+                return Task.CompletedTask;
+            },
+        };
+
         if (!string.IsNullOrWhiteSpace(jwtSettings.PublicKeyPemBase64))
         {
             var rsa = RSA.Create();
@@ -391,7 +407,14 @@ if (!app.Environment.IsEnvironment("Testing"))
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
     await DatabaseSeeder.SeedAsync(app.Services);
-    await DemoDataSeeder.SeedAsync(app.Services);
+    await ReferenceDataSeeder.SeedAsync(app.Services);
+
+    // Sample customers, items, stock and invoices are for trying the system out. Never in a real company's books (they would be
+    // posted to ERPNext too): Development only, or when explicitly asked for with Seed:DemoData=true.
+    if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Seed:DemoData"))
+    {
+        await DemoDataSeeder.SeedAsync(app.Services);
+    }
 }
 
 app.Run();

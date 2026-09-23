@@ -138,15 +138,13 @@ public sealed class JournalEntryErpNextSyncer
                 return Result<IReadOnlyList<ErpNextJournalLine>>.Failure(new Error("ErpNext.PartyAccount", $"A party can only be used on a receivable or payable account; '{line.Account}' is neither."));
             }
 
-            var party = await _erpNextClient.SyncPartyAsync(new ErpNextPartySync(line.PartyId.Value, line.PartyName, partyType!, line.TaxNumber), cancellationToken);
-            await ErpNextSyncLogWriter.WriteAsync(connection, "Party", line.PartyId.Value, syncedDoctype!, party.IsSuccess ? party.Value : null,
-                StatusOf(party.IsSuccess), party.IsFailure ? party.Error.Message : null, cancellationToken);
+            var party = await ErpNextPartyLinks.EnsureAsync(connection, _erpNextClient, line.PartyId.Value, partyType!, cancellationToken);
             if (party.IsFailure)
             {
-                return Result<IReadOnlyList<ErpNextJournalLine>>.Failure(new Error("ErpNext.PartySync", $"'{line.PartyName}' could not be created in ERPNext: {party.Error.Message}"));
+                return Result<IReadOnlyList<ErpNextJournalLine>>.Failure(party.Error);
             }
 
-            result.Add(new ErpNextJournalLine(line.Account, erpType, string.IsNullOrEmpty(party.Value) ? line.PartyName : party.Value, line.Debit, line.Credit, line.Narration));
+            result.Add(new ErpNextJournalLine(line.Account, erpType, party.Value!, line.Debit, line.Credit, line.Narration));
         }
 
         return Result<IReadOnlyList<ErpNextJournalLine>>.Success(result);

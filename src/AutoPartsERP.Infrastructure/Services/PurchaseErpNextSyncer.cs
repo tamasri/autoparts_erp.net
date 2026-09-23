@@ -67,7 +67,7 @@ public sealed class PurchaseErpNextSyncer
 
         var result = await _erpNextClient.SyncPurchaseInvoiceAsync(
             new ErpNextPurchaseInvoiceSync(
-                billId, bill.BillNumber, bill.SupplierName, bill.BillDate, bill.DueDate, false,
+                billId, bill.BillNumber, prerequisite.Value!, bill.BillDate, bill.DueDate, false,
                 lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitCost, l.DiscountPercent)).ToList(),
                 bill.DiscountAmountUsd),
             cancellationToken);
@@ -125,16 +125,16 @@ public sealed class PurchaseErpNextSyncer
             references.Add(new ErpNextPaymentReference(name, amount));
         }
 
-        var supplier = await _erpNextClient.SyncPartyAsync(new ErpNextPartySync(payment.PartyId, payment.SupplierName, PartyTypeCodes.Vendor, payment.TaxNumber), cancellationToken);
+        var supplier = await ErpNextPartyLinks.EnsureAsync(connection, _erpNextClient, payment.PartyId, PartyTypeCodes.Vendor, cancellationToken);
         if (supplier.IsFailure)
         {
-            await ErpNextSyncLogWriter.WriteAsync(connection, PaymentEntity, paymentId, PaymentDoctype, null, StatusOf(false),
-                $"Supplier '{payment.SupplierName}' could not be created in ERPNext: {supplier.Error.Message}", cancellationToken);
+            await ErpNextSyncLogWriter.WriteAsync(connection, PaymentEntity, paymentId, PaymentDoctype, null, StatusOf(false), supplier.Error.Message, cancellationToken);
             return;
         }
 
+        // The supplier's ERPNext record, never its display name.
         var result = await _erpNextClient.SyncSupplierPaymentAsync(
-            new ErpNextSupplierPaymentSync(paymentId, payment.SupplierName, payment.Amount, payment.PaymentDate, payment.PaymentMethod, payment.ReferenceNumber, references),
+            new ErpNextSupplierPaymentSync(paymentId, supplier.Value!, payment.Amount, payment.PaymentDate, payment.PaymentMethod, payment.ReferenceNumber, references),
             cancellationToken);
         await ErpNextSyncLogWriter.WriteAsync(connection, PaymentEntity, paymentId, PaymentDoctype, result.IsSuccess ? result.Value : null,
             StatusOf(result.IsSuccess), result.IsFailure ? result.Error.Message : null, cancellationToken);
@@ -192,14 +192,13 @@ public sealed class PurchaseErpNextSyncer
             result.IsFailure ? $"Cancel failed: {result.Error.Message}" : null, cancellationToken);
     }
 
-    private async Task<Result> EnsureMasterDataAsync(DbConnection connection, BillRow bill, IReadOnlyList<BillLineRow> lines, CancellationToken cancellationToken)
+    /// <returns>The supplier's ERPNext record name, once the supplier and the items exist in ERPNext.</returns>
+    private async Task<Result<string>> EnsureMasterDataAsync(DbConnection connection, BillRow bill, IReadOnlyList<BillLineRow> lines, CancellationToken cancellationToken)
     {
-        var supplier = await _erpNextClient.SyncPartyAsync(new ErpNextPartySync(bill.PartyId, bill.SupplierName, PartyTypeCodes.Vendor, bill.TaxNumber), cancellationToken);
-        await ErpNextSyncLogWriter.WriteAsync(connection, "Party", bill.PartyId, "Supplier", supplier.IsSuccess ? supplier.Value : null,
-            StatusOf(supplier.IsSuccess), supplier.IsFailure ? supplier.Error.Message : null, cancellationToken);
+        var supplier = await ErpNextPartyLinks.EnsureAsync(connection, _erpNextClient, bill.PartyId, PartyTypeCodes.Vendor, cancellationToken);
         if (supplier.IsFailure)
         {
-            return Result.Failure(new Error("ErpNext.SupplierSync", $"Supplier '{bill.SupplierName}' could not be created in ERPNext: {supplier.Error.Message}"));
+            return Result<string>.Failure(supplier.Error);
         }
 
         foreach (var item in lines.DistinctBy(l => l.SkuId))
@@ -209,11 +208,11 @@ public sealed class PurchaseErpNextSyncer
                 StatusOf(synced.IsSuccess), synced.IsFailure ? synced.Error.Message : null, cancellationToken);
             if (synced.IsFailure)
             {
-                return Result.Failure(new Error("ErpNext.ItemSync", $"Item '{item.ItemCode}' could not be created in ERPNext: {synced.Error.Message}"));
+                return Result<string>.Failure(new Error("ErpNext.ItemSync", $"Item '{item.ItemCode}' could not be created in ERPNext: {synced.Error.Message}"));
             }
         }
 
-        return Result.Success();
+        return Result<string>.Success(supplier.Value!);
     }
 
     private sealed record BillRow(string BillNumber, Guid PartyId, string SupplierName, string? TaxNumber, DateOnly BillDate, DateOnly DueDate, decimal DiscountAmountUsd);

@@ -85,27 +85,12 @@ public sealed class SyncCatalogToErpNextJob
                     continue;
                 }
 
-                var doctype = typeCode == PartyTypeCodes.Customer ? "Customer" : "Supplier";
-
-                // ERPNext identifies a customer/supplier by name. If the name changed here since the last sync, rename the
-                // existing ERPNext record (its invoices and payments follow) instead of creating a second one.
-                var syncedName = await ErpNextSyncLogWriter.FindSyncedNameAsync(connection, "Party", party.Id, doctype, cancellationToken);
-                if (syncedName is not null && !string.Equals(syncedName, party.DisplayName, StringComparison.Ordinal))
+                // Linked by record, not by name: a changed display name updates the same ERPNext record (see ErpNextPartyLinks).
+                var linked = await ErpNextPartyLinks.EnsureAsync(connection, _erpNextClient, party.Id, typeCode, cancellationToken);
+                if (linked.IsFailure)
                 {
-                    // If the rename is refused (typically because a record with the new name already exists), fall through to the
-                    // upsert below: it updates that existing record and the sync log then points at it, so we stop retrying the rename.
-                    var renamed = await _erpNextClient.RenameDocumentAsync(doctype, syncedName, party.DisplayName, cancellationToken);
-                    if (renamed.IsFailure)
-                    {
-                        _logger.LogWarning("ERPNext rename of {Doctype} '{Old}' to '{New}' refused ({Error}); adopting the record with the new name.", doctype, syncedName, party.DisplayName, renamed.Error.Message);
-                    }
+                    _logger.LogWarning("ERPNext party sync failed: {Error}", linked.Error.Message);
                 }
-
-                var result = await _erpNextClient.SyncPartyAsync(
-                    new ErpNextPartySync(party.Id, party.DisplayName, typeCode, party.TaxNumber),
-                    cancellationToken);
-
-                await LogSyncAsync(connection, "Party", party.Id, typeCode == PartyTypeCodes.Customer ? "Customer" : "Supplier", result, cancellationToken);
             }
         }
 

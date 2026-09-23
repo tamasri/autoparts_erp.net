@@ -44,7 +44,7 @@ public sealed partial class ErpNextClient
         }
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"{response.StatusCode}: {Truncate(body)}"));
+        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"{Explain(response.StatusCode, body)}"));
     }
 
     public async Task<Result<string>> UpdateAccountAsync(string name, ErpNextAccountUpdate update, CancellationToken cancellationToken = default)
@@ -61,7 +61,7 @@ public sealed partial class ErpNextClient
             if (!renamed.IsSuccessStatusCode)
             {
                 var body = await renamed.Content.ReadAsStringAsync(cancellationToken);
-                return Result<string>.Failure(new Error("ErpNext.AccountUpdateFailed", $"{renamed.StatusCode}: {Truncate(body)}"));
+                return Result<string>.Failure(new Error("ErpNext.AccountUpdateFailed", $"{Explain(renamed.StatusCode, body)}"));
             }
 
             await using var stream = await renamed.Content.ReadAsStreamAsync(cancellationToken);
@@ -95,7 +95,7 @@ public sealed partial class ErpNextClient
         }
 
         var failure = await response.Content.ReadAsStringAsync(cancellationToken);
-        return Result<string>.Failure(new Error("ErpNext.AccountUpdateFailed", $"{response.StatusCode}: {Truncate(failure)}"));
+        return Result<string>.Failure(new Error("ErpNext.AccountUpdateFailed", $"{Explain(response.StatusCode, failure)}"));
     }
 
     private async Task<(string? Number, string? Type)?> GetAccountFieldsAsync(string name, CancellationToken cancellationToken)
@@ -187,7 +187,7 @@ public sealed partial class ErpNextClient
             return Result<IReadOnlyList<ErpNextGlBalance>>.Failure(filters.Error);
         }
 
-        var rows = await QueryRowsAsync("GL Entry", ["account", "sum(debit) as debit", "sum(credit) as credit"], filters.Value!, null, "account", 0, cancellationToken);
+        var rows = await QueryRowsAsync("GL Entry", ["account", Aggregate.Sum("debit"), Aggregate.Sum("credit")], filters.Value!, null, "account", 0, cancellationToken);
         return rows.IsFailure
             ? Result<IReadOnlyList<ErpNextGlBalance>>.Failure(rows.Error)
             : Result<IReadOnlyList<ErpNextGlBalance>>.Success(rows.Value!.Where(r => Text(r, "account") is not null).Select(r => new ErpNextGlBalance(Text(r, "account")!, Dec(r, "debit"), Dec(r, "credit"))).ToList());
@@ -232,7 +232,7 @@ public sealed partial class ErpNextClient
         }
 
         // No group_by: the aggregate query answers with a single row for everything that matches.
-        var rows = await QueryRowsAsync("GL Entry", ["count(name) as n", "sum(debit) as debit", "sum(credit) as credit"], filters.Value!, null, null, 0, cancellationToken);
+        var rows = await QueryRowsAsync("GL Entry", [Aggregate.Count("name", "n"), Aggregate.Sum("debit"), Aggregate.Sum("credit")], filters.Value!, null, null, 0, cancellationToken);
         if (rows.IsFailure)
         {
             return Result<ErpNextGlSummary>.Failure(rows.Error);
@@ -323,7 +323,7 @@ public sealed partial class ErpNextClient
         }
 
         filters.Value!.Add(["party_type", "=", partyType]);
-        var rows = await QueryRowsAsync("GL Entry", ["party", "sum(debit) as debit", "sum(credit) as credit"], filters.Value!, null, "party", 0, cancellationToken);
+        var rows = await QueryRowsAsync("GL Entry", ["party", Aggregate.Sum("debit"), Aggregate.Sum("credit")], filters.Value!, null, "party", 0, cancellationToken);
         return rows.IsFailure
             ? Result<IReadOnlyList<ErpNextPartyBalance>>.Failure(rows.Error)
             : Result<IReadOnlyList<ErpNextPartyBalance>>.Success(rows.Value!.Where(r => Text(r, "party") is not null).Select(r => new ErpNextPartyBalance(Text(r, "party")!, Dec(r, "debit"), Dec(r, "credit"))).ToList());
@@ -375,11 +375,69 @@ public sealed partial class ErpNextClient
         return Result<List<object[]>>.Success(filters);
     }
 
-    /// <summary>A list query against Frappe's REST API. <paramref name="limit"/> 0 means "all rows".</summary>
-    private async Task<Result<List<JsonElement>>> QueryRowsAsync(
-        string doctype, string[] fields, IReadOnlyList<object[]> filters, string? orderBy, string? groupBy, int limit, CancellationToken cancellationToken, int limitStart = 0)
+    /// <summary>
+    /// An aggregate column (SUM, COUNT) in a list query. Frappe changed how these are written: up to v15 only as SQL text
+    /// ("sum(debit) as debit"), from v16 only as a dict ({"SUM": "debit", "as": "debit"}) — each version refuses the other's form.
+    /// Queries carry this type and <see cref="QueryRowsAsync"/> writes whichever form the server accepts.
+    /// </summary>
+    internal sealed record Aggregate(string Function, string Field, string Alias)
     {
-        var url = $"api/resource/{Uri.EscapeDataString(doctype)}?fields={Uri.EscapeDataString(JsonSerializer.Serialize(fields))}"
+        public static Aggregate Sum(string field, string? alias = null) => new("SUM", field, alias ?? field);
+
+        public static Aggregate Count(string field, string alias) => new("COUNT", field, alias);
+
+        public JsonNode Render(bool dictSyntax) => dictSyntax
+            ? new JsonObject { [Function] = Field, ["as"] = Alias }
+            : JsonValue.Create($"{Function.ToLowerInvariant()}({Field}) as {Alias}");
+    }
+
+    /// <summary>
+    /// Per ERPNext server: does it take aggregates in dict form (v16+)? Learned from the first aggregate query that succeeds and
+    /// kept for the life of the process (a server upgrade is followed by a deploy, which restarts it).
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> AggregateDictSyntax = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A list query against Frappe's REST API. <paramref name="limit"/> 0 means "all rows". Fields are names or <see cref="Aggregate"/>s.</summary>
+    private async Task<Result<List<JsonElement>>> QueryRowsAsync(
+        string doctype, object[] fields, IReadOnlyList<object[]> filters, string? orderBy, string? groupBy, int limit, CancellationToken cancellationToken, int limitStart = 0)
+    {
+        if (!fields.OfType<Aggregate>().Any())
+        {
+            return await SendListAsync(doctype, fields, dictSyntax: false, filters, orderBy, groupBy, limit, limitStart, cancellationToken);
+        }
+
+        var server = _httpClient.BaseAddress?.ToString() ?? string.Empty;
+        var known = AggregateDictSyntax.TryGetValue(server, out var dict);
+        var preferred = !known || dict; // unknown server: try the current (v16) form first
+        var first = await SendListAsync(doctype, fields, preferred, filters, orderBy, groupBy, limit, limitStart, cancellationToken);
+        if (first.IsSuccess)
+        {
+            AggregateDictSyntax[server] = preferred;
+            return first;
+        }
+
+        if (known || first.Error.Code == "ErpNext.AccessDenied")
+        {
+            return first;
+        }
+
+        // The server refused this form; it may be a version that only understands the other one.
+        var second = await SendListAsync(doctype, fields, !preferred, filters, orderBy, groupBy, limit, limitStart, cancellationToken);
+        if (second.IsSuccess)
+        {
+            _logger.LogInformation("ERPNext at {Server} takes aggregates in {Form} form.", server, preferred ? "text (Frappe ≤ v15)" : "dict (Frappe ≥ v16)");
+            AggregateDictSyntax[server] = !preferred;
+            return second;
+        }
+
+        return first;
+    }
+
+    private async Task<Result<List<JsonElement>>> SendListAsync(
+        string doctype, object[] fields, bool dictSyntax, IReadOnlyList<object[]> filters, string? orderBy, string? groupBy, int limit, int limitStart, CancellationToken cancellationToken)
+    {
+        var fieldJson = new JsonArray(fields.Select(f => f is Aggregate a ? a.Render(dictSyntax) : JsonValue.Create((string)f)).ToArray<JsonNode?>());
+        var url = $"api/resource/{Uri.EscapeDataString(doctype)}?fields={Uri.EscapeDataString(fieldJson.ToJsonString())}"
             + $"&filters={Uri.EscapeDataString(JsonSerializer.Serialize(filters))}&limit_page_length={limit.ToString(CultureInfo.InvariantCulture)}&limit_start={limitStart}";
         if (orderBy is not null)
         {
@@ -395,7 +453,8 @@ public sealed partial class ErpNextClient
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            return Result<List<JsonElement>>.Failure(new Error("ErpNext.ListFailed", $"{doctype}: {response.StatusCode}: {Truncate(body)}"));
+            var code = response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden ? "ErpNext.AccessDenied" : "ErpNext.ListFailed";
+            return Result<List<JsonElement>>.Failure(new Error(code, $"{doctype}: {Explain(response.StatusCode, body)}"));
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);

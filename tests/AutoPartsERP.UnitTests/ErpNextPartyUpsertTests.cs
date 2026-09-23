@@ -88,4 +88,63 @@ public sealed class ErpNextPartyUpsertTests
         result.Value.Should().Be("CUST-0007");
         handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Put);
     }
+
+    [Fact]
+    public async Task A_linked_party_is_updated_by_its_record_name_without_any_lookup()
+    {
+        // The display name changed ("Garage One" → "Garage One Ltd"); the record keeps its name, so its invoices stay attached.
+        string? putUrl = null;
+        var (client, handler) = Create(r => { putUrl = r.RequestUri!.AbsolutePath; return Json(HttpStatusCode.OK, "{\"data\":{\"name\":\"CUST-00042\"}}"); });
+
+        var result = await client.SyncPartyAsync(Customer with { Name = "Garage One Ltd", KnownName = "CUST-00042" });
+
+        result.Value.Should().Be("CUST-00042");
+        handler.Methods.Should().Equal(HttpMethod.Put);
+        Uri.UnescapeDataString(putUrl!).Should().EndWith("/Customer/CUST-00042");
+    }
+
+    [Fact]
+    public async Task A_linked_record_deleted_in_ErpNext_is_linked_again()
+    {
+        var (client, handler) = Create(r => r.Method == HttpMethod.Put ? Json(HttpStatusCode.NotFound, "{\"exc_type\":\"DoesNotExistError\"}")
+            : r.Method == HttpMethod.Get ? Json(HttpStatusCode.OK, "{\"data\":[]}")
+            : Json(HttpStatusCode.OK, "{\"data\":{\"name\":\"Garage One\"}}"));
+
+        var result = await client.SyncPartyAsync(Customer with { KnownName = "CUST-00042" });
+
+        result.Value.Should().Be("Garage One");
+        handler.Methods.Should().Equal(HttpMethod.Put, HttpMethod.Get, HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task A_same_named_record_owned_by_another_party_is_not_adopted()
+    {
+        // Two different customers are both called "Garage One": the second gets its own record, told apart by its code.
+        string? postedName = null;
+        var (client, handler) = Create(r =>
+        {
+            if (r.Method == HttpMethod.Get) return Json(HttpStatusCode.OK, "{\"data\":[{\"name\":\"Garage One\"}]}");
+            postedName = System.Text.Json.JsonDocument.Parse(r.Content!.ReadAsStringAsync().Result).RootElement.GetProperty("customer_name").GetString();
+            return Json(HttpStatusCode.OK, "{\"data\":{\"name\":\"Garage One (WS-0007)\"}}");
+        });
+
+        var result = await client.SyncPartyAsync(Customer with { Code = "WS-0007", TakenNames = ["Garage One"] });
+
+        result.Value.Should().Be("Garage One (WS-0007)");
+        postedName.Should().Be("Garage One (WS-0007)");
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task Of_several_same_named_records_the_one_nobody_owns_is_adopted()
+    {
+        var (client, handler) = Create(r => r.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, "{\"data\":[{\"name\":\"Garage One\"},{\"name\":\"Garage One - 1\"}]}")
+            : Json(HttpStatusCode.OK, "{\"data\":{\"name\":\"Garage One - 1\"}}"));
+
+        var result = await client.SyncPartyAsync(Customer with { TakenNames = ["Garage One"] });
+
+        result.Value.Should().Be("Garage One - 1");
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Put);
+    }
 }

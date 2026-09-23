@@ -76,18 +76,17 @@ public sealed class PaymentErpNextSyncer
             references.Add(new ErpNextPaymentReference(invoiceName, ToUsd(allocation.AllocatedUsd, allocation.AllocatedSyp, payment.FxMid)));
         }
 
-        var customer = await _erpNextClient.SyncPartyAsync(new ErpNextPartySync(payment.PartyId, payment.CustomerName, PartyTypeCodes.Customer, payment.TaxNumber), cancellationToken);
+        var customer = await ErpNextPartyLinks.EnsureAsync(connection, _erpNextClient, payment.PartyId, PartyTypeCodes.Customer, cancellationToken);
         if (customer.IsFailure)
         {
-            await ErpNextSyncLogWriter.WriteAsync(connection, Entity, paymentId, Doctype, null, ErpNextSyncLogWriter.Failed,
-                $"Customer '{payment.CustomerName}' could not be created in ERPNext: {customer.Error.Message}", cancellationToken);
+            await ErpNextSyncLogWriter.WriteAsync(connection, Entity, paymentId, Doctype, null, ErpNextSyncLogWriter.Failed, customer.Error.Message, cancellationToken);
             return;
         }
 
         var result = await _erpNextClient.SyncPaymentAsync(
             new ErpNextPaymentSync(
                 paymentId,
-                payment.CustomerName,
+                customer.Value!, // the customer's ERPNext record, never its display name
                 ToUsd(payment.AmountUsd, payment.AmountSyp, payment.FxMid),
                 payment.PaymentDate,
                 payment.PaymentMethod,

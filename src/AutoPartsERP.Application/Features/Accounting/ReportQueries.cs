@@ -244,8 +244,9 @@ public sealed class GetPartyBalancesQueryHandler : IRequestHandler<GetPartyBalan
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var partyIds = (await connection.QueryAsync<(string Name, Guid Id)>(new CommandDefinition(
             """
-            SELECT erpnext_name AS Name, local_entity_id AS Id FROM erpnext_sync_log
-            WHERE local_entity_type = 'Party' AND erpnext_doctype = @partyDoctype AND erpnext_name = ANY(@names) AND status = 'SYNCED';
+            SELECT DISTINCT ON (erpnext_name) erpnext_name AS Name, local_entity_id AS Id FROM erpnext_sync_log
+            WHERE local_entity_type = 'Party' AND erpnext_doctype = @partyDoctype AND erpnext_name = ANY(@names) AND status = 'SYNCED'
+            ORDER BY erpnext_name, updated_at DESC;
             """,
             new { partyDoctype, names }, cancellationToken: cancellationToken))).ToDictionary(x => x.Name, x => x.Id, StringComparer.Ordinal);
         var ids = partyIds.Values.ToArray();

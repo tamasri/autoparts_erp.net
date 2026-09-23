@@ -76,9 +76,19 @@ export default function ChartOfAccounts(): JSX.Element {
   const load = useCallback(async (): Promise<void> => {
     setLoading(true); setError('');
     try {
-      const [tree, map] = await Promise.all([accountingApi.accounts(true), accountingApi.mapping().catch(() => null)]);
+      const map = accountingApi.mapping().catch(() => null);
+      let tree;
+      try {
+        tree = await accountingApi.accounts(true);
+      } catch (e: unknown) {
+        // The balances come from a separate ledger query; if only that fails, still show the chart (it can be maintained
+        // without balances) and say why the balance column is empty.
+        tree = await accountingApi.accounts(false);
+        setError(`تعذّرت قراءة الأرصدة، فالشجرة معروضة دونها — ${extractApiError(e, 'خطأ من ERPNext')}`);
+      }
       setAccounts(unwrapList<Account>(tree.data));
-      setMapping(map ? unwrapList<AccountMapping>(map.data) : []);
+      const m = await map;
+      setMapping(m ? unwrapList<AccountMapping>(m.data) : []);
     } catch (e: unknown) { setError(extractApiError(e, 'تعذر قراءة شجرة الحسابات من ERPNext')); }
     finally { setLoading(false); }
   }, []);

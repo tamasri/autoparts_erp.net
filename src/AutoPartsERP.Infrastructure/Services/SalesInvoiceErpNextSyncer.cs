@@ -74,6 +74,8 @@ public sealed class SalesInvoiceErpNextSyncer
                 return;
             }
 
+            var customerName = prerequisite.Value!; // the ERPNext record of this customer, never the display name
+
             string? returnAgainst = null;
             if (isReturn && header.OriginalInvoiceId is { } original)
             {
@@ -84,7 +86,7 @@ public sealed class SalesInvoiceErpNextSyncer
                 new ErpNextSalesInvoiceSync(
                     invoiceId,
                     header.InvoiceNumber ?? invoiceId.ToString(),
-                    header.CustomerName,
+                    customerName,
                     header.InvoiceDate,
                     header.DueDate,
                     lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitPrice, l.DiscountPercent)).ToList(),
@@ -173,15 +175,13 @@ public sealed class SalesInvoiceErpNextSyncer
         }
     }
 
-    private async Task<Result> EnsureMasterDataAsync(DbConnection connection, InvoiceHeader header, IReadOnlyList<InvoiceLineRow> lines, CancellationToken cancellationToken)
+    /// <returns>The customer's ERPNext record name, once the customer, sales person and items all exist in ERPNext.</returns>
+    private async Task<Result<string>> EnsureMasterDataAsync(DbConnection connection, InvoiceHeader header, IReadOnlyList<InvoiceLineRow> lines, CancellationToken cancellationToken)
     {
-        var customer = await _erpNextClient.SyncPartyAsync(new ErpNextPartySync(header.PartyId, header.CustomerName, PartyTypeCodes.Customer, header.TaxNumber), cancellationToken);
-        await ErpNextSyncLogWriter.WriteAsync(connection, "Party", header.PartyId, "Customer", customer.IsSuccess ? customer.Value : null,
-            _erpNextClient.IsEnabled ? (customer.IsSuccess ? ErpNextSyncLogWriter.Synced : ErpNextSyncLogWriter.Failed) : ErpNextSyncLogWriter.Skipped,
-            customer.IsFailure ? customer.Error.Message : null, cancellationToken);
+        var customer = await ErpNextPartyLinks.EnsureAsync(connection, _erpNextClient, header.PartyId, PartyTypeCodes.Customer, cancellationToken);
         if (customer.IsFailure)
         {
-            return Result.Failure(new Error("ErpNext.CustomerSync", $"Customer '{header.CustomerName}' could not be created in ERPNext: {customer.Error.Message}"));
+            return Result<string>.Failure(customer.Error);
         }
 
         if (header.SalesRepId is { } repId && header.SalesRepName is { } repName)
@@ -192,7 +192,7 @@ public sealed class SalesInvoiceErpNextSyncer
                 person.IsFailure ? person.Error.Message : null, cancellationToken);
             if (person.IsFailure)
             {
-                return Result.Failure(new Error("ErpNext.SalesPersonSync", $"Sales person '{repName}' could not be created in ERPNext: {person.Error.Message}"));
+                return Result<string>.Failure(new Error("ErpNext.SalesPersonSync", $"Sales person '{repName}' could not be created in ERPNext: {person.Error.Message}"));
             }
         }
 
@@ -204,11 +204,11 @@ public sealed class SalesInvoiceErpNextSyncer
                 synced.IsFailure ? synced.Error.Message : null, cancellationToken);
             if (synced.IsFailure)
             {
-                return Result.Failure(new Error("ErpNext.ItemSync", $"Item '{item.ItemCode}' could not be created in ERPNext: {synced.Error.Message}"));
+                return Result<string>.Failure(new Error("ErpNext.ItemSync", $"Item '{item.ItemCode}' could not be created in ERPNext: {synced.Error.Message}"));
             }
         }
 
-        return Result.Success();
+        return Result<string>.Success(customer.Value!);
     }
 
     private sealed record InvoiceHeader(

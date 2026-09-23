@@ -120,7 +120,7 @@ public sealed partial class ErpNextClient
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return Result<IReadOnlyList<JsonElement>>.Failure(new Error("ErpNext.ReadFailed", $"{doctype}: {response.StatusCode}: {Truncate(body)}"));
+            return Result<IReadOnlyList<JsonElement>>.Failure(new Error("ErpNext.ReadFailed", $"{doctype}: {Explain(response.StatusCode, body)}"));
         }
 
         using var document = JsonDocument.Parse(body);

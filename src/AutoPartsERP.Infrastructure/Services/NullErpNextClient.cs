@@ -40,9 +40,6 @@ public sealed class NullErpNextClient : IErpNextClient
     public Task<Result<string>> SyncSupplierPaymentAsync(ErpNextSupplierPaymentSync payment, CancellationToken cancellationToken = default) =>
         Skip(nameof(SyncSupplierPaymentAsync), payment.LocalPaymentId);
 
-    public Task<Result<string>> RenameDocumentAsync(string doctype, string oldName, string newName, CancellationToken cancellationToken = default) =>
-        Skip(nameof(RenameDocumentAsync), Guid.Empty);
-
     public Task<Result<string>> CancelDocumentAsync(string doctype, string name, CancellationToken cancellationToken = default) =>
         Skip(nameof(CancelDocumentAsync), Guid.Empty);
 

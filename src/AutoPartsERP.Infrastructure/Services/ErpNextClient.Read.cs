@@ -26,7 +26,7 @@ public sealed partial class ErpNextClient
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            return Result<IReadOnlyList<ErpNextAccount>>.Failure(new Error("ErpNext.AccountsFailed", $"{response.StatusCode}: {Truncate(body)}"));
+            return Result<IReadOnlyList<ErpNextAccount>>.Failure(new Error("ErpNext.AccountsFailed", $"{Explain(response.StatusCode, body)}"));
         }
 
         var accounts = new List<ErpNextAccount>();
