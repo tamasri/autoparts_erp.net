@@ -9,7 +9,6 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'الإدارة العليا',
     items: [
       { to: '/', label: 'لوحة التحكم', icon: '⊞', end: true },
-      { to: '/kpi', label: 'مؤشرات الأداء', icon: '↗' },
     ],
   },
   {

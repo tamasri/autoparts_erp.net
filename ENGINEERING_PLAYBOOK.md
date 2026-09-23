@@ -163,6 +163,11 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - A new warehouse list filters with `(@ScopeAll OR <column> IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))` and passes `ScopeAll = WarehouseScopeSql.SeesAll(user)`, `ScopeUser = user.UserId`.
 - Seeing every warehouse is the permission `inventory:all_warehouses`, never a role-name check.
 
+### 2.3i Dashboard figures
+- Business figures come from `GetBusinessKpisQuery` only; the arithmetic is `KpiMath`. Do not add a second place that sums sales or receivables for a screen — extend the query.
+- Sales figures by line are scaled to the invoice's own net total, so any breakdown adds up to the invoices. Net profit is always the ledger's (ERPNext P&L), never recomputed locally.
+- A filter that does not apply to a section must not silently change it: leave the section out (null) or unfiltered and say so on screen.
+
 ### 2.3f Invoice totals and discounts
 - **One formula.** A sales invoice's subtotal/discount/total are written only by `recalc_invoice_totals(id)` (via `InvoiceTotals`); any code that changes lines, the fee or the discount calls it. Never update `total_*` by hand.
 - **Invoice discount = percentage or amount** (`DocumentDiscount.Resolve`), stored positive; a RETURN's subtotal and total are negative. Line discounts stay on the lines. Only a DRAFT's discount can change.

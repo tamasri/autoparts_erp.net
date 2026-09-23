@@ -19,7 +19,6 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 const Login            = lazy(() => import('./pages/Login'));
 const AppLayout        = lazy(() => import('./components/layout/AppLayout'));
 const Dashboard        = lazy(() => import('./pages/Dashboard'));
-const KpiDashboard     = lazy(() => import('./pages/kpi/KpiDashboard'));
 const Accounts         = lazy(() => import('./pages/accounts/Accounts'));
 const CustomerDetail   = lazy(() => import('./pages/customers/CustomerDetail'));
 const Invoices         = lazy(() => import('./pages/invoices/Invoices'));
@@ -113,7 +112,7 @@ export default function App(): JSX.Element {
       >
         <Route index                          element={<RouteWrapper><Dashboard /></RouteWrapper>} />
         <Route path="dashboard"               element={<RouteWrapper><Dashboard /></RouteWrapper>} />
-        <Route path="kpi"                     element={<RouteWrapper><KpiDashboard /></RouteWrapper>} />
+        <Route path="kpi"                     element={<Navigate to="/" replace />} />
         <Route path="accounts"                element={<RouteWrapper><Accounts /></RouteWrapper>} />
         <Route path="customers"               element={<Navigate to="/accounts" replace />} />
         <Route path="customers/:id"           element={<RouteWrapper><CustomerDetail /></RouteWrapper>} />

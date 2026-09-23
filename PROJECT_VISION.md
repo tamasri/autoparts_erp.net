@@ -262,7 +262,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] Activity timeline (invoices, payments, audit + manual calls), generic **tags**, **custom fields**,
       direct e-mail with correspondence log, accounting summary per customer.
 
-#### PHASE 4 — Reports centre  · `Status: Not Started`
+#### PHASE 4 — Reports centre  · `Status: In Progress`
+- [x] **Business KPIs on the dashboard (2026-09-23):** period / warehouse / customer / rep / category filters and a currency switch; sales, profit (gross and ledger net), purchases, ageing and DSO, cash, stock value and slow movers, top customers / items / reps, overdue invoices, 12-month trend.
 - [ ] Sales / purchases / returns, profit by item and by invoice, slow movers, item movement, payments and expenses,
       salesperson points (rep figures exist on the reps page); date + tag filters; Excel export everywhere (ClosedXML is in place).
 

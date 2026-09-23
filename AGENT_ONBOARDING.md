@@ -352,3 +352,18 @@ AGENT_ONBOARDING.md                                  [MODIFY]
   Not filtered on purpose: the sales item picker (sellers need stock everywhere) and the plain location list used by pickers (a transfer needs the other warehouse as destination).
 - **Verified:** unit 135 (6 new for the behaviour); live 21/21 (four document lists × five kinds of user, transfer lists, stock, movements, overview, 403 on another warehouse's documents and
   new work, transfers allowed from one side, ship refused to the wrong side, unknown = 404, admin unaffected); item 9 approval test re-run 31/31.
+- **Item 10 — KPIs on the dashboard with filters.** What existed: `GetDashboardSummaryQuery` (fixed current-month tiles, used by both the dashboard and a duplicate KPI page), the ledger
+  reports (`FinancialReports`, P&L query). Built: `GET /api/v1/dashboard/kpis?from&to&warehouseId&customerId&salesRepId&categoryId` (`GetBusinessKpisQuery`, `invoices:read`) — net sales,
+  returns, cost, gross profit and margin; purchases; receivables and payables with ageing buckets and DSO; cash in/out; stock value, out-of-stock, below-reorder and slow movers (90 days);
+  12-month trend; top customers, top items, sales by rep; overdue invoices. Net profit is ERPNext's P&L for the same period, fetched through the existing P&L query (company-wide only).
+  Sales are invoice lines scaled to their invoice's net total (after line and invoice discounts, without delivery and tax), so they always add up to the invoices; categories include
+  sub-categories (ltree); a warehouse includes its shelves. Sections a filter does not apply to are hidden or left unfiltered and the screen says which. The arithmetic is `KpiMath` (tested).
+  UI: `features/dashboard/BusinessKpis.tsx` on the home screen (each card links to its report); `/kpi` redirects home and its menu entry and page are gone; the summary endpoint now returns only
+  today's work (latest invoices, open alerts), so no figure is computed twice. Removed unused `SalesChart` and `KpiCard`.
+- **Found on the way:** two seed invoices (INV-2026-00001/00002) store a subtotal that differs from their lines by $0.26 / $0.46 (data from before the single totals function). KPIs follow the
+  invoice totals as issued; the data itself was not changed.
+- **Verified:** unit 147; live 29/29 against hand-written SQL on a different path (invoice headers instead of lines): net sales, returns, cost, invoice count, margin, receivables and buckets,
+  DSO, overdue ordering, purchases, payables, cash, stock value, slow movers, the September month of the trend, rep totals, ledger net profit = P&L report, customer / rep / category / warehouse
+  filters, 400 on a reversed period, 403 for warehouse staff, a sales rep without purchases or net profit; the screen and the currency switch checked in the browser.
+- **Known gaps (item 10):** receivables are today's balances of invoices dated in range (not the balance as it stood on the end date); payables are not split by supplier on the dashboard;
+  no dashboard export yet (every card links to a report that has one).
