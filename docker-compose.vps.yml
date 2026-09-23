@@ -21,6 +21,10 @@ services:
       Erpnext__ApiKey: "${ERPNEXT_API_KEY}"
       Erpnext__ApiSecret: "${ERPNEXT_API_SECRET}"
       Governance__AllowSelfApproval: "${GOVERNANCE_ALLOW_SELF_APPROVAL:-false}"
+      Assistant__GatewaySecret: "${ASSISTANT_GATEWAY_SECRET:-}"
+      Ai__BaseUrl: "${AI_BASE_URL:-https://api.groq.com/openai/v1}"
+      Ai__Model: "${AI_MODEL:-llama-3.3-70b-versatile}"
+      Ai__ApiKey: "${AI_API_KEY:-}"
     depends_on:
       - redis
     extra_hosts:
@@ -32,6 +36,22 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+
+  # WhatsApp assistant transport (Baileys). Runs only with the "whatsapp" profile (WHATSAPP_ENABLED=true in .env.vps).
+  # Talks to the api over this private network only; publishes no port. The linked-device session is in the whatsapp-auth volume.
+  whatsapp:
+    build: ./whatsapp-gateway
+    restart: unless-stopped
+    profiles: ["whatsapp"]
+    environment:
+      API_URL: "http://api:8080"
+      GATEWAY_SECRET: "${ASSISTANT_GATEWAY_SECRET:-}"
+    volumes:
+      - whatsapp-auth:/data
+    depends_on:
+      - api
+    networks:
+      - erp-internal
 
   redis:
     image: redis:7-alpine
@@ -63,3 +83,4 @@ networks:
 
 volumes:
   redisdata-vps:
+  whatsapp-auth:

@@ -22,4 +22,8 @@ public static class AuditActions
     public const string ReasonCodeUpdated = "REASON_CODE.UPDATED";
 	public const string PeriodLockBlocked = "PERIOD_LOCK_BLOCKED";
 	public const string IdempotencyReplay  = "IDEMPOTENCY_REPLAY";
+    public const string AssistantQuery = "ASSISTANT.QUERY";
+    public const string AssistantLinkCreated = "ASSISTANT.LINK_CREATED";
+    public const string AssistantLinkVerified = "ASSISTANT.LINK_VERIFIED";
+    public const string AssistantLinkRevoked = "ASSISTANT.LINK_REVOKED";
 }

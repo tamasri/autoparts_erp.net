@@ -1,0 +1,18 @@
+{
+  "name": "autoparts-erp-whatsapp-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Transport-only WhatsApp gateway for the AutoParts ERP assistant (Baileys). All decisions are made by the ERP API.",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "pino": "9.14.0"
+  }
+}

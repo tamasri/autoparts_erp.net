@@ -124,6 +124,30 @@ If `git pull` complains about local changes on the server, look at them (`git di
 ### 3.4a ERPNext read access (chart of accounts, documents)
 The API user needs create/write on **Sales Person** (reps), read on **Cost Center, Mode of Payment, Sales/Purchase Taxes and Charges Template, Fiscal Year, Currency Exchange** (reference lists) and read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item. The accounting screens also **write**: create/write on **Account** (chart maintenance; renaming calls `erpnext.accounts.doctype.account.account.update_account_number`), and create/submit/cancel on **Journal Entry**. Reports use grouped `GL Entry` queries (`group_by`, `sum(debit)`), so the user must be allowed to read GL Entry with aggregates. If an accounting screen shows an error, read the message: it is ERPNext's own text.
 
+### 3.4b WhatsApp assistant
+Read-only questions (customer balance, item stock, invoice status, sales, overdue invoices) from phone numbers linked to ERP users,
+answered with that user's permissions. Nothing is created or changed from WhatsApp.
+1. **Use a dedicated WhatsApp number** (a SIM for the business, WhatsApp Business app on a phone you keep). The gateway uses
+   Baileys, an **unofficial** WhatsApp Web client: it is free and runs on this server, but WhatsApp may restrict or ban a number
+   that it considers automated. Do not use the owner's personal number. (The official alternative is the WhatsApp Cloud API —
+   needs a Meta business account and a public HTTPS webhook; the gateway is the only piece to replace.)
+2. **Groq key (optional but recommended):** create one at console.groq.com and put it in `.env.vps` on the server as
+   `AI_API_KEY=` — never in chat, e-mail or git. Only the message text is sent to Groq; no ERP data. Without a key the assistant
+   still works with keyword rules (fewer phrasings understood).
+3. In `.env.vps`: `WHATSAPP_ENABLED=true`, then deploy. `ASSISTANT_GATEWAY_SECRET` is generated automatically.
+4. **Pair:** Settings → **مساعد واتساب** shows a QR. On the assistant's phone: WhatsApp → Linked devices → Link a device → scan.
+   The session is kept in the `whatsapp-auth` volume (survives deploys). If the phone unlinks it, a new QR appears.
+5. **Link each person:** on the same screen, **ربط رقم** → choose the user, enter their number in international form
+   (963…) → a 6-digit code appears once. From that phone, send the code to the assistant's number within 15 minutes.
+   The user needs the `assistant:use` permission (SYSTEM_ADMIN and ACCOUNTANT have it).
+6. **Stop it:** revoke a number on the screen; switch the whole assistant off with the `WHATSAPP_ASSISTANT` AI feature flag;
+   or `WHATSAPP_ENABLED=false` and deploy to stop the gateway.
+
+Security model: the gateway only carries messages and knows no rules; the API answers only linked numbers (strangers get no reply,
+no read receipt, no typing indicator); a number is linked only after it sends a one-time code (hashed, 15 min, 5 tries per link and
+per sender); every answer runs as the linked user (permissions, warehouse scope, audit `ASSISTANT.QUERY`) and a deactivated
+user loses access at once; `/internal/assistant/*` is not routed by nginx and needs the shared secret; 20 messages/minute per number.
+
 ### 3.5 Firewall / network
 - `ufw` should allow only 22, 80, 443 to the world. Container → host Postgres needs `5432` from `172.16.0.0/12`.
 - ERPNext's port 8080 was opened to reach the setup wizard from a browser. Check `ufw status` and close it to the

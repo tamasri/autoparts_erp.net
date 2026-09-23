@@ -195,6 +195,15 @@ else
 {
     builder.Services.AddScoped<IErpNextClient, NullErpNextClient>();
 }
+// WhatsApp assistant: intent from the language model (text only), everything else local; see AssistantModule.
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
+builder.Services.AddHttpClient<IIntentExtractor, GroqIntentExtractor>();
+builder.Services.AddSingleton(builder.Configuration.GetSection("Assistant").Get<AutoPartsERP.Application.Features.Assistant.AssistantOptions>()
+    ?? new AutoPartsERP.Application.Features.Assistant.AssistantOptions());
+builder.Services.AddSingleton<AutoPartsERP.Application.Features.Assistant.IAssistantState, RedisAssistantState>();
+builder.Services.AddScoped<IAssistantIdentity, AutoPartsERP.Infrastructure.Http.AssistantIdentity>();
+builder.Services.AddScoped<AutoPartsERP.Application.Features.Assistant.AssistantAnswers>();
+builder.Services.AddScoped<AutoPartsERP.Application.Features.Assistant.WhatsAppAssistant>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();

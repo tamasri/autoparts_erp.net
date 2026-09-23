@@ -62,6 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/periods', label: 'إقفال الفترات', icon: '⊝' },
       { to: '/accounting/sync', label: 'مزامنة ERPNext', icon: '⇄' },
       { to: '/users', label: 'المستخدمون والأدوار', icon: '◉', tabs: [{ to: '/users', label: 'المستخدمون' }, { to: '/roles', label: 'الأدوار والصلاحيات' }] },
+      { to: '/assistant', label: 'مساعد واتساب', icon: '✆' },
     ],
   },
 ];

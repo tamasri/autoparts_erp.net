@@ -403,3 +403,13 @@ An outside review was checked claim by claim; only the confirmed findings were f
 - `scripts/backup-db.sh [daily|predeploy|manual]` and `scripts/restore-check.sh`; scheduled by `deploy-vps.sh` into `/etc/cron.d/autoparts-erp-backup`; settings `BACKUP_DIR`, `KEEP_*`, `BACKUP_REMOTE` in `.env.vps` (template updated). `.gitattributes` forces LF for `*.sh`.
 - **Bug caught while testing:** a `[[ weekday ]] && …` line ended the script under `set -e` on every non-Sunday, silently skipping rotation and the off-server copy; replaced with `if` blocks and checked the exit code.
 - **Verified locally** against the dev database: 3 runs with `KEEP_DAILY=2` (rotation, weekly copy, exit 0), restore check restored 83 tables / 38 users / 38 invoices in a throw-away container; `bash -n` and shellcheck clean.
+
+### 2026-09-23 — WhatsApp assistant (Groq for intent only, everything else local)
+- **Pieces:** `whatsapp-gateway/` (Node 20 + Baileys 7, transport only, compose service `whatsapp` under profile `whatsapp`, volume `whatsapp-auth`);
+  `AssistantModule` (`/internal/assistant/whatsapp/inbound` + `/gateway/status` with `X-Gateway-Secret`; admin `/api/v1/assistant/*`);
+  `Features/Assistant`: `WhatsAppAssistant` (flow), `AssistantAnswers` (five read-only questions), `EntityMatcher`, `RuleBasedIntents`, `AssistantLinks`;
+  `GroqIntentExtractor`, `RedisAssistantState`, `AssistantIdentity` (acts as the linked user via `IAuthService.BuildPrincipalAsync`);
+  migration 24 (`ar_norm()`, trigram indexes on normalized names, `assistant_links`, flag `WHATSAPP_ASSISTANT`); permissions `assistant:use` (+ACCOUNTANT), `assistant:manage`;
+  screen **مساعد واتساب** (`pages/settings/WhatsAppAssistant.tsx`, QR via `qrcode`). Config: `Ai:*`, `Assistant:GatewaySecret`, `Assistant:UtcOffsetHours`; VPS: `WHATSAPP_ENABLED`, `AI_API_KEY`.
+- **Found on the way:** invoices have a third type `CREDIT_NOTE` (the reversal a void creates) — labelled in answers; the gateway first marked messages read / "typing" before knowing whether to answer, which would reveal the bot to strangers — now nothing is visible unless a reply is sent.
+- **Verified:** 37 end-to-end checks against Postgres with a recording stand-in for Groq (secret required; strangers silent; code only from its own number, stored hashed; ة/ه-hamza variants and typos matched; numbered choice incl. Arabic digits; answers equal the statement/stock in the DB; **no ERP data in any model request**; model down → keyword rules; dedupe; 20/min limit; flag off; audit; revoke); the real gateway container reached WhatsApp and its QR showed on the screen; UI link flow in the browser; 32 new unit tests (183 total), integration 35; `tsc`/build clean.

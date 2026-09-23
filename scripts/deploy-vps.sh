@@ -130,6 +130,21 @@ else
   echo "Seed admin password already provided."
 fi
 
+step "WhatsApp assistant settings"
+# The gateway authenticates to the API with this shared secret (never leaves the server). Generated once, kept in .env.vps.
+if is_placeholder "${ASSISTANT_GATEWAY_SECRET:-}"; then
+  upsert_env "ASSISTANT_GATEWAY_SECRET" "$(openssl rand -hex 32)"
+  set -a; source "$ENV_FILE"; set +a
+  echo "Generated ASSISTANT_GATEWAY_SECRET."
+fi
+if [[ "${WHATSAPP_ENABLED:-false}" == "true" ]]; then
+  export COMPOSE_PROFILES=whatsapp
+  echo "WhatsApp gateway: enabled (pair it from Settings → WhatsApp assistant)."
+  [[ -n "${AI_API_KEY:-}" ]] || warn "AI_API_KEY is empty: the assistant will use keyword rules only (no language model)."
+else
+  echo "WhatsApp gateway: disabled (set WHATSAPP_ENABLED=true in $ENV_FILE to run it)."
+fi
+
 step "Check external PostgreSQL connectivity"
 # --add-host is required on native Linux Docker Engine: unlike Docker Desktop,
 # host.docker.internal is not resolvable by default in a plain `docker run`
@@ -185,7 +200,8 @@ else
 fi
 
 step "Build and start Docker stack"
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down --remove-orphans || true
+# --profile whatsapp on "down" so a gateway that was switched off is stopped too; "up" starts it only when COMPOSE_PROFILES says so.
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile whatsapp down --remove-orphans || true
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build \
   || fail "docker compose up failed."
 

@@ -207,6 +207,16 @@ public static class PermissionCodes
         public const string Manage = "sales_reps:manage";
     }
 
+    /// <summary>
+    /// The WhatsApp assistant: use = ask questions from a linked phone (answers are limited by the user's other permissions);
+    /// manage = link and revoke phone numbers and pair the WhatsApp gateway.
+    /// </summary>
+    public static class Assistant
+    {
+        public const string Use = "assistant:use";
+        public const string Manage = "assistant:manage";
+    }
+
     public static class System
     {
         public const string ConfigRead = "system:config_read";
@@ -314,6 +324,8 @@ public static class PermissionCodes
         Accounting.Reconcile,
         SalesReps.Read,
         SalesReps.Manage,
+        Assistant.Use,
+        Assistant.Manage,
         Barcodes.Generate,
         Ai.Chat,
         Ai.SuggestionsRead,

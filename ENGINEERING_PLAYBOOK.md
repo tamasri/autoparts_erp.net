@@ -185,6 +185,7 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 ### 2.4 AI rules
 - All AI features go through one provider abstraction over an **OpenAI-compatible** endpoint (Groq / DeepSeek);
   base URL, model and key are configuration, the key never leaves the server.
+- **WhatsApp assistant (2026-09-23):** the model only chooses a tool (`AssistantActions.Tools`, function calling, `tool_choice=required`) and copies the user's words; its arguments are filtered to the declared names and 200 characters. Records are resolved locally with `ar_norm` + pg_trgm (`EntityMatcher`: take only a clear winner — score ≥ 0.75 and 0.15 ahead — otherwise ask with a numbered list). Answers are written on the server and never sent to the model. To add a question: a `ToolSpec`, a branch in `AssistantAnswers` with its permission check (reuse an existing query), a keyword rule in `RuleBasedIntents`, tests. Keep it read-only.
 - **Read-only tools only**, each checking the caller's permissions. **AI never writes core data**
   (`AllowWritesToCoreData` stays blocked). A proposed action is a `PENDING` row in `ai_suggestions` and executes only
   via the maker-checker flow.

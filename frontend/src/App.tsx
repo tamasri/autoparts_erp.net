@@ -42,6 +42,7 @@ const InventoryAlerts  = lazy(() => import('./pages/inventory/InventoryAlerts'))
 const CombinedStatement= lazy(() => import('./pages/parties/CombinedStatement'));
 const Users            = lazy(() => import('./pages/settings/Users'));
 const Roles            = lazy(() => import('./pages/settings/Roles'));
+const WhatsAppAssistant = lazy(() => import('./pages/settings/WhatsAppAssistant'));
 const Approvals        = lazy(() => import('./pages/approvals/Approvals'));
 const AuditLog         = lazy(() => import('./pages/audit/AuditLog'));
 const Items            = lazy(() => import('./pages/items/Items'));
@@ -160,6 +161,7 @@ export default function App(): JSX.Element {
         <Route path="periods"                 element={<RouteWrapper><PeriodLocks /></RouteWrapper>} />
         <Route path="users"                   element={<RouteWrapper><Users /></RouteWrapper>} />
         <Route path="roles"                   element={<RouteWrapper><Roles /></RouteWrapper>} />
+        <Route path="assistant"               element={<RouteWrapper><WhatsAppAssistant /></RouteWrapper>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

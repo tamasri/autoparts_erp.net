@@ -179,6 +179,35 @@ public sealed class AuthService : IAuthService
         return Result<CurrentUserResponse>.Success(new CurrentUserResponse(summary, permissions));
     }
 
+    public async Task<Result<ClaimsPrincipal>> BuildPrincipalAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+        {
+            return Result<ClaimsPrincipal>.Failure(new Error("Auth.UserNotFound", "User was not found."));
+        }
+
+        if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTimeOffset.UtcNow)
+        {
+            return Result<ClaimsPrincipal>.Failure(new Error("Auth.LockedOut", "Account is locked out."));
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var permissions = await ResolvePermissionsAsync(roles);
+
+        // Same claim names as the access token (JwtTokenService), so CurrentUserService reads them the same way.
+        var claims = new List<Claim>
+        {
+            new(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+            new("username", user.UserName ?? string.Empty),
+            new("full_name", user.FullName),
+        };
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        claims.AddRange(permissions.Select(permission => new Claim("permission", permission)));
+        return Result<ClaimsPrincipal>.Success(new ClaimsPrincipal(new ClaimsIdentity(claims, "assistant", "username", ClaimTypes.Role)));
+    }
+
     private async Task<IReadOnlyCollection<string>> ResolvePermissionsAsync(IEnumerable<string> roles)
     {
         var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

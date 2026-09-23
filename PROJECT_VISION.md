@@ -254,7 +254,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] POS screen: barcode/name/code search, fast lines, hold (= `DRAFT`) and resume.
 - [ ] Public invoice link with token: view, PDF, (later) pay. `IPaymentGateway` abstraction + webhook +
       public payment page shell for **Sham Cash** (integration is added when the owner provides the API).
-- [ ] Notification channels: e-mail (SMTP), pluggable SMS/WhatsApp channel; payment reminders; message log.
+- [ ] Notification channels: e-mail (SMTP), pluggable SMS channel; payment reminders; message log. (WhatsApp inbound assistant done 2026-09-23; the same gateway can later send reminders.)
 - [ ] Invoice history: financial operations, e-mails sent, read/paid state.
 
 #### PHASE 3 — CRM  · `Status: Not Started`
@@ -272,7 +272,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       `pg_dump`, rotation, admin-only download), catalog categories, batches, warranty and reason-code screens.
 
 #### PHASE 6 — Real AI  · `Status: Not Started`
-- [ ] Provider abstraction over an OpenAI-compatible API (Groq / DeepSeek), config-driven, key only on the server.
+- [x] Provider over an OpenAI-compatible API (Groq default; `Ai:BaseUrl/Model/ApiKey`, key only on the server) — `GroqIntentExtractor`, used by the WhatsApp assistant (2026-09-23).
 - [ ] Read-only tools (item search, stock, customer balance, recent invoices, period sales), permission-checked.
 - [ ] Real scheduled tasks: accounting check (SQL rules + LLM narration), low-stock summary with reorder proposals.
 - [ ] Suggestions inbox wired to maker-checker; sidebar advisor; AI admin (flags, tasks, prompt logs, runs, KB).
@@ -309,4 +309,5 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - **Decision:** hosted OpenAI-compatible provider — Groq (free tier, rate-limited) first, DeepSeek as the cheap
   alternative; model name and base URL are configuration. Free tiers change — re-check limits and data terms before
   relying on them. Data sent to the provider is minimised and never includes secrets or credentials.
+- **WhatsApp assistant (2026-09-23, live):** read-only questions from linked numbers (balance, stock, invoice, sales, overdue); the model gets the message text only and picks a tool; matching and answers are local; see SETUP_HARDENING §3.4b.
 - **Plan:** Phase 6 above.

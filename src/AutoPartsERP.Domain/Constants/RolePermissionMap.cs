@@ -76,7 +76,8 @@ public static class RolePermissionMap
                 PermissionCodes.Items.Read,
                 PermissionCodes.Inventory.Read,
                 PermissionCodes.Inventory.AllWarehouses,
-                PermissionCodes.PeriodLocksRead
+                PermissionCodes.PeriodLocksRead,
+                PermissionCodes.Assistant.Use
             },
 
             // Buys goods: prepares and posts supplier bills, sees stock and suppliers; does not pay or void.
