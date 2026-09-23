@@ -19,6 +19,9 @@ public sealed class NullErpNextClient : IErpNextClient
     public Task<Result<string>> SyncItemAsync(ErpNextItemSync item, CancellationToken cancellationToken = default) =>
         Skip(nameof(SyncItemAsync), item.LocalItemId);
 
+    public Task<Result<string>> SyncSalesPersonAsync(ErpNextSalesPersonSync person, CancellationToken cancellationToken = default) =>
+        Skip(nameof(SyncSalesPersonAsync), person.LocalUserId);
+
     public Task<Result<string>> SyncPartyAsync(ErpNextPartySync party, CancellationToken cancellationToken = default) =>
         Skip(nameof(SyncPartyAsync), party.LocalPartyId);
 

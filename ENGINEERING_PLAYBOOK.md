@@ -152,6 +152,12 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - **Approval exemptions live in one place [convention]:** SYSTEM_ADMIN's exemption is in `MakerCheckerBehavior`; approver resolution (who may approve what) must be one service used by `GovernanceService`, not per handler.
 - **Transfers between warehouses [enforced by tests]:** a command that moves stock between warehouses implements `IWarehouseTransferRequest` and is resolved in `WarehouseAccess.ResolveTransferAsync`; the decision is `TransferApprovalPolicy` (pure). Do not check warehouse managers anywhere else. A warehouse is a top-level location; moves inside one warehouse are not transfers.
 
+### 2.3g Sales representatives
+- A rep is a **user** with a row in `sales_reps`; `invoices.sales_rep_id` and `customers.assigned_sales_rep` reference it (FK). Check with `SalesRepGuard.IsActiveAsync` before writing either.
+- **Rep figures come from one query** (`SalesRepReader.ListAsync`) and the arithmetic from `SalesRepMetrics`; do not compute rep totals elsewhere. Visibility is `SalesRepScope`: `sales_reps:read` sees all, a rep sees themselves.
+- Customer updates: a missing `assignedSalesRep` keeps the rep, `Guid.Empty` removes it (same convention as `Customer.AssignSalesRep`). Never write NULL because a form left a field out.
+- ERPNext: the rep is a Sales Person named by the user's full name; invoices carry `sales_team` at 100 %.
+
 ### 2.3f Invoice totals and discounts
 - **One formula.** A sales invoice's subtotal/discount/total are written only by `recalc_invoice_totals(id)` (via `InvoiceTotals`); any code that changes lines, the fee or the discount calls it. Never update `total_*` by hand.
 - **Invoice discount = percentage or amount** (`DocumentDiscount.Resolve`), stored positive; a RETURN's subtotal and total are negative. Line discounts stay on the lines. Only a DRAFT's discount can change.

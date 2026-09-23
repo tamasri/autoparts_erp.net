@@ -28,6 +28,7 @@ global using AutoPartsERP.Contracts.Purchasing;
 global using AutoPartsERP.Contracts.Parties;
 global using AutoPartsERP.Contracts.Periods;
 global using AutoPartsERP.Contracts.ReasonCodes;
+global using AutoPartsERP.Contracts.SalesReps;
 global using AutoPartsERP.Contracts.Reports;
 global using AutoPartsERP.Contracts.Roles;
 global using AutoPartsERP.Contracts.Receiving;

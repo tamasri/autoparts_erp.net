@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { invoicesApi, type CreateInvoice } from '../../api/endpoints/invoices';
 import { customersApi } from '../../api/endpoints/customers';
 import { lookupsApi, type PickItem } from '../../api/endpoints/lookups';
+import { salesRepsApi, type SalesRep } from '../../api/endpoints/salesReps';
 import { unwrapNode, unwrapPaged } from '../../api/apiData';
 import ErrorBanner from '../../components/common/ErrorBanner';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
@@ -105,6 +106,12 @@ export default function InvoiceWorkspace(): JSX.Element {
   // Discount on the whole invoice, on top of each line's own discount.
   const [discountMode, setDiscountMode] = useState<'pct' | 'usd'>('pct');
   const [discountValue, setDiscountValue] = useState(0);
+  // Reps the user may see (all, or only themselves); empty when the user is neither a rep nor allowed to see reps.
+  const [reps, setReps] = useState<SalesRep[]>([]);
+  const [salesRepId, setSalesRepId] = useState('');
+  useEffect(() => {
+    salesRepsApi.list({}).then((r) => setReps((unwrapNode<SalesRep[]>(r.data) ?? []).filter((x) => x.isActive))).catch(() => setReps([]));
+  }, []);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
@@ -123,6 +130,9 @@ export default function InvoiceWorkspace(): JSX.Element {
       data: c,
     }));
   }, []);
+
+  // The rep follows the customer's own rep whenever the customer changes.
+  useEffect(() => { setSalesRepId(customerRecord?.assignedSalesRep ?? ''); }, [customerRecord]);
 
   // The due date follows the customer's payment terms until the user edits it by hand.
   useEffect(() => {
@@ -287,7 +297,7 @@ export default function InvoiceWorkspace(): JSX.Element {
         dueDate,
         fxRateId,
         invoiceType,
-        salesRepId: customerRecord?.assignedSalesRep || undefined,
+        salesRepId: salesRepId || undefined,
         deliveryFeeSyp: Number(deliveryFeeSyp),
         deliveryFeeUsd: Number(deliveryFeeUsd),
         discountPct: discountMode === 'pct' && Number(discountValue) > 0 ? Number(discountValue) : undefined,
@@ -361,6 +371,16 @@ export default function InvoiceWorkspace(): JSX.Element {
                 تاريخ الاستحقاق {customerRecord?.paymentTermsDays ? <span style={{ color: 'var(--txt-muted)', fontWeight: 400 }}>(شروط الزبون: {customerRecord.paymentTermsDays} يوم)</span> : null}
                 <input id="invoice-due-date" type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueTouched(true); }} className="vex-input" />
               </label>
+
+              {reps.length > 0 ? (
+                <label className="vex-label">
+                  المندوب
+                  <select id="invoice-sales-rep" value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} className="vex-select">
+                    <option value="">— بدون مندوب —</option>
+                    {reps.map((r) => <option key={r.userId} value={r.userId}>{r.fullName}</option>)}
+                  </select>
+                </label>
+              ) : null}
 
               <div className="vex-label" style={{ gridColumn: 'span 2' }}>
                 سعر الصرف
@@ -506,6 +526,7 @@ export default function InvoiceWorkspace(): JSX.Element {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
                   <Row label="الزبون" value={customer?.label ?? '-'} />
                   <Row label="النوع" value={isReturn ? 'مرتجع' : 'بيع'} />
+                  <Row label="المندوب" value={reps.find((r) => r.userId === salesRepId)?.fullName ?? '—'} />
                   <Row label="التاريخ" value={invoiceDate} />
                   <Row label="الاستحقاق" value={dueDate} />
                   <Row label="سعر الصرف" value={fxRate ? `${fmt(fxRate.midRate)} ${fxRate.currencyTo} (${fxRate.rateDate})` : '-'} />

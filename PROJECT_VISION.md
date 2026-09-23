@@ -248,7 +248,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
 - [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 
-#### PHASE 2 — Sales experience  · `Status: Not Started`
+#### PHASE 2 — Sales experience  · `Status: In Progress`
+- [x] **Sales representatives (2026-09-23):** rep list and page (sales, returns, collections, receivables, commission, monthly target, 12-month trend), customer hand-over, rep on invoices and customers, ERPNext Sales Person + sales team.
 - [ ] POS screen: barcode/name/code search, fast lines, hold (= `DRAFT`) and resume.
 - [ ] Public invoice link with token: view, PDF, (later) pay. `IPaymentGateway` abstraction + webhook +
       public payment page shell for **Sham Cash** (integration is added when the owner provides the API).
@@ -262,7 +263,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 
 #### PHASE 4 — Reports centre  · `Status: Not Started`
 - [ ] Sales / purchases / returns, profit by item and by invoice, slow movers, item movement, payments and expenses,
-      salesperson points; date + tag filters; Excel export everywhere (ClosedXML is in place).
+      salesperson points (rep figures exist on the reps page); date + tag filters; Excel export everywhere (ClosedXML is in place).
 
 #### PHASE 5 — Security & administration  · `Status: Not Started`
 - [ ] Role-permission editor (the users editor is done, 2026-09-21), user ↔ warehouse scoping of stock lists (assignment and transfer approval done), one-click database backup (scheduled

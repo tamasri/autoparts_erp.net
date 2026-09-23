@@ -10,7 +10,7 @@
  *
  * Phase 3 — feat(frontend): CustomerDialog with RHF + Zod + MUI (phase3)
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -29,6 +29,10 @@ import { customerSchema, type CustomerForm } from './schema';
 import { inLira, useFxMid } from '../../hooks/useFxMid';
 import { useSaveCustomer, type Customer } from './queries';
 import { toast, extractApiError } from '../../lib/toast';
+import { salesRepsApi, type SalesRep } from '../../api/endpoints/salesReps';
+import { unwrapNode } from '../../api/apiData';
+
+const NO_REP = '00000000-0000-0000-0000-000000000000';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +75,7 @@ function toDefaults(initial?: Partial<Customer>): CustomerForm {
     creditLimitUsd:    Number(initial.creditLimitUsd    ?? 0),
     paymentTermsDays:  Number(initial.paymentTermsDays  ?? 0),
     notes:             initial.notes             ?? '',
+    assignedSalesRep:  initial.assignedSalesRep  ?? '',
   };
 }
 
@@ -102,9 +107,17 @@ export default function CustomerDialog({ open, onClose, editId, initial }: Props
 
   const save = useSaveCustomer(editId);
 
+  // Only reps this user may see are offered; without any, the rep is left untouched.
+  const [reps, setReps] = useState<SalesRep[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    salesRepsApi.list({}).then((r) => setReps(unwrapNode<SalesRep[]>(r.data) ?? [])).catch(() => setReps([]));
+  }, [open]);
+
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await save.mutateAsync(values);
+      const assignedSalesRep = reps.length === 0 ? undefined : values.assignedSalesRep || NO_REP;
+      await save.mutateAsync({ ...values, assignedSalesRep });
       toast.success(isEdit ? 'تم تحديث الزبون بنجاح' : 'تم إنشاء الزبون بنجاح');
       onClose();
     } catch (err: unknown) {
@@ -259,6 +272,21 @@ export default function CustomerDialog({ open, onClose, editId, initial }: Props
               )}
             />
           </Grid>
+
+          {reps.length > 0 && (
+            <Grid item xs={12} sm={6}>
+              <Controller
+                name="assignedSalesRep"
+                control={control}
+                render={({ field }) => (
+                  <TextField {...field} value={field.value ?? ''} select label="المندوب" helperText="الفواتير الجديدة لهذا الزبون تُسند إليه تلقائياً">
+                    <MenuItem value="">— بدون مندوب —</MenuItem>
+                    {reps.map((r) => <MenuItem key={r.userId} value={r.userId} disabled={!r.isActive}>{r.fullName}{r.isActive ? '' : ' (موقوف)'}</MenuItem>)}
+                  </TextField>
+                )}
+              />
+            </Grid>
+          )}
 
           {/* Notes */}
           <Grid item xs={12}>

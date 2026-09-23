@@ -197,6 +197,13 @@ public static class PermissionCodes
         public const string Reconcile = "accounting:reconcile";
     }
 
+    /// <summary>Sales representatives: read = every rep's figures (a rep always sees their own), manage = add reps, set terms, hand over customers.</summary>
+    public static class SalesReps
+    {
+        public const string Read = "sales_reps:read";
+        public const string Manage = "sales_reps:manage";
+    }
+
     public static class System
     {
         public const string ConfigRead = "system:config_read";
@@ -301,6 +308,8 @@ public static class PermissionCodes
         Accounting.ManageAccounts,
         Accounting.PostEntries,
         Accounting.Reconcile,
+        SalesReps.Read,
+        SalesReps.Manage,
         Barcodes.Generate,
         Ai.Chat,
         Ai.SuggestionsRead,

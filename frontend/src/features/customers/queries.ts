@@ -36,6 +36,7 @@ export type Customer = {
   balanceSyp?: number;
   notes?: string;
   isActive?: boolean;
+  assignedSalesRep?: string | null;
 };
 
 export type CustomersParams = {

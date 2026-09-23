@@ -20,6 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/invoices', label: 'الفواتير والقبض', icon: '☰',
         tabs: [{ to: '/invoices', label: 'فواتير المبيعات' }, { to: '/payments', label: 'الدفعات والقبض' }],
       },
+      { to: '/sales-reps', label: 'المندوبون', icon: '☺' },
     ],
   },
   {

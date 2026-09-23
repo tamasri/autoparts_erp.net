@@ -72,7 +72,7 @@ Deploy with `./scripts/deploy-vps.sh` only (see SETUP_HARDENING.md). New in the 
 **What is built and working (verified in the running system):**
 - Governance pipeline (Validation → Authorization → Idempotency → PeriodLock → MakerChecker) — incl. a working
   approval **replay** (`IApprovalReplayContext`) so an approved request actually executes.
-- ~30 Carter modules; 21 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
+- ~30 Carter modules; 22 raw-SQL migrations (ids `202401010000NN`); 70+ tables.
 - Auth (JWT RS256), users/roles/permissions backend, audit log, period locks, approvals.
 - Two product models unified: `skus` + `inventory_stock` (operational, drives invoices) linked to
   `items` + `inventory_balances` (WMS) via `items.sku_id`, kept in step by SQL functions run from Hangfire
@@ -316,3 +316,16 @@ AGENT_ONBOARDING.md                                  [MODIFY]
   PDF, ERPNext payloads for sale/return/no-discount/bill, weighted cost at the discounted price and its exact reversal); discount applied and removed in the browser on a draft invoice.
 - **Known gaps:** the delivery fee is still not sent to ERPNext (its Sales Invoice total is lower than ours by the fee); a RETURN is not linked to the invoice it returns, so it carries its own discount;
   stock lists are not yet filtered by the user's warehouses (only approvals and assignment are); no purchase returns.
+- **Item 5 — sales representatives.** What existed (abandoned): `invoices.sales_rep_id` and `customers.assigned_sales_rep` holding user ids with no table, FK or validation; a `SALES_REP` role row
+  seeded in migration 1 with no permissions and not in `RoleCodes`; the invoice screen copied the customer's rep. Built on them: migration 22 `sales_reps(user_id → asp_net_users, commission_pct,
+  monthly_target_usd, is_active, notes)` with the existing references kept as reps and FKs added; `RoleCodes.SalesRep` with a 14-permission bundle; permissions `sales_reps:read|manage` (ACCOUNTANT reads).
+  API `/api/v1/sales-reps` (list with figures for a period, detail with 12-month trend/customers/invoices, candidates, save, hand over customers). A rep without `sales_reps:read` sees only themselves.
+  Figures: posted SALE/RETURN only; net = sales − returns; commission on net without delivery/tax (`SalesRepMetrics`, tested); target = monthly × calendar months touched; collected = allocations of
+  unreversed receipts in the period; outstanding = today's balance of the rep's sales. Invoices default to the customer's rep and refuse an inactive one (`SalesRepGuard`). ERPNext: the rep is upserted as
+  a **Sales Person** under "Sales Team" (commission rate, enabled) and the Sales Invoice gets `sales_team` = that person at 100 %, so ERPNext's own sales-person reports match.
+  UI: menu «المندوبون» (`pages/sales/SalesReps.tsx`, `SalesRepDetail.tsx`, `features/salesReps/*`), rep picker on the new invoice and in the customer dialog. Added `@mui/x-charts` (MUI X 7, same line as the tree view).
+- **Bug fixed on the way:** saving a customer from the edit dialog cleared their rep (the dialog never sent the field and the API wrote NULL). Now a missing field keeps the rep and the empty guid removes it.
+- **Verified:** unit 123; live 32/32 (backfill, role, candidates, validation, hand-over all-or-nothing, rep kept on customer edit, default on invoices, figures with a sale/return/receipt, trend, ERPNext
+  Sales Person + sales_team, a rep's own scope and 403s, deactivation); both pages and the invoice picker checked in the browser.
+- **Known gaps (item 5):** a rep renamed in the users screen becomes a new Sales Person in ERPNext on the next invoice (old one stays); commission is a report, not a posted expense; no split of one
+  invoice between several reps; reps are not filtered by warehouse.

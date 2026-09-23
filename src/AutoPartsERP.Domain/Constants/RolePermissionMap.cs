@@ -70,6 +70,7 @@ public static class RolePermissionMap
                 PermissionCodes.Accounting.ManageAccounts,
                 PermissionCodes.Accounting.PostEntries,
                 PermissionCodes.Accounting.Reconcile,
+                PermissionCodes.SalesReps.Read,
                 PermissionCodes.Customers.Read,
                 PermissionCodes.Party.Read,
                 PermissionCodes.Items.Read,
@@ -121,6 +122,26 @@ public static class RolePermissionMap
                 PermissionCodes.InventoryAlerts.Read,
                 PermissionCodes.InventoryAlerts.Acknowledge,
                 PermissionCodes.Barcodes.Scan
+            },
+
+            // Sells to customers: prepares invoices and takes receipts, manages customer details, sees stock and prices. Sees only their own
+            // figures on the sales-rep page (being a rep is a row in sales_reps, set by whoever holds sales_reps:manage).
+            [RoleCodes.SalesRep] = new[]
+            {
+                PermissionCodes.Customers.Read,
+                PermissionCodes.Customers.Create,
+                PermissionCodes.Customers.Update,
+                PermissionCodes.Party.Read,
+                PermissionCodes.Invoices.Read,
+                PermissionCodes.Invoices.Create,
+                PermissionCodes.Invoices.Update,
+                PermissionCodes.Payments.Read,
+                PermissionCodes.Payments.Create,
+                PermissionCodes.Payments.Allocate,
+                PermissionCodes.Items.Read,
+                PermissionCodes.Catalog.Read,
+                PermissionCodes.Inventory.Read,
+                PermissionCodes.FxRates.Read
             },
 
             // Baseline authenticated user: assorted read access.

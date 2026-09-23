@@ -95,7 +95,7 @@ password (generates one if it is still a placeholder) → checks Postgres reacha
 files → **builds the frontend into `frontend/dist`** → `docker compose down/up --build` → waits for `/health` → checks
 the HTTPS edge.
 
-Migrations run when the API starts (20 = user warehouses, 21 = invoice discounts, 2026-09-23); nothing to run by hand.
+Migrations run when the API starts (20 = user warehouses, 21 = invoice discounts, 22 = sales reps, 2026-09-23); nothing to run by hand.
 
 **Do not** run `docker compose up` by hand:
 - it does not rebuild `frontend/dist` (the UI would stay stale);
@@ -121,7 +121,7 @@ If `git pull` complains about local changes on the server, look at them (`git di
 - **Change the default ERPNext `Administrator` password (`admin`)** — pending (H-4).
 
 ### 3.4a ERPNext read access (chart of accounts, documents)
-The API user needs read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item. The accounting screens also **write**: create/write on **Account** (chart maintenance; renaming calls `erpnext.accounts.doctype.account.account.update_account_number`), and create/submit/cancel on **Journal Entry**. Reports use grouped `GL Entry` queries (`group_by`, `sum(debit)`), so the user must be allowed to read GL Entry with aggregates. If an accounting screen shows an error, read the message: it is ERPNext's own text.
+The API user needs create/write on **Sales Person** (reps) and read on Account, Company, GL Entry, Journal Entry, Payment Entry, Sales/Purchase Invoice, Customer, Supplier and Item. The accounting screens also **write**: create/write on **Account** (chart maintenance; renaming calls `erpnext.accounts.doctype.account.account.update_account_number`), and create/submit/cancel on **Journal Entry**. Reports use grouped `GL Entry` queries (`group_by`, `sum(debit)`), so the user must be allowed to read GL Entry with aggregates. If an accounting screen shows an error, read the message: it is ERPNext's own text.
 
 ### 3.5 Firewall / network
 - `ufw` should allow only 22, 80, 443 to the world. Container → host Postgres needs `5432` from `172.16.0.0/12`.
@@ -156,6 +156,8 @@ The API user needs read on Account, Company, GL Entry, Journal Entry, Payment En
 | A locked period still accepts entries for a few minutes / a locked month cannot be unlocked | (fixed 2026-09-21) the lock answer was cached for 10 minutes and never invalidated; the lock commands were gated by the lock they manage | deploy the fix; nothing to do in the data |
 | 500 "Numeric value does not fit in a System.Decimal" | a SQL division returned more digits than .NET decimal holds | round the expression in SQL (fixed for purchase bill posting, 2026-09-23) |
 | A transfer stays "بانتظار الموافقة" | it needs the manager of each other warehouse involved (item 9) | give a user manager status on that warehouse (Users → warehouses), or approve as SYSTEM_ADMIN |
+| Invoice refused with "SalesRep.NotActive" | the customer's rep was deactivated | reactivate the rep, or give the customer to another rep (المندوبون → إسناد زبائن), or pick another rep on the invoice |
+| ERPNext rejects an invoice: Sales Person not found / "Sales Team" missing | the root sales-person group has another name on that server | read the error in the sync log; create "Sales Team" as a group Sales Person in ERPNext or adjust `SyncSalesPersonAsync` |
 | Item import rejects the file | not .xlsx/.csv, > 5 MB, or no `Code` column | download the template from the import dialog |
 
 ---

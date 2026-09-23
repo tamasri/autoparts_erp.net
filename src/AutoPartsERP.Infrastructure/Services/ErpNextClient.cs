@@ -141,9 +141,23 @@ public sealed partial class ErpNextClient : IErpNextClient
                 ["items"] = lines,
                 ["is_return"] = invoice.IsReturn ? 1 : 0,
                 ["docstatus"] = 1
-            }.WithReturnAgainst(invoice.ReturnAgainst).WithInvoiceDiscount(invoice.DiscountAmount, invoice.IsReturn),
+            }.WithReturnAgainst(invoice.ReturnAgainst).WithInvoiceDiscount(invoice.DiscountAmount, invoice.IsReturn).WithSalesPerson(invoice.SalesPerson),
             cancellationToken);
     }
+
+    public Task<Result<string>> SyncSalesPersonAsync(ErpNextSalesPersonSync person, CancellationToken cancellationToken = default) =>
+        UpsertAsync(
+            "Sales Person",
+            person.Name,
+            new JsonObject
+            {
+                ["sales_person_name"] = person.Name,
+                ["parent_sales_person"] = "Sales Team",
+                ["is_group"] = 0,
+                ["enabled"] = person.Enabled ? 1 : 0,
+                ["commission_rate"] = person.CommissionRate
+            },
+            cancellationToken);
 
     public async Task<Result<string>> SyncPaymentAsync(ErpNextPaymentSync payment, CancellationToken cancellationToken = default)
     {
@@ -642,6 +656,17 @@ internal static class ErpNextJsonExtensions
     /// The discount on the whole invoice, taken off the net total the way ERPNext's own "Additional Discount" does
     /// (a return carries it negative, like its quantities). Nothing is added when there is no discount.
     /// </summary>
+    /// <summary>Credits the whole invoice to one Sales Person (ERPNext requires the allocations to add up to 100 %).</summary>
+    public static JsonObject WithSalesPerson(this JsonObject doc, string? salesPerson)
+    {
+        if (!string.IsNullOrWhiteSpace(salesPerson))
+        {
+            doc["sales_team"] = new JsonArray { new JsonObject { ["sales_person"] = salesPerson, ["allocated_percentage"] = 100 } };
+        }
+
+        return doc;
+    }
+
     public static JsonObject WithInvoiceDiscount(this JsonObject doc, decimal discountAmount, bool isReturn)
     {
         if (discountAmount != 0)

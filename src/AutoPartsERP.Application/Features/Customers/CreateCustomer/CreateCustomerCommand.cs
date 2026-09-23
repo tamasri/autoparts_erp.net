@@ -1,3 +1,5 @@
+using AutoPartsERP.Application.Features.SalesReps;
+
 namespace AutoPartsERP.Application.Features.Customers.CreateCustomer;
 
 public sealed record CreateCustomerCommand(CreateCustomerRequest Request, string IdempotencyKey)
@@ -43,6 +45,11 @@ public sealed class CreateCustomerCommandHandler : IRequestHandler<CreateCustome
 
         await using var connection = await _connectionFactory.CreateAsync(cancellationToken);
         await EnsureOpenAsync(connection, cancellationToken);
+        if (request.Request.AssignedSalesRep is { } rep && rep != Guid.Empty && !await SalesRepGuard.IsActiveAsync(connection, null, rep, cancellationToken))
+        {
+            return Result<CustomerDto>.Failure(SalesRepGuard.NotActive);
+        }
+
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         var partyId = Guid.NewGuid();
@@ -113,7 +120,7 @@ public sealed class CreateCustomerCommandHandler : IRequestHandler<CreateCustome
         AddParameter(command, "CreditLimitSyp", request.Request.CreditLimitSyp);
         AddParameter(command, "CreditLimitUsd", request.Request.CreditLimitUsd);
         AddParameter(command, "PaymentTermsDays", request.Request.PaymentTermsDays);
-        AddParameter(command, "AssignedSalesRep", (object?)request.Request.AssignedSalesRep ?? DBNull.Value);
+        AddParameter(command, "AssignedSalesRep", request.Request.AssignedSalesRep is { } chosenRep && chosenRep != Guid.Empty ? (object)chosenRep : DBNull.Value);
         AddParameter(command, "Notes", (object?)request.Request.Notes?.Trim() ?? DBNull.Value);
         AddParameter(command, "CreatedBy", _currentUser.UserId);
 

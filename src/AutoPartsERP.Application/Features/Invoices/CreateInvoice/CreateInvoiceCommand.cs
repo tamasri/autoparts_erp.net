@@ -2,6 +2,8 @@ using System.Data.Common;
 using Dapper;
 using Humanizer;
 
+using AutoPartsERP.Application.Features.SalesReps;
+
 namespace AutoPartsERP.Application.Features.Invoices.CreateInvoice;
 
 public sealed record CreateInvoiceCommand(
@@ -70,9 +72,9 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var customer = await connection.QuerySingleOrDefaultAsync<(Guid Id, string Code, string Name)>(
+        var customer = await connection.QuerySingleOrDefaultAsync<(Guid Id, string Code, string Name, Guid? SalesRep)>(
             new CommandDefinition(
-                "SELECT id AS Id, code AS Code, name AS Name FROM customers WHERE id = @CustomerId;",
+                "SELECT id AS Id, code AS Code, name AS Name, assigned_sales_rep AS SalesRep FROM customers WHERE id = @CustomerId;",
                 new { request.CustomerId },
                 transaction,
                 cancellationToken: cancellationToken));
@@ -80,6 +82,14 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<InvoiceDto>.Failure(new Error("Customer.NotFound", "Customer was not found."));
+        }
+
+        // The rep is the one chosen on the invoice, or the customer's own rep.
+        var salesRepId = request.SalesRepId is { } chosen && chosen != Guid.Empty ? chosen : customer.SalesRep;
+        if (salesRepId is { } rep && !await SalesRepGuard.IsActiveAsync(connection, transaction, rep, cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<InvoiceDto>.Failure(SalesRepGuard.NotActive);
         }
 
         var fxRate = await connection.QuerySingleOrDefaultAsync<(Guid Id, decimal MidRate)>(
@@ -120,7 +130,7 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
                 request.DeliveryFeeUsd,
                 request.FxRateId,
                 FxRateSnapshot = fxRate.MidRate,
-                request.SalesRepId,
+                SalesRepId = salesRepId,
                 CreatedBy = _currentUser.UserId
             },
             transaction,

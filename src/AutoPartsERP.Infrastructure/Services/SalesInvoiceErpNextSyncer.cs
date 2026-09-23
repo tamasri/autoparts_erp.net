@@ -29,10 +29,14 @@ public sealed class SalesInvoiceErpNextSyncer
             """
             SELECT i.invoice_number AS InvoiceNumber, i.invoice_type AS Type, i.original_invoice_id AS OriginalInvoiceId,
                    p.id AS PartyId, p.display_name AS CustomerName, p.tax_number AS TaxNumber,
-                   i.invoice_date AS InvoiceDate, i.due_date AS DueDate, i.discount_amount_usd AS DiscountAmountUsd
+                   i.invoice_date AS InvoiceDate, i.due_date AS DueDate, i.discount_amount_usd AS DiscountAmountUsd,
+                   r.user_id AS SalesRepId, COALESCE(NULLIF(u.full_name, ''), u.user_name) AS SalesRepName,
+                   COALESCE(r.commission_pct, 0) AS SalesRepCommission, COALESCE(r.is_active, FALSE) AS SalesRepActive
             FROM invoices i
             INNER JOIN customers c ON c.id = i.customer_id
             INNER JOIN parties p ON p.id = c.party_id
+            LEFT JOIN sales_reps r ON r.user_id = i.sales_rep_id
+            LEFT JOIN asp_net_users u ON u.id = r.user_id
             WHERE i.id = @invoiceId AND i.status = 'POSTED' AND i.invoice_type IN ('SALE', 'RETURN');
             """,
             new { invoiceId },
@@ -86,7 +90,8 @@ public sealed class SalesInvoiceErpNextSyncer
                     lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitPrice, l.DiscountPercent)).ToList(),
                     isReturn,
                     returnAgainst,
-                    header.DiscountAmountUsd),
+                    header.DiscountAmountUsd,
+                    header.SalesRepId is null ? null : header.SalesRepName),
                 cancellationToken);
 
             await ErpNextSyncLogWriter.WriteAsync(
@@ -178,6 +183,18 @@ public sealed class SalesInvoiceErpNextSyncer
             return Result.Failure(new Error("ErpNext.CustomerSync", $"Customer '{header.CustomerName}' could not be created in ERPNext: {customer.Error.Message}"));
         }
 
+        if (header.SalesRepId is { } repId && header.SalesRepName is { } repName)
+        {
+            var person = await _erpNextClient.SyncSalesPersonAsync(new ErpNextSalesPersonSync(repId, repName, header.SalesRepCommission, header.SalesRepActive), cancellationToken);
+            await ErpNextSyncLogWriter.WriteAsync(connection, "SalesRep", repId, "Sales Person", person.IsSuccess ? person.Value : null,
+                _erpNextClient.IsEnabled ? (person.IsSuccess ? ErpNextSyncLogWriter.Synced : ErpNextSyncLogWriter.Failed) : ErpNextSyncLogWriter.Skipped,
+                person.IsFailure ? person.Error.Message : null, cancellationToken);
+            if (person.IsFailure)
+            {
+                return Result.Failure(new Error("ErpNext.SalesPersonSync", $"Sales person '{repName}' could not be created in ERPNext: {person.Error.Message}"));
+            }
+        }
+
         foreach (var item in lines.DistinctBy(l => l.SkuId))
         {
             var synced = await _erpNextClient.SyncItemAsync(new ErpNextItemSync(item.SkuId, item.ItemCode, item.NameEn, item.NameAr, item.CostPrice, item.SellingPrice), cancellationToken);
@@ -194,7 +211,8 @@ public sealed class SalesInvoiceErpNextSyncer
     }
 
     private sealed record InvoiceHeader(
-        string? InvoiceNumber, string Type, Guid? OriginalInvoiceId, Guid PartyId, string CustomerName, string? TaxNumber, DateOnly InvoiceDate, DateOnly DueDate, decimal DiscountAmountUsd);
+        string? InvoiceNumber, string Type, Guid? OriginalInvoiceId, Guid PartyId, string CustomerName, string? TaxNumber, DateOnly InvoiceDate, DateOnly DueDate, decimal DiscountAmountUsd,
+        Guid? SalesRepId, string? SalesRepName, decimal SalesRepCommission, bool SalesRepActive);
 
     private sealed record InvoiceLineRow(
         Guid SkuId, string ItemCode, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice,

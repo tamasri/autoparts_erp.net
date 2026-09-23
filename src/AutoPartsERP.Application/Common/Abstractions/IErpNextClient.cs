@@ -22,6 +22,9 @@ public interface IErpNextClient
 
     Task<Result<string>> SyncSalesInvoiceAsync(ErpNextSalesInvoiceSync invoice, CancellationToken cancellationToken = default);
 
+    /// <summary>Creates or updates a Sales Person (under the root "Sales Team") so invoices can credit the rep in ERPNext's own sales reports.</summary>
+    Task<Result<string>> SyncSalesPersonAsync(ErpNextSalesPersonSync person, CancellationToken cancellationToken = default);
+
     Task<Result<string>> SyncPaymentAsync(ErpNextPaymentSync payment, CancellationToken cancellationToken = default);
 
     /// <summary>Books cost of goods sold (Dr COGS / Cr Inventory) for a posted invoice; reversed for customer returns.</summary>
@@ -113,7 +116,11 @@ public sealed record ErpNextSalesInvoiceSync(
     IReadOnlyList<ErpNextInvoiceLineSync> Lines,
     bool IsReturn = false,
     string? ReturnAgainst = null,
-    decimal DiscountAmount = 0);
+    decimal DiscountAmount = 0,
+    string? SalesPerson = null);
+
+/// <summary>A sales rep as ERPNext's Sales Person. ERPNext names it by <c>sales_person_name</c>; the rep's full name is used.</summary>
+public sealed record ErpNextSalesPersonSync(Guid LocalUserId, string Name, decimal CommissionRate, bool Enabled);
 
 /// <summary>A cost-of-goods Journal Entry (Dr COGS / Cr Inventory, reversed when <c>IsReturn</c>). <c>Description</c> replaces the default invoice remark, e.g. for an inventory adjustment.</summary>
 public sealed record ErpNextCogsEntrySync(Guid LocalInvoiceId, string InvoiceNumber, DateOnly Date, decimal Amount, bool IsReturn, string? Description = null);

@@ -60,7 +60,8 @@ export const customerSchema = z.object({
 
   notes: z.string().max(2000, 'الملاحظات طويلة جداً').optional().or(z.literal('')),
 
-  assignedSalesRep: z.string().uuid().optional(),
+  /** '' = no rep (sent as the empty guid); undefined = leave as it is. */
+  assignedSalesRep: z.string().optional(),
 });
 
 /** Full inferred type — used for form values AND API payload (create). */

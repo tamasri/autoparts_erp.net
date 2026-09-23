@@ -1,3 +1,5 @@
+using AutoPartsERP.Application.Features.SalesReps;
+
 namespace AutoPartsERP.Application.Features.Customers.UpdateCustomer;
 
 public sealed record UpdateCustomerCommand(Guid CustomerId, UpdateCustomerRequest Request)
@@ -41,6 +43,11 @@ public sealed class UpdateCustomerCommandHandler : IRequestHandler<UpdateCustome
         await using var connection = await _connectionFactory.CreateAsync(cancellationToken);
         await EnsureOpenAsync(connection, cancellationToken);
 
+        if (request.Request.AssignedSalesRep is { } rep && rep != Guid.Empty && !await SalesRepGuard.IsActiveAsync(connection, null, rep, cancellationToken))
+        {
+            return Result<CustomerDto>.Failure(SalesRepGuard.NotActive);
+        }
+
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE customers
@@ -53,7 +60,9 @@ public sealed class UpdateCustomerCommandHandler : IRequestHandler<UpdateCustome
                 credit_limit_syp = @CreditLimitSyp,
                 credit_limit_usd = @CreditLimitUsd,
                 payment_terms_days = @PaymentTermsDays,
-                assigned_sales_rep = @AssignedSalesRep,
+                assigned_sales_rep = CASE WHEN @AssignedSalesRep::uuid IS NULL THEN assigned_sales_rep
+                                          WHEN @AssignedSalesRep::uuid = '00000000-0000-0000-0000-000000000000' THEN NULL
+                                          ELSE @AssignedSalesRep::uuid END,
                 notes = @Notes,
                 updated_at = now(),
                 updated_by = @UpdatedBy
