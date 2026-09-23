@@ -170,6 +170,20 @@ docker run --rm \
 [[ -d "frontend/dist" ]] || fail "frontend/dist not found after build."
 echo "Frontend build completed."
 
+step "Back up the database before migrations run"
+# The API applies migrations on start-up, so this is the last moment the database is in its previous state.
+# SKIP_PREDEPLOY_BACKUP=1 skips it (only for an emergency redeploy when the backup itself is what is broken).
+has_schema=$(PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --add-host=host.docker.internal:host-gateway -e PGPASSWORD postgres:16-alpine \
+  psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select to_regclass('public.invoices') is not null" 2>/dev/null || echo f)
+if [[ "${SKIP_PREDEPLOY_BACKUP:-0}" == "1" ]]; then
+  warn "Pre-deploy backup skipped (SKIP_PREDEPLOY_BACKUP=1)."
+elif [[ "$has_schema" != "t" ]]; then
+  echo "Empty database (first install) - nothing to back up yet."
+else
+  ENV_FILE="$ROOT_DIR/$ENV_FILE" bash "$ROOT_DIR/scripts/backup-db.sh" predeploy \
+    || fail "Pre-deploy backup failed; nothing was changed. Fix it, or rerun with SKIP_PREDEPLOY_BACKUP=1 if you accept deploying without one."
+fi
+
 step "Build and start Docker stack"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down --remove-orphans || true
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build \
@@ -208,6 +222,31 @@ if curl -kfsS -o /dev/null https://localhost/ 2>/dev/null; then
 else
   warn "Nginx HTTPS edge (https://localhost/) did not respond - check 'docker compose logs nginx' and nginx/certs/."
 fi
+
+step "Schedule database backups"
+# Written on every deploy so the schedule always follows this checkout's path. Times are the server's local time.
+BACKUP_LOG=/var/log/autoparts-erp-backup.log
+cat > /etc/cron.d/autoparts-erp-backup <<CRON
+# Managed by scripts/deploy-vps.sh - edit there, not here.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Daily backup at 02:30 (weekly copy on Sunday, monthly on the 1st; rotation in backup-db.sh)
+30 2 * * * root bash $ROOT_DIR/scripts/backup-db.sh daily >> $BACKUP_LOG 2>&1
+# Weekly proof that the newest backup restores (throw-away container), Sunday 04:15
+15 4 * * 0 root bash $ROOT_DIR/scripts/restore-check.sh >> $BACKUP_LOG 2>&1
+CRON
+chmod 644 /etc/cron.d/autoparts-erp-backup
+cat > /etc/logrotate.d/autoparts-erp-backup <<ROT
+$BACKUP_LOG {
+  weekly
+  rotate 12
+  compress
+  missingok
+  notifempty
+}
+ROT
+echo "Backups scheduled: daily 02:30, restore check Sundays 04:15, log $BACKUP_LOG, files ${BACKUP_DIR:-/var/backups/autoparts-erp}."
+[[ -n "${BACKUP_REMOTE:-}" ]] || warn "BACKUP_REMOTE is not set in $ENV_FILE: backups stay on this server only (a lost server loses them too)."
 
 step "Deployment completed"
 echo "VPS deployment is up."
