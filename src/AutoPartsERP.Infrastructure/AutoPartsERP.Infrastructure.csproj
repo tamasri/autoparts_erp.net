@@ -21,11 +21,11 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.*" />
     <!-- Raw SQL -->
     <PackageReference Include="Dapper" Version="2.*" />
-    <PackageReference Include="Npgsql" Version="9.*" />
+    <PackageReference Include="Npgsql" Version="10.*" />
     <!-- Audit.NET - replaces all custom audit code -->
-    <PackageReference Include="Audit.NET" Version="26.*" />
+    <PackageReference Include="Audit.NET" Version="33.*" />
     <PackageReference Include="Audit.EntityFramework.Core" Version="26.*" />
-    <PackageReference Include="Audit.NET.PostgreSql" Version="26.*" />
+    <PackageReference Include="Audit.NET.PostgreSql" Version="33.*" />
     <!-- Background jobs - replaces custom Channel<T> + HostedService -->
     <PackageReference Include="Hangfire.AspNetCore" Version="1.*" />
     <PackageReference Include="Hangfire.PostgreSql" Version="1.*" />
