@@ -367,3 +367,10 @@ AGENT_ONBOARDING.md                                  [MODIFY]
   filters, 400 on a reversed period, 403 for warehouse staff, a sales rep without purchases or net profit; the screen and the currency switch checked in the browser.
 - **Known gaps (item 10):** receivables are today's balances of invoices dated in range (not the balance as it stood on the end date); payables are not split by supplier on the dashboard;
   no dashboard export yet (every card links to a report that has one).
+- **Item 2 — one Money display.** Ready-made tools only: `Intl.NumberFormat` (`lib/format.ts`), the existing latest-rate hook `useFxMid`, zustand `persist` for the choice
+  (`stores/displayStore.ts`). `components/ui/Money.tsx`: an amount kept in dollars shown in both currencies, lira first by default (owner decision) and the other small; a switch in the top bar
+  flips which comes first for every screen and is remembered. A lira amount recorded on the document (invoice, receipt, statement line) is used instead of today's rate; a lira-only record shows
+  lira only. Rolled out to: dashboard, invoice list, customer page and statements, receivables/payables ageing, purchasing (bills, supplier payments, bill total), trial balance, balance sheet,
+  profit and loss, ledger statement, journal entries, chart of accounts (USD accounts), warehouses (stock value), sales reps, ERPNext consistency. Exports keep plain dollar numbers.
+- **Deliberate exceptions:** entry forms stay in the currency typed (bills, manual entries, payments); bank reconciliation stays in the account's currency because it is matched line by line with a
+  bank statement. The old-style screens (invoice workspace and detail, payments, item card, warehouse documents, pickers) get `Money` as part of their MUI migration (item 4).

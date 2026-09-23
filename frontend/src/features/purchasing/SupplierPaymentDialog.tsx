@@ -6,6 +6,7 @@ import {
 import { purchasingApi, type PurchaseInvoiceRow } from '../../api/endpoints/purchasing';
 import { unwrapPaged } from '../../api/apiData';
 import { extractApiError, toast } from '../../lib/toast';
+import Money from '../../components/ui/Money';
 
 const METHODS = [
   { value: 'CASH', label: 'نقداً (ل.س)' }, { value: 'USD_CASH', label: 'نقداً (دولار)' },
@@ -73,7 +74,7 @@ export default function SupplierPaymentDialog({ open, supplier, onClose, onSaved
       <DialogContent dividers>
         <Stack spacing={2}>
           {error ? <Alert severity="error">{error}</Alert> : null}
-          <Typography variant="body2" color="text.secondary">المستحق للمورّد: <strong>${money(owed)}</strong> على {bills.length} فاتورة</Typography>
+          <Typography variant="body2" color="text.secondary">المستحق للمورّد: <Money usd={owed} inline fontWeight={700} /> على {bills.length} فاتورة</Typography>
           <Stack direction="row" gap={2} flexWrap="wrap">
             <TextField size="small" select label="طريقة الدفع" value={method} onChange={(e) => setMethod(e.target.value)} sx={{ minWidth: 170 }}>
               {METHODS.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
@@ -84,11 +85,11 @@ export default function SupplierPaymentDialog({ open, supplier, onClose, onSaved
             {method === 'BANK_TRANSFER' ? <TextField size="small" label="رقم الحوالة" value={reference} onChange={(e) => setReference(e.target.value)} /> : null}
           </Stack>
           <Table size="small">
-            <TableHead><TableRow sx={{ '& th': { fontWeight: 700 } }}><TableCell>الفاتورة</TableCell><TableCell>الاستحقاق</TableCell><TableCell align="left">المتبقي ($)</TableCell><TableCell align="left">سيُسدَّد ($)</TableCell></TableRow></TableHead>
+            <TableHead><TableRow sx={{ '& th': { fontWeight: 700 } }}><TableCell>الفاتورة</TableCell><TableCell>الاستحقاق</TableCell><TableCell align="left">المتبقي</TableCell><TableCell align="left">سيُسدَّد ($)</TableCell></TableRow></TableHead>
             <TableBody>
               {bills.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell>{b.billNumber}</TableCell><TableCell>{b.dueDate}</TableCell><TableCell align="left">{money(b.balanceUsd)}</TableCell>
+                  <TableCell>{b.billNumber}</TableCell><TableCell>{b.dueDate}</TableCell><TableCell align="left"><Money usd={b.balanceUsd} /></TableCell>
                   <TableCell align="left" sx={{ color: 'success.main', fontWeight: 700 }}>{money(plan.find((p) => p.purchaseInvoiceId === b.id)?.amountUsd ?? 0) || '—'}</TableCell>
                 </TableRow>
               ))}

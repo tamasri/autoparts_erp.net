@@ -7,7 +7,7 @@ import { unwrapList, unwrapNode } from '../../../api/apiData';
 import { useCan, ACCOUNTING } from '../../../hooks/useCan';
 import { useChartAccounts } from '../../../hooks/useChartAccounts';
 import { useLoad } from '../../../hooks/useLoad';
-import { money, moneyOrBlank, today, yearStart } from '../../../lib/money';
+import { today, yearStart } from '../../../lib/money';
 import DataTable, { type Column } from '../../../components/ui/DataTable';
 import ExportMenu from '../../../components/ui/ExportMenu';
 import type { ExportDocument } from '../../../lib/exportClient';
@@ -15,6 +15,7 @@ import AccountPicker from '../AccountPicker';
 import TagChips from '../TagChips';
 import { ROOT_LABEL, VOUCHER_LABEL, sourceRoute } from '../labels';
 import { ledgerDocument } from '../documents';
+import Money from '../../../components/ui/Money';
 
 /** A ledger export takes at most this many lines (fetched page by page); beyond it the file says how many were left out. */
 const EXPORT_LIMIT = 20000;
@@ -70,9 +71,9 @@ export default function LedgerReport({ initialAccount }: { initialAccount?: stri
     },
     { header: 'الطرف', render: (r) => r.party ?? '—' },
     { header: 'البيان', render: (r) => <Typography variant="body2" sx={{ maxWidth: 240 }} noWrap title={r.remarks ?? ''}>{r.remarks ?? ''}</Typography> },
-    { header: 'مدين', numeric: true, render: (r) => moneyOrBlank(r.debit) },
-    { header: 'دائن', numeric: true, render: (r) => moneyOrBlank(r.credit) },
-    { header: 'الرصيد', numeric: true, render: (r) => <strong>{money(r.balance)}</strong> },
+    { header: 'مدين', numeric: true, render: (r) => (r.debit ? <Money usd={r.debit} /> : '') },
+    { header: 'دائن', numeric: true, render: (r) => (r.credit ? <Money usd={r.credit} /> : '') },
+    { header: 'الرصيد', numeric: true, render: (r) => <Money usd={r.balance} fontWeight={700} /> },
     {
       header: 'وسوم',
       render: (r) => r.voucherType && r.voucherNo
@@ -98,10 +99,10 @@ export default function LedgerReport({ initialAccount }: { initialAccount?: stri
       {data ? (
         <>
           <Stack direction="row" gap={1} flexWrap="wrap">
-            <Chip label={`الرصيد الافتتاحي: ${money(data.opening)}`} />
-            <Chip color="primary" variant="outlined" label={`مدين: ${money(data.totalDebit)}`} />
-            <Chip color="primary" variant="outlined" label={`دائن: ${money(data.totalCredit)}`} />
-            <Chip color="success" label={`الرصيد الختامي: ${money(data.closing)}`} />
+            <Chip label={<>الرصيد الافتتاحي: <Money usd={data.opening} inline variant="body2" /></>} />
+            <Chip color="primary" variant="outlined" label={<>مدين: <Money usd={data.totalDebit} inline variant="body2" /></>} />
+            <Chip color="primary" variant="outlined" label={<>دائن: <Money usd={data.totalCredit} inline variant="body2" /></>} />
+            <Chip color="success" label={<>الرصيد الختامي: <Money usd={data.closing} inline variant="body2" /></>} />
             {data.rootType ? <Chip variant="outlined" label={ROOT_LABEL[data.rootType] ?? data.rootType} /> : null}
             <Chip variant="outlined" label={`${data.totalCount.toLocaleString('en-US')} حركة`} />
           </Stack>

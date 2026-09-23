@@ -7,11 +7,11 @@ import {
 import { erpnextApi, type ConsistencyReport, type ConsistencySection } from '../../api/endpoints/erpnext';
 import { unwrapNode } from '../../api/apiData';
 import { useLoad } from '../../hooks/useLoad';
-import { money } from '../../lib/money';
 import { num, type ExportDocument } from '../../lib/exportClient';
 import DataTable from '../../components/ui/DataTable';
 import ExportMenu from '../../components/ui/ExportMenu';
 import { DOCTYPE_LABEL, localRoute } from './erpnextLinks';
+import Money from '../../components/ui/Money';
 
 const KIND: Record<string, { label: string; color: 'error' | 'warning' | 'info' }> = {
   NOT_SENT: { label: 'لم يصل إلى ERPNext', color: 'error' },
@@ -31,7 +31,7 @@ function SectionView({ s }: { s: ConsistencySection }): JSX.Element {
           <Typography fontWeight={700} sx={{ minWidth: 190 }}>{DOCTYPE_LABEL[s.doctype] ?? s.doctype}</Typography>
           {s.error ? <Chip size="small" color="error" label="تعذرت القراءة من ERPNext" /> : issueTotal === 0 ? <Chip size="small" color="success" label="متطابق" /> : <Chip size="small" color="warning" label={`${issueTotal} فرق`} />}
           <Typography variant="body2" color="text.secondary">
-            هنا {s.localCount}{s.localTotal !== null ? ` ($${money(s.localTotal)})` : ''} · في ERPNext {s.erpNextCount}{s.erpNextTotal !== null ? ` ($${money(s.erpNextTotal)})` : ''} · متطابق {s.matchedCount}
+            هنا {s.localCount}{s.localTotal !== null ? <> (<Money usd={s.localTotal} inline variant="body2" />)</> : null} · في ERPNext {s.erpNextCount}{s.erpNextTotal !== null ? <> (<Money usd={s.erpNextTotal} inline variant="body2" />)</> : null} · متطابق {s.matchedCount}
           </Typography>
         </Stack>
       </AccordionSummary>
@@ -55,8 +55,8 @@ function SectionView({ s }: { s: ConsistencySection }): JSX.Element {
                   },
                 },
                 { header: 'في ERPNext', render: (i) => <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: 12 }}>{i.erpNextName ?? '—'}</Typography> },
-                { header: 'المبلغ هنا ($)', render: (i) => (i.localAmount !== null ? money(i.localAmount) : ''), numeric: true },
-                { header: 'في ERPNext ($)', render: (i) => (i.erpNextAmount !== null ? money(i.erpNextAmount) : ''), numeric: true },
+                { header: 'المبلغ هنا', render: (i) => (i.localAmount !== null ? <Money usd={i.localAmount} /> : ''), numeric: true },
+                { header: 'في ERPNext', render: (i) => (i.erpNextAmount !== null ? <Money usd={i.erpNextAmount} /> : ''), numeric: true },
                 { header: 'التفاصيل', render: (i) => <Typography variant="caption" color="text.secondary">{i.detail}</Typography> },
               ]}
             />

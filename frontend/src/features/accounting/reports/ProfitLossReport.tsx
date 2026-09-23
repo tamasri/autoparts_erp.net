@@ -3,10 +3,11 @@ import { Alert, Box, LinearProgress, Paper, Stack, TextField, Typography } from 
 import { accountingApi, type ProfitLoss } from '../../../api/endpoints/accounting';
 import { unwrapNode } from '../../../api/apiData';
 import { useLoad } from '../../../hooks/useLoad';
-import { money, today, yearStart } from '../../../lib/money';
+import { today, yearStart } from '../../../lib/money';
 import ExportMenu from '../../../components/ui/ExportMenu';
 import { profitLossDocument } from '../documents';
 import StatementSection from './StatementSection';
+import Money from '../../../components/ui/Money';
 
 export default function ProfitLossReport(): JSX.Element {
   const [from, setFrom] = useState(yearStart());
@@ -31,7 +32,7 @@ export default function ProfitLossReport(): JSX.Element {
           </Box>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, textAlign: 'center', bgcolor: data.netProfit >= 0 ? 'success.light' : 'error.light' }}>
             <Typography variant="body2">{data.netProfit >= 0 ? 'صافي الربح' : 'صافي الخسارة'}</Typography>
-            <Typography variant="h4" fontWeight={800} sx={{ direction: 'ltr' }}>{money(data.netProfit)} $</Typography>
+            <Money usd={data.netProfit} variant="h4" fontWeight={800} />
           </Paper>
         </>
       ) : null}

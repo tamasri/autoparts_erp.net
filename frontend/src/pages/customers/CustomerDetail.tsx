@@ -4,11 +4,11 @@ import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typogra
 import { customersApi } from '../../api/endpoints/customers';
 import { unwrapNode } from '../../api/apiData';
 import { extractApiError } from '../../lib/toast';
-import { inLira, useFxMid } from '../../hooks/useFxMid';
 import PageHeader from '../../components/ui/PageHeader';
 import ExportMenu from '../../components/ui/ExportMenu';
 import DocumentDialog from '../../components/ui/DocumentDialog';
 import StatementTable, { statementDocument, withRunning, type StatementLine } from '../../components/accounts/StatementTable';
+import Money from '../../components/ui/Money';
 
 type Customer = { id: string; code?: string; name?: string; type?: string; city?: string; phone?: string; creditLimitSyp?: number; creditLimitUsd?: number; paymentTermsDays?: number };
 type Tx = { id: string; type: string; date: string; reference?: string; debitSyp: number; creditSyp: number; debitUsd: number; creditUsd: number; balanceSyp: number; balanceUsd: number };
@@ -16,12 +16,12 @@ type Statement = { totalInvoicedSyp: number; totalInvoicedUsd: number; totalPaid
 
 const money = (v?: number): string => Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'error' | 'success' | 'primary' }): JSX.Element {
+function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: 'error' | 'success' | 'primary' }): JSX.Element {
   return (
     <Card variant="outlined" sx={{ borderRadius: 3, flex: 1, minWidth: 180, borderInlineStart: 4, borderInlineStartColor: tone ? `${tone}.main` : 'divider' }}>
       <CardContent>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography variant="h5" fontWeight={800} color={tone ? `${tone}.main` : 'text.primary'}>{value}</Typography>
+        <Typography component="div" variant="h5" fontWeight={800} color={tone ? `${tone}.main` : 'text.primary'}>{value}</Typography>
       </CardContent>
     </Card>
   );
@@ -34,7 +34,6 @@ export default function CustomerDetail(): JSX.Element {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewOpen, setViewOpen] = useState(false);
-  const fxMid = useFxMid();
 
   useEffect(() => {
     if (!id) return;
@@ -79,11 +78,10 @@ export default function CustomerDetail(): JSX.Element {
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
       <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mb: 3 }}>
-        <Stat label="المستحق (ل.س)" value={money(outSyp)} tone={outSyp > 0 ? 'error' : 'success'} />
-        <Stat label="المستحق ($)" value={money(outUsd)} tone={outUsd > 0 ? 'error' : 'success'} />
-        <Stat label="إجمالي الفواتير ($)" value={money(statement?.totalInvoicedUsd)} />
-        <Stat label="إجمالي المقبوض ($)" value={money(statement?.totalPaidUsd)} tone="primary" />
-        <Stat label={`الحد الائتماني ${inLira(customer?.creditLimitUsd ?? 0, fxMid)}`.trim()} value={`${money(customer?.creditLimitUsd)}`} />
+        <Stat label="المستحق" value={<Money usd={outUsd} syp={outSyp} variant="h5" fontWeight={800} />} tone={outUsd > 0 || outSyp > 0 ? 'error' : 'success'} />
+        <Stat label="إجمالي الفواتير" value={<Money usd={statement?.totalInvoicedUsd ?? 0} variant="h5" fontWeight={800} />} />
+        <Stat label="إجمالي المقبوض" value={<Money usd={statement?.totalPaidUsd ?? 0} variant="h5" fontWeight={800} />} tone="primary" />
+        <Stat label="الحد الائتماني" value={<Money usd={customer?.creditLimitUsd ?? 0} variant="h5" fontWeight={800} />} />
         <Stat label="شروط الدفع" value={`${customer?.paymentTermsDays ?? '-'} يوم`} />
       </Stack>
 

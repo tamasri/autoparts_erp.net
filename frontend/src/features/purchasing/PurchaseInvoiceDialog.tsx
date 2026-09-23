@@ -11,6 +11,7 @@ import { useLocations } from '../../hooks/useLocations';
 import { extractApiError, toast } from '../../lib/toast';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
 import ItemPickerModal, { type PickedLine } from '../../components/pickers/ItemPickerModal';
+import Money from '../../components/ui/Money';
 
 type Line = PurchaseLineInput & { key: string; code: string; name: string };
 type PartyRow = { id: string; displayNameAr?: string; displayName?: string; code?: string };
@@ -129,7 +130,7 @@ export default function PurchaseInvoiceDialog({ open, onClose, onSaved }: { open
             </Stack>
             <Box textAlign="left">
               {discount > 0 ? <Typography variant="body2" color="text.secondary">مجموع البنود ${money(subtotal)} − خصم ${money(discount)}</Typography> : null}
-              <Typography variant="h6" fontWeight={800}>الإجمالي: ${money(total)}</Typography>
+              <Typography variant="h6" fontWeight={800} component="div">الإجمالي: <Money usd={total} inline variant="h6" fontWeight={800} /></Typography>
             </Box>
           </Stack>
         </Stack>

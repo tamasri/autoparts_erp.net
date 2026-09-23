@@ -12,6 +12,7 @@ import { invalidateLocations } from '../../hooks/useLocations';
 import { num, type ExportDocument } from '../../lib/exportClient';
 import PageHeader from '../../components/ui/PageHeader';
 import ExportMenu from '../../components/ui/ExportMenu';
+import Money from '../../components/ui/Money';
 
 const TYPES: Array<{ value: string; label: string }> = [
   { value: 'WAREHOUSE', label: 'مستودع' }, { value: 'SHELF', label: 'رف / موقع' }, { value: 'VEHICLE', label: 'مركبة' },
@@ -105,7 +106,7 @@ export default function Warehouses(): JSX.Element {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mb: 2 }}>
         <Chip label={`مواقع فعّالة: ${all.filter((l) => l.isActive).length}`} />
         <Chip color="primary" variant="outlined" label={`إجمالي الكمية: ${money(totals.qty)}`} />
-        <Chip color="success" variant="outlined" label={`قيمة المخزون: $${money(totals.value)}`} />
+        <Chip color="success" variant="outlined" label={<>قيمة المخزون: <Money usd={totals.value} inline variant="body2" /></>} />
       </Stack>
 
       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3, opacity: loading ? 0.6 : 1 }}>
@@ -113,7 +114,7 @@ export default function Warehouses(): JSX.Element {
           <TableHead>
             <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
               <TableCell>الموقع</TableCell><TableCell>النوع</TableCell><TableCell align="left">الأصناف</TableCell><TableCell align="left">الكمية</TableCell>
-              <TableCell align="left">القيمة ($)</TableCell><TableCell>الحالة</TableCell><TableCell />
+              <TableCell align="left">القيمة</TableCell><TableCell>الحالة</TableCell><TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -127,7 +128,7 @@ export default function Warehouses(): JSX.Element {
                 <TableCell><Chip size="small" variant="outlined" label={typeLabel(r.type)} /></TableCell>
                 <TableCell align="left">{r.skuCount}</TableCell>
                 <TableCell align="left" sx={{ fontWeight: 700 }}>{money(r.totalQty)}</TableCell>
-                <TableCell align="left">{money(r.valueUsd)}</TableCell>
+                <TableCell align="left"><Money usd={r.valueUsd} /></TableCell>
                 <TableCell><Chip size="small" color={r.isActive ? 'success' : 'default'} label={r.isActive ? 'فعّال' : 'موقوف'} /></TableCell>
                 <TableCell align="left" sx={{ whiteSpace: 'nowrap' }}>
                   <Button size="small" onClick={() => navigate(`/inventory/movements?locationId=${r.id}`)}>حركة الأصناف</Button>

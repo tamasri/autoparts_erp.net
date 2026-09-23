@@ -14,7 +14,6 @@ import { useChartAccounts } from '../../hooks/useChartAccounts';
 import { extractApiError, toast } from '../../lib/toast';
 import { useConfirm } from '../../hooks/useConfirm';
 import { notifyResult } from '../../lib/notify';
-import { money } from '../../lib/money';
 import { num, ymd, type ExportDocument } from '../../lib/exportClient';
 import PageHeader from '../../components/ui/PageHeader';
 import DataTable, { type Column } from '../../components/ui/DataTable';
@@ -27,6 +26,7 @@ import EntryViewDialog from '../../features/accounting/EntryViewDialog';
 import TagChips from '../../features/accounting/TagChips';
 import TagsDialog from '../../features/accounting/TagsDialog';
 import { SYNC_LABEL } from '../../features/accounting/labels';
+import Money from '../../components/ui/Money';
 
 const FILTERS = [{ key: '', label: 'الكل' }, { key: 'DRAFT', label: 'مسودات' }, { key: 'POSTED', label: 'مرحّلة' }, { key: 'VOID', label: 'ملغاة' }];
 
@@ -102,7 +102,7 @@ export default function JournalEntries(): JSX.Element {
     { header: 'النوع', render: (r) => r.typeNameAr },
     { header: 'التاريخ', nowrap: true, render: (r) => r.entryDate },
     { header: 'البيان', render: (r) => <Typography variant="body2" sx={{ maxWidth: 280 }} noWrap title={r.narration ?? ''}>{r.narration ?? '—'}</Typography> },
-    { header: 'المبلغ ($)', numeric: true, render: (r) => <strong>{money(r.totalUsd)}</strong> },
+    { header: 'المبلغ', numeric: true, render: (r) => <Money usd={r.totalUsd} fontWeight={700} /> },
     { header: 'وسوم', render: (r) => <TagChips tags={r.tags} allTags={tags} canEdit={canPost} target={{ targetType: 'JOURNAL_ENTRY', targetKey: r.id }} onChanged={list.reload} /> },
     { header: 'الحالة', render: (r) => <StatusChip status={r.status} /> },
     {

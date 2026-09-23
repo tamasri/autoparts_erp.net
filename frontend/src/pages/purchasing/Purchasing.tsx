@@ -16,6 +16,7 @@ import ExportMenu from '../../components/ui/ExportMenu';
 import DocumentViewButton from '../../components/ui/DocumentViewButton';
 import PurchaseInvoiceDialog from '../../features/purchasing/PurchaseInvoiceDialog';
 import SupplierPaymentDialog from '../../features/purchasing/SupplierPaymentDialog';
+import Money from '../../components/ui/Money';
 
 const STATUS: Record<string, { label: string; color: 'default' | 'success' | 'error' }> = {
   DRAFT: { label: 'مسودة', color: 'default' }, POSTED: { label: 'مرحّلة', color: 'success' }, VOID: { label: 'ملغاة', color: 'error' },
@@ -107,7 +108,7 @@ function BillsTab(): JSX.Element {
         <Table size="small">
           <TableHead><TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
             <TableCell>الرقم</TableCell><TableCell>المورّد</TableCell><TableCell>التاريخ</TableCell><TableCell>الاستحقاق</TableCell>
-            <TableCell align="left">الإجمالي ($)</TableCell><TableCell align="left">المتبقي ($)</TableCell><TableCell>الحالة</TableCell><TableCell />
+            <TableCell align="left">الإجمالي</TableCell><TableCell align="left">المتبقي</TableCell><TableCell>الحالة</TableCell><TableCell />
           </TableRow></TableHead>
           <TableBody>
             {rows.length === 0 ? <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد فواتير شراء</TableCell></TableRow> : null}
@@ -115,8 +116,8 @@ function BillsTab(): JSX.Element {
               <TableRow key={b.id} hover>
                 <TableCell sx={{ fontWeight: 700 }}>{b.billNumber}{b.supplierRef ? <Box component="span" sx={{ mx: 1, color: 'text.secondary', fontSize: 12 }}>({b.supplierRef})</Box> : null}</TableCell>
                 <TableCell>{b.supplierName}</TableCell><TableCell>{ymd(b.billDate)}</TableCell><TableCell>{ymd(b.dueDate)}</TableCell>
-                <TableCell align="left">{money(b.totalUsd)}</TableCell>
-                <TableCell align="left" sx={{ fontWeight: 700, color: b.balanceUsd > 0 ? 'error.main' : 'text.secondary' }}>{money(b.balanceUsd)}</TableCell>
+                <TableCell align="left"><Money usd={b.totalUsd} /></TableCell>
+                <TableCell align="left"><Money usd={b.balanceUsd} fontWeight={700} color={b.balanceUsd > 0 ? 'error.main' : 'text.secondary'} /></TableCell>
                 <TableCell><Chip size="small" color={STATUS[b.status]?.color} label={STATUS[b.status]?.label ?? b.status} variant="outlined" /></TableCell>
                 <TableCell align="left" sx={{ whiteSpace: 'nowrap' }}>
                   <DocumentViewButton load={() => billDocument(b.id)} />
@@ -178,14 +179,14 @@ function PaymentsTab(): JSX.Element {
         <Table size="small">
           <TableHead><TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
             <TableCell>رقم السند</TableCell><TableCell>المورّد</TableCell><TableCell>التاريخ</TableCell><TableCell>الطريقة</TableCell>
-            <TableCell align="left">المبلغ ($)</TableCell><TableCell>الحالة</TableCell><TableCell />
+            <TableCell align="left">المبلغ</TableCell><TableCell>الحالة</TableCell><TableCell />
           </TableRow></TableHead>
           <TableBody>
             {rows.length === 0 ? <TableRow><TableCell colSpan={7} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد مدفوعات</TableCell></TableRow> : null}
             {rows.map((p) => (
               <TableRow key={p.id} hover sx={{ opacity: p.isReversed ? 0.55 : 1 }}>
                 <TableCell sx={{ fontWeight: 700 }}>{p.paymentNumber}</TableCell><TableCell>{p.supplierName}</TableCell><TableCell>{ymd(p.paymentDate)}</TableCell>
-                <TableCell>{METHOD[p.paymentMethod] ?? p.paymentMethod}</TableCell><TableCell align="left" sx={{ fontWeight: 700 }}>{money(p.amountUsd)}</TableCell>
+                <TableCell>{METHOD[p.paymentMethod] ?? p.paymentMethod}</TableCell><TableCell align="left"><Money usd={p.amountUsd} fontWeight={700} /></TableCell>
                 <TableCell><Chip size="small" variant="outlined" color={p.isReversed ? 'error' : 'success'} label={p.isReversed ? 'معكوسة' : 'فعّالة'} /></TableCell>
                 <TableCell align="left">{!p.isReversed ? <Button size="small" onClick={() => { setReversing(p); setReason(''); }}>↩ عكس</Button> : null}</TableCell>
               </TableRow>

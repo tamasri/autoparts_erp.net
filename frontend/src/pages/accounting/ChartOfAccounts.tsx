@@ -19,6 +19,7 @@ import ExportMenu from '../../components/ui/ExportMenu';
 import ImportDialog, { type ImportSummary } from '../../components/ui/ImportDialog';
 import AccountDialog, { type AccountDialogMode } from '../../features/accounting/AccountDialog';
 import { ROOT_COLOR, ROOT_LABEL, accountTypeLabel } from '../../features/accounting/labels';
+import Money from '../../components/ui/Money';
 
 type Node = Account & { children: Node[]; depth: number };
 
@@ -46,7 +47,7 @@ function renderNodes(nodes: Node[], onPick: (n: Node) => void): JSX.Element[] {
       label={(
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.4, pr: 1 }}>
           <Typography variant="body2" fontWeight={n.isGroup ? 700 : 400}>{n.accountName}</Typography>
-          <Typography variant="body2" color={n.balance ? 'text.primary' : 'text.disabled'} sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{n.balance ? money(n.balance) : '—'}</Typography>
+          {n.balance ? ((n.currency ?? 'USD') === 'USD' ? <Money usd={n.balance} inline /> : <Typography variant="body2" sx={{ direction: 'ltr' }}>{money(n.balance)} {n.currency}</Typography>) : <Typography variant="body2" color="text.disabled">—</Typography>}
         </Stack>
       )}
     >
@@ -157,7 +158,7 @@ export default function ChartOfAccounts(): JSX.Element {
                     {current.accountType ? <Chip size="small" variant="outlined" label={accountTypeLabel(current.accountType)} /> : null}
                     {current.currency ? <Chip size="small" variant="outlined" label={current.currency} /> : null}
                   </Stack>
-                  {current.balance !== null ? <Typography variant="h5" fontWeight={800} sx={{ direction: 'ltr', textAlign: 'right' }}>{money(current.balance)} {current.currency}</Typography> : null}
+                  {current.balance !== null ? ((current.currency ?? 'USD') === 'USD' ? <Money usd={current.balance} variant="h5" fontWeight={800} /> : <Typography variant="h5" fontWeight={800} sx={{ direction: 'ltr', textAlign: 'right' }}>{money(current.balance)} {current.currency}</Typography>) : null}
                   {mappedTo.has(current.name) ? <Alert severity="info">يستخدمه النظام: {mappedTo.get(current.name)!.join('، ')}</Alert> : null}
                   <Stack direction="row" gap={1} flexWrap="wrap" sx={{ pt: 1 }}>
                     {!current.isGroup ? <Button size="small" variant="contained" component={RouterLink} to={`/accounting/reports?tab=ledger&account=${encodeURIComponent(current.name)}`}>كشف الحساب</Button> : null}

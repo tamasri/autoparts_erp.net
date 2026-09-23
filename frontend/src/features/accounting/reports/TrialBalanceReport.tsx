@@ -3,9 +3,10 @@ import { Alert, Chip, LinearProgress, Paper, Stack, Switch, FormControlLabel, Ta
 import { accountingApi, type TrialBalance } from '../../../api/endpoints/accounting';
 import { unwrapNode } from '../../../api/apiData';
 import { useLoad } from '../../../hooks/useLoad';
-import { money, moneyOrBlank, today, yearStart } from '../../../lib/money';
+import { today, yearStart } from '../../../lib/money';
 import ExportMenu from '../../../components/ui/ExportMenu';
 import { trialBalanceDocument } from '../documents';
+import Money from '../../../components/ui/Money';
 
 const debit = (v: number): number => (v > 0 ? v : 0);
 const credit = (v: number): number => (v < 0 ? -v : 0);
@@ -46,13 +47,13 @@ export default function TrialBalanceReport(): JSX.Element {
               {data.lines.map((l) => (
                 <TableRow key={l.account} hover sx={l.isGroup ? { bgcolor: 'action.hover' } : undefined}>
                   <TableCell sx={{ paddingInlineStart: `${16 + l.depth * 20}px`, fontWeight: l.isGroup ? 700 : 400 }}>{l.accountName}</TableCell>
-                  <TableCell align="left">{moneyOrBlank(debit(l.opening))}</TableCell><TableCell align="left">{moneyOrBlank(credit(l.opening))}</TableCell>
-                  <TableCell align="left">{moneyOrBlank(l.debit)}</TableCell><TableCell align="left">{moneyOrBlank(l.credit)}</TableCell>
-                  <TableCell align="left" sx={{ fontWeight: 700 }}>{moneyOrBlank(debit(l.closing))}</TableCell><TableCell align="left" sx={{ fontWeight: 700 }}>{moneyOrBlank(credit(l.closing))}</TableCell>
+                  <TableCell align="left">{debit(l.opening) ? <Money usd={debit(l.opening)} /> : ''}</TableCell><TableCell align="left">{credit(l.opening) ? <Money usd={credit(l.opening)} /> : ''}</TableCell>
+                  <TableCell align="left">{l.debit ? <Money usd={l.debit} /> : ''}</TableCell><TableCell align="left">{l.credit ? <Money usd={l.credit} /> : ''}</TableCell>
+                  <TableCell align="left">{debit(l.closing) ? <Money usd={debit(l.closing)} fontWeight={700} /> : ''}</TableCell><TableCell align="left">{credit(l.closing) ? <Money usd={credit(l.closing)} fontWeight={700} /> : ''}</TableCell>
                 </TableRow>
               ))}
               <TableRow sx={{ '& td': { fontWeight: 800, bgcolor: 'action.selected' } }}>
-                <TableCell colSpan={5}>الإجمالي (الأرصدة الختامية)</TableCell><TableCell align="left">{money(data.totalDebit)}</TableCell><TableCell align="left">{money(data.totalCredit)}</TableCell>
+                <TableCell colSpan={5}>الإجمالي (الأرصدة الختامية)</TableCell><TableCell align="left"><Money usd={data.totalDebit} fontWeight={800} /></TableCell><TableCell align="left"><Money usd={data.totalCredit} fontWeight={800} /></TableCell>
               </TableRow>
             </TableBody>
           </Table>

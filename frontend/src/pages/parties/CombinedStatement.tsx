@@ -13,6 +13,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import ExportMenu from '../../components/ui/ExportMenu';
 import DocumentDialog from '../../components/ui/DocumentDialog';
 import StatementTable, { statementDocument, withRunning, type StatementLine } from '../../components/accounts/StatementTable';
+import Money from '../../components/ui/Money';
 
 type Party = { id: string; code?: string; displayName?: string; displayNameAr?: string; hasCombinedStatement: boolean; showArTab: boolean; showApTab: boolean };
 type Line = { date: string; entryType: string; referenceNumber: string; description: string; debitSyp: number; creditSyp: number; debitUsd: number; creditUsd: number };
@@ -21,7 +22,6 @@ type Combined = { arLines: Line[]; apLines: Line[]; arBalance: Balance; apBalanc
 type SupplierStatement = { outstandingUsd: number; transactions: ArStatement['transactions'] };
 type ArStatement = { transactions: Array<{ id: string; type: string; date: string; reference?: string; debitSyp: number; creditSyp: number; debitUsd: number; creditUsd: number; balanceSyp: number; balanceUsd: number }> };
 
-const money = (v?: number): string => Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 const toLines = (rows: Line[]): StatementLine[] => withRunning(rows.map((r) => ({ date: r.date, type: r.entryType, reference: r.referenceNumber, description: r.description, debitSyp: r.debitSyp, creditSyp: r.creditSyp, debitUsd: r.debitUsd, creditUsd: r.creditUsd })));
 
 function Stat({ label, syp, usd }: { label: string; syp: number; usd: number }): JSX.Element {
@@ -29,8 +29,7 @@ function Stat({ label, syp, usd }: { label: string; syp: number; usd: number }):
     <Card variant="outlined" sx={{ borderRadius: 3, flex: 1, minWidth: 220 }}>
       <CardContent>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography variant="h6" fontWeight={800}>{money(syp)} ل.س</Typography>
-        <Typography variant="body2" color="text.secondary">{money(usd)} $</Typography>
+        <Box sx={{ mt: 0.5 }}><Money usd={usd} syp={syp} variant="h6" fontWeight={800} /></Box>
       </CardContent>
     </Card>
   );
@@ -113,8 +112,8 @@ export default function CombinedStatement(): JSX.Element {
           <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mb: 3 }}>
             <Card variant="outlined" sx={{ borderRadius: 3, flex: 1, minWidth: 220 }}>
               <CardContent>
-                <Typography variant="caption" color="text.secondary">المستحق للمورد علينا ($)</Typography>
-                <Typography variant="h5" fontWeight={800} color={owedUsd > 0 ? 'error.main' : 'success.main'}>{money(owedUsd)}</Typography>
+                <Typography variant="caption" color="text.secondary">المستحق للمورد علينا</Typography>
+                <Box><Money usd={owedUsd} variant="h5" fontWeight={800} color={owedUsd > 0 ? 'error.main' : 'success.main'} /></Box>
               </CardContent>
             </Card>
           </Stack>

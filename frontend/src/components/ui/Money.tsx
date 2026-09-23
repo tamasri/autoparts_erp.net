@@ -21,7 +21,10 @@ type Props = {
 export function useMoneyParts(usd: number, syp?: number | null): { main: string; sub: string | null } {
   const mid = useFxMid();
   const primary = useDisplayStore((s) => s.primary);
-  const lira = syp ?? (mid > 0 ? usd * mid : null);
+  // A recorded lira amount wins over today's rate; a lira-only record (no dollar amount) is shown in lira alone.
+  const recorded = syp !== null && syp !== undefined && (syp !== 0 || usd === 0) ? syp : null;
+  if (recorded !== null && usd === 0 && recorded !== 0) return { main: formatSyp(recorded), sub: null };
+  const lira = recorded ?? (mid > 0 ? usd * mid : null);
   if (lira === null) return { main: formatUsd(usd), sub: null };
   return primary === 'SYP' ? { main: formatSyp(lira), sub: formatUsd(usd) } : { main: formatUsd(usd), sub: formatSyp(lira) };
 }

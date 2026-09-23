@@ -4,11 +4,11 @@ import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogT
 import { accountingApi, type JournalEntryDetail } from '../../api/endpoints/accounting';
 import { unwrapNode } from '../../api/apiData';
 import { extractApiError } from '../../lib/toast';
-import { moneyOrBlank } from '../../lib/money';
 import ExportMenu from '../../components/ui/ExportMenu';
 import StatusChip from '../../components/ui/StatusChip';
 import { SYNC_LABEL } from './labels';
 import { entryDocument } from './documents';
+import Money from '../../components/ui/Money';
 
 export default function EntryViewDialog({ entryId, onClose }: { entryId: string | null; onClose: () => void }): JSX.Element {
   const [detail, setDetail] = useState<JournalEntryDetail | null>(null);
@@ -42,13 +42,13 @@ export default function EntryViewDialog({ entryId, onClose }: { entryId: string 
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead><TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
-                  <TableCell>#</TableCell><TableCell>الحساب</TableCell><TableCell>الزبون / المورّد</TableCell><TableCell align="left">مدين ($)</TableCell><TableCell align="left">دائن ($)</TableCell><TableCell>بيان</TableCell>
+                  <TableCell>#</TableCell><TableCell>الحساب</TableCell><TableCell>الزبون / المورّد</TableCell><TableCell align="left">مدين</TableCell><TableCell align="left">دائن</TableCell><TableCell>بيان</TableCell>
                 </TableRow></TableHead>
                 <TableBody>
                   {detail.lines.map((l) => (
                     <TableRow key={l.lineNumber}>
                       <TableCell>{l.lineNumber}</TableCell><TableCell>{l.account}</TableCell><TableCell>{l.partyName ?? '—'}</TableCell>
-                      <TableCell align="left">{moneyOrBlank(l.debit)}</TableCell><TableCell align="left">{moneyOrBlank(l.credit)}</TableCell><TableCell>{l.narration ?? ''}</TableCell>
+                      <TableCell align="left">{l.debit ? <Money usd={l.debit} /> : ''}</TableCell><TableCell align="left">{l.credit ? <Money usd={l.credit} /> : ''}</TableCell><TableCell>{l.narration ?? ''}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

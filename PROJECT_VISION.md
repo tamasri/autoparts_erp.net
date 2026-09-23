@@ -296,7 +296,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 ---
 
 ### 5.4 Decisions from the owner (2026-09-22)
-1. **Company currency — display layer only.** No data or ERPNext-currency change. Every amount keeps its USD value in `*_usd` columns and in ERPNext; the UI shows the lira equivalent (from `useFxMid`) in small type next to the USD figure everywhere an amount appears. Still open: build this (item 2 of the D16-adjacent task list) — a shared `Money`-style component used across invoices, payments, purchasing, receivables/payables, statements, reports, dashboard, stock value.
+1. **Company currency — display layer only.** No data or ERPNext-currency change. Every amount keeps its USD value in `*_usd` columns and in ERPNext; the UI shows the lira equivalent (from `useFxMid`) in small type next to the USD figure everywhere an amount appears. **Done 2026-09-23:** `components/ui/Money.tsx` (lira first by default, top-bar switch remembered per browser, recorded lira used when the document has it); old-style screens adopt it as they move to MUI.
 2. **Warehouse-manager approval scope.** A warehouse manager may approve a transfer **into or out of any warehouse they manage** — not only the two warehouses on that specific transfer. Manager status on a warehouse is granted only by an administrator (via the user's warehouse assignment), never self-service. SYSTEM_ADMIN needs no approval. A manager's authority is scoped to transfers; it does not extend to other governed request types. **Done 2026-09-23** (migration 20, `IWarehouseAccess` + `TransferApprovalPolicy`, wired in `MakerCheckerBehavior`/`GovernanceService`).
 
 ## 6. AI layer — truthful status

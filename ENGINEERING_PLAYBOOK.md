@@ -163,6 +163,11 @@ User-facing screens that a role must not see are hidden **and** the endpoint is 
 - A new warehouse list filters with `(@ScopeAll OR <column> IN (SELECT location_id FROM user_visible_locations(@ScopeUser)))` and passes `ScopeAll = WarehouseScopeSql.SeesAll(user)`, `ScopeUser = user.UserId`.
 - Seeing every warehouse is the permission `inventory:all_warehouses`, never a role-name check.
 
+### 2.3j Showing money
+- Show an amount with `<Money usd={..} syp={..} />` (`components/ui/Money.tsx`); pass `syp` when the document recorded the lira amount. Never format money by hand in a screen and never add "($)" to a column title — the component shows both currencies.
+- Number formatting goes through `lib/format.ts` (Intl.NumberFormat). Exports (`ExportDocument`) keep plain dollar numbers.
+- Inputs stay in the currency being typed; bank reconciliation stays in the account's currency.
+
 ### 2.3i Dashboard figures
 - Business figures come from `GetBusinessKpisQuery` only; the arithmetic is `KpiMath`. Do not add a second place that sums sales or receivables for a screen — extend the query.
 - Sales figures by line are scaled to the invoice's own net total, so any breakdown adds up to the invoices. Net profit is always the ledger's (ERPNext P&L), never recomputed locally.

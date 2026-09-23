@@ -1,8 +1,9 @@
-/** Account statement table shared by the customer page and the account (party) statement page: SYP + USD with running balance. */
+/** Account statement table shared by the customer page and the account (party) statement page: each amount in both currencies, with running balance. */
 import { Box, Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import type { ExportDocument } from '../../lib/exportClient';
 import { num, ymd } from '../../lib/exportClient';
+import Money from '../ui/Money';
 
 export type StatementLine = {
   id?: string;
@@ -22,7 +23,6 @@ export const TYPE_LABEL: Record<string, string> = {
   INVOICE: 'فاتورة', VOIDED: 'فاتورة (ملغاة)', CREDIT_NOTE: 'إشعار دائن', RETURN: 'مرتجع', PAYMENT: 'سند قبض', REFUND: 'ردّ مبلغ', BILL: 'فاتورة شراء', SUPPLIER_PAYMENT: 'دفعة لمورّد',
 };
 
-const money = (v: number | undefined): string => (v === undefined || v === 0 ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
 
 /** Adds a running balance when the source does not provide one. */
 export function withRunning(lines: StatementLine[]): StatementLine[] {
@@ -56,13 +56,12 @@ export default function StatementTable({ lines, linkFor }: { lines: StatementLin
         <TableHead>
           <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
             <TableCell>التاريخ</TableCell><TableCell>النوع</TableCell><TableCell>المرجع</TableCell>
-            <TableCell align="left">مدين (ل.س)</TableCell><TableCell align="left">دائن (ل.س)</TableCell><TableCell align="left">الرصيد (ل.س)</TableCell>
-            <TableCell align="left">مدين ($)</TableCell><TableCell align="left">دائن ($)</TableCell><TableCell align="left">الرصيد ($)</TableCell>
+            <TableCell align="left">مدين</TableCell><TableCell align="left">دائن</TableCell><TableCell align="left">الرصيد</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {lines.length === 0 ? (
-            <TableRow><TableCell colSpan={9} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد حركات مالية</TableCell></TableRow>
+            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد حركات مالية</TableCell></TableRow>
           ) : lines.map((l, i) => {
             const to = linkFor?.(l) ?? null;
             return (
@@ -72,12 +71,9 @@ export default function StatementTable({ lines, linkFor }: { lines: StatementLin
                 <TableCell sx={{ fontWeight: 600 }}>
                   {to ? <Box component={RouterLink} to={to} sx={{ color: 'primary.main', textDecoration: 'none' }}>{l.reference || l.description || '—'}</Box> : (l.reference || l.description || '—')}
                 </TableCell>
-                <TableCell align="left" sx={{ color: l.debitSyp ? 'error.main' : 'text.disabled' }}>{money(l.debitSyp)}</TableCell>
-                <TableCell align="left" sx={{ color: l.creditSyp ? 'success.main' : 'text.disabled' }}>{money(l.creditSyp)}</TableCell>
-                <TableCell align="left" sx={{ fontWeight: 700 }}>{(l.balanceSyp ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
-                <TableCell align="left" sx={{ color: l.debitUsd ? 'error.main' : 'text.disabled' }}>{money(l.debitUsd)}</TableCell>
-                <TableCell align="left" sx={{ color: l.creditUsd ? 'success.main' : 'text.disabled' }}>{money(l.creditUsd)}</TableCell>
-                <TableCell align="left" sx={{ fontWeight: 700 }}>{(l.balanceUsd ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
+                <TableCell align="left">{l.debitUsd || l.debitSyp ? <Money usd={l.debitUsd} syp={l.debitSyp} color="error.main" /> : '—'}</TableCell>
+                <TableCell align="left">{l.creditUsd || l.creditSyp ? <Money usd={l.creditUsd} syp={l.creditSyp} color="success.main" /> : '—'}</TableCell>
+                <TableCell align="left"><Money usd={l.balanceUsd ?? 0} syp={l.balanceSyp ?? 0} fontWeight={700} /></TableCell>
               </TableRow>
             );
           })}

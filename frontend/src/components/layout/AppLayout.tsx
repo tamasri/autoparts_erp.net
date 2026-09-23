@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { Link as RouterLink, NavLink, Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import {
-  AppBar, Avatar, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tab, Tabs, Toolbar, Tooltip, Typography,
+  AppBar, Avatar, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tab, Tabs, ToggleButton, ToggleButtonGroup, Toolbar, Tooltip, Typography,
   useMediaQuery,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useAuthStore } from '../../stores/authStore';
+import { useDisplayStore, type PrimaryCurrency } from '../../stores/displayStore';
 import { NAV_GROUPS, QUICK_ACTIONS, type NavItem, type NavTab } from './navigation';
 
 const WIDTH = 260;
@@ -84,6 +85,8 @@ export default function AppLayout(): JSX.Element {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [collapsedByUser, setCollapsedByUser] = useState(false);
+  const primary = useDisplayStore((st) => st.primary);
+  const setPrimary = useDisplayStore((st) => st.setPrimary);
   const [quick, setQuick] = useState<HTMLElement | null>(null);
   const [account, setAccount] = useState<HTMLElement | null>(null);
   const { pathname } = useLocation();
@@ -105,6 +108,14 @@ export default function AppLayout(): JSX.Element {
             </Menu>
 
             <Box sx={{ flex: 1 }} />
+
+            {/* Which currency amounts are shown in first (display only; everything is kept in dollars). */}
+            <Tooltip title="عملة العرض الأساسية">
+              <ToggleButtonGroup size="small" exclusive value={primary} onChange={(_, v: PrimaryCurrency | null) => { if (v) setPrimary(v); }}>
+                <ToggleButton value="SYP" sx={{ px: 1.25 }}>ل.س</ToggleButton>
+                <ToggleButton value="USD" sx={{ px: 1.25 }}>$</ToggleButton>
+              </ToggleButtonGroup>
+            </Tooltip>
 
             <Box sx={{ textAlign: 'end', display: { xs: 'none', sm: 'block' } }}>
               <Typography variant="body2" fontWeight={700} lineHeight={1.2}>{name}</Typography>

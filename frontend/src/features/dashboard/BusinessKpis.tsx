@@ -1,12 +1,12 @@
 /**
- * The business KPIs with filters (period, warehouse, customer, rep, category, display currency). Every figure comes from GET /dashboard/kpis,
+ * The business KPIs with filters (period, warehouse, customer, rep, category; the display currency is the switch in the top bar). Every figure comes from GET /dashboard/kpis,
  * which aggregates on the server; each card links to the list or report that explains it.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert, Autocomplete, Box, Button, Card, CardActionArea, CardContent, Chip, LinearProgress, Link, MenuItem, Paper, Stack, TextField,
-  ToggleButton, ToggleButtonGroup, Typography,
+  Typography,
 } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { dashboardApi, type BusinessKpis as Kpis, type KpiAgeing, type KpiFilters, type KpiRank } from '../../api/endpoints/dashboard';
@@ -15,7 +15,6 @@ import { customersApi } from '../../api/endpoints/customers';
 import { unwrapNode, unwrapPaged } from '../../api/apiData';
 import { useLoad } from '../../hooks/useLoad';
 import { useLocations } from '../../hooks/useLocations';
-import { useDisplayStore, type PrimaryCurrency } from '../../stores/displayStore';
 import { formatPct, formatQty } from '../../lib/format';
 import { today } from '../../lib/money';
 import Money from '../../components/ui/Money';
@@ -107,8 +106,6 @@ export default function BusinessKpis(): JSX.Element {
   const [customer, setCustomer] = useState<PickerOption | null>(null);
   const [salesRepId, setSalesRepId] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
-  const primary = useDisplayStore((s) => s.primary);
-  const setPrimary = useDisplayStore((s) => s.setPrimary);
   const { locations } = useLocations('WAREHOUSE');
   const [reps, setReps] = useState<SalesRep[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -156,9 +153,6 @@ export default function BusinessKpis(): JSX.Element {
             getOptionLabel={(c) => `${'  '.repeat(c.path.split('.').length - 1)}${c.nameAr || c.name}`} isOptionEqualToValue={(a, b) => a.id === b.id}
             renderInput={(p) => <TextField {...p} label="فئة الأصناف" />}
           />
-          <ToggleButtonGroup size="small" exclusive value={primary} onChange={(_, v: PrimaryCurrency | null) => { if (v) setPrimary(v); }}>
-            <ToggleButton value="SYP">ل.س</ToggleButton><ToggleButton value="USD">$</ToggleButton>
-          </ToggleButtonGroup>
           {filtered ? <Button size="small" onClick={() => { setWarehouseId(''); setCustomer(null); setSalesRepId(''); setCategory(null); }}>مسح الفلاتر</Button> : null}
         </Stack>
       </Paper>

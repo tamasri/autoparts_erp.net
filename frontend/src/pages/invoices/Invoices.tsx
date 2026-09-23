@@ -9,6 +9,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import ExportMenu from '../../components/ui/ExportMenu';
 import StatusChip from '../../components/ui/StatusChip';
+import Money from '../../components/ui/Money';
 
 type Invoice = {
   id: string; invoiceNumber?: string; customerName?: string; invoiceDate?: string; dueDate?: string;
@@ -16,7 +17,6 @@ type Invoice = {
 };
 
 const FILTERS = [{ key: '', label: 'الكل' }, { key: 'DRAFT', label: 'مسودة' }, { key: 'CONFIRMED', label: 'مؤكدة' }, { key: 'POSTED', label: 'مرحّلة' }, { key: 'VOID', label: 'ملغاة' }];
-const fmt = (v?: number): string => Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 
 export default function Invoices(): JSX.Element {
   const navigate = useNavigate();
@@ -51,9 +51,8 @@ export default function Invoices(): JSX.Element {
         return overdue ? <Chip size="small" color="error" label={i.dueDate} /> : (i.dueDate ?? '—');
       },
     },
-    { header: 'الإجمالي (ل.س)', numeric: true, render: (i) => <strong>{fmt(i.totalSyp)}</strong> },
-    { header: 'الإجمالي ($)', numeric: true, render: (i) => fmt(i.totalUsd) },
-    { header: 'المتبقي (ل.س)', numeric: true, render: (i) => <span style={{ color: Number(i.balanceSyp ?? 0) > 0 ? 'crimson' : undefined, fontWeight: 700 }}>{fmt(i.balanceSyp)}</span> },
+    { header: 'الإجمالي', numeric: true, render: (i) => <Money usd={i.totalUsd} syp={i.totalSyp} fontWeight={700} /> },
+    { header: 'المتبقي', numeric: true, render: (i) => <Money usd={i.balanceUsd} syp={i.balanceSyp} fontWeight={700} color={Number(i.balanceUsd ?? i.balanceSyp ?? 0) > 0 ? 'error.main' : undefined} /> },
     { header: 'الحالة', render: (i) => <StatusChip status={i.status} /> },
   ];
 

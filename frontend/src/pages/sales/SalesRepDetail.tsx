@@ -16,6 +16,7 @@ import ExportMenu from '../../components/ui/ExportMenu';
 import SalesRepDialog from '../../features/salesReps/SalesRepDialog';
 import AssignCustomersDialog from '../../features/salesReps/AssignCustomersDialog';
 import { TargetBar } from './SalesReps';
+import Money from '../../components/ui/Money';
 
 const MONTHS = ['كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران', 'تموز', 'آب', 'أيلول', 'تشرين الأول', 'تشرين الثاني', 'كانون الأول'];
 
@@ -77,10 +78,10 @@ export default function SalesRepDetail(): JSX.Element {
       {rep ? (
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 2, mb: 2 }}>
-            <KpiTile title="صافي المبيعات" value={`$${money(rep.netSalesUsd)}`} hint={`${rep.invoiceCount} فاتورة · مرتجعات $${money(rep.returnsUsd)}`} />
-            <KpiTile title="المحصّل" value={`$${money(rep.collectedUsd)}`} tone="success" />
-            <KpiTile title="ذمم زبائنه" value={`$${money(rep.outstandingUsd)}`} tone="warning" hint={`${rep.customerCount} زبون`} />
-            <KpiTile title="العمولة" value={`$${money(rep.commissionUsd)}`} hint={`${rep.commissionPct}% من الصافي بدون التوصيل`} />
+            <KpiTile title="صافي المبيعات" value={<Money usd={rep.netSalesUsd} variant="h5" fontWeight={800} />} hint={`${rep.invoiceCount} فاتورة`} />
+            <KpiTile title="المحصّل" value={<Money usd={rep.collectedUsd} variant="h5" fontWeight={800} />} tone="success" />
+            <KpiTile title="ذمم زبائنه" value={<Money usd={rep.outstandingUsd} variant="h5" fontWeight={800} />} tone="warning" hint={`${rep.customerCount} زبون`} />
+            <KpiTile title="العمولة" value={<Money usd={rep.commissionUsd} variant="h5" fontWeight={800} />} hint={`${rep.commissionPct}% من الصافي بدون التوصيل`} />
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
               <Typography variant="caption" color="text.secondary">الهدف للفترة</Typography>
               <Box sx={{ mt: 1 }}><TargetBar value={rep.netSalesUsd} target={rep.targetUsd} /></Box>
@@ -108,7 +109,7 @@ export default function SalesRepDetail(): JSX.Element {
                 { header: 'الكود', render: (c) => c.code, nowrap: true },
                 { header: 'الزبون', render: (c) => <Link component={RouterLink} to={`/customers/${c.id}`}>{c.name}</Link> },
                 { header: 'الهاتف', render: (c) => c.phone ?? '' },
-                { header: 'الذمة ($)', render: (c) => money(c.outstandingUsd), numeric: true },
+                { header: 'الذمة', render: (c) => <Money usd={c.outstandingUsd} />, numeric: true },
                 { header: 'آخر فاتورة', render: (c) => ymd(c.lastInvoiceDate) || '—', nowrap: true },
               ]}
             />
@@ -122,8 +123,8 @@ export default function SalesRepDetail(): JSX.Element {
               { header: 'النوع', render: (i) => (i.type === 'RETURN' ? 'مرتجع' : 'بيع') },
               { header: 'التاريخ', render: (i) => ymd(i.invoiceDate), nowrap: true },
               { header: 'الزبون', render: (i) => i.customerName },
-              { header: 'الإجمالي ($)', render: (i) => money(i.totalUsd), numeric: true },
-              { header: 'المتبقي ($)', render: (i) => money(i.balanceUsd), numeric: true },
+              { header: 'الإجمالي', render: (i) => <Money usd={i.totalUsd} />, numeric: true },
+              { header: 'المتبقي', render: (i) => <Money usd={i.balanceUsd} />, numeric: true },
             ]}
           />
           <SalesRepDialog open={editing} rep={rep} onClose={() => setEditing(false)} onSaved={reload} />

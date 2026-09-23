@@ -6,13 +6,14 @@ import { salesRepsApi, SALES_REPS, type SalesRep } from '../../api/endpoints/sal
 import { unwrapNode } from '../../api/apiData';
 import { useLoad } from '../../hooks/useLoad';
 import { useCan } from '../../hooks/useCan';
-import { money, today } from '../../lib/money';
+import { today } from '../../lib/money';
 import { num, type ExportDocument } from '../../lib/exportClient';
 import PageHeader from '../../components/ui/PageHeader';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import KpiTile from '../../components/ui/KpiTile';
 import ExportMenu from '../../components/ui/ExportMenu';
 import SalesRepDialog from '../../features/salesReps/SalesRepDialog';
+import Money from '../../components/ui/Money';
 
 const monthStart = (): string => `${today().slice(0, 8)}01`;
 
@@ -23,7 +24,7 @@ export function TargetBar({ value, target }: { value: number; target: number }):
   return (
     <Box sx={{ minWidth: 110 }}>
       <LinearProgress variant="determinate" value={Math.min(Math.max(pct, 0), 100)} color={pct >= 100 ? 'success' : pct >= 60 ? 'primary' : 'warning'} sx={{ height: 6, borderRadius: 3 }} />
-      <Typography variant="caption" color="text.secondary">{pct}% من {money(target)}</Typography>
+      <Typography variant="caption" color="text.secondary" component="div">{pct}% من <Money usd={target} inline variant="caption" /></Typography>
     </Box>
   );
 }
@@ -55,12 +56,12 @@ export default function SalesReps(): JSX.Element {
     },
     { header: 'الزبائن', render: (r) => r.customerCount, numeric: true },
     { header: 'الفواتير', render: (r) => r.invoiceCount, numeric: true },
-    { header: 'المبيعات ($)', render: (r) => money(r.salesUsd), numeric: true, nowrap: true },
-    { header: 'المرتجعات ($)', render: (r) => (r.returnsUsd ? money(r.returnsUsd) : '—'), numeric: true, nowrap: true },
-    { header: 'الصافي ($)', render: (r) => <b>{money(r.netSalesUsd)}</b>, numeric: true, nowrap: true },
-    { header: 'المحصّل ($)', render: (r) => money(r.collectedUsd), numeric: true, nowrap: true },
-    { header: 'ذمم الزبائن ($)', render: (r) => money(r.outstandingUsd), numeric: true, nowrap: true },
-    { header: 'العمولة', render: (r) => <span>{money(r.commissionUsd)} <Typography component="span" variant="caption" color="text.secondary">({r.commissionPct}%)</Typography></span>, numeric: true, nowrap: true },
+    { header: 'المبيعات', render: (r) => <Money usd={r.salesUsd} />, numeric: true, nowrap: true },
+    { header: 'المرتجعات', render: (r) => (r.returnsUsd ? <Money usd={r.returnsUsd} /> : '—'), numeric: true, nowrap: true },
+    { header: 'الصافي', render: (r) => <Money usd={r.netSalesUsd} fontWeight={700} />, numeric: true, nowrap: true },
+    { header: 'المحصّل', render: (r) => <Money usd={r.collectedUsd} />, numeric: true, nowrap: true },
+    { header: 'ذمم الزبائن', render: (r) => <Money usd={r.outstandingUsd} />, numeric: true, nowrap: true },
+    { header: 'العمولة', render: (r) => <><Money usd={r.commissionUsd} /> <Typography component="span" variant="caption" color="text.secondary">({r.commissionPct}%)</Typography></>, numeric: true, nowrap: true },
     { header: 'الهدف', render: (r) => <TargetBar value={r.netSalesUsd} target={r.targetUsd} /> },
     {
       header: ' ',
@@ -90,7 +91,7 @@ export default function SalesReps(): JSX.Element {
     <Box>
       <PageHeader
         title="مندوبو المبيعات"
-        subtitle="المبيعات والتحصيل والعمولة لكل مندوب — الفواتير المرحّلة فقط، بالدولار"
+        subtitle="المبيعات والتحصيل والعمولة لكل مندوب — الفواتير المرحّلة فقط"
         actions={canManage ? <Button variant="contained" onClick={() => setEditing(null)}>＋ إضافة مندوب</Button> : undefined}
       />
       <Stack direction="row" gap={1.5} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
@@ -102,10 +103,10 @@ export default function SalesReps(): JSX.Element {
       </Stack>
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2, mb: 2 }}>
-        <KpiTile title="صافي المبيعات" value={`$${money(sum((r) => r.netSalesUsd))}`} hint={`مرتجعات $${money(sum((r) => r.returnsUsd))}`} />
-        <KpiTile title="المحصّل في الفترة" value={`$${money(sum((r) => r.collectedUsd))}`} tone="success" />
-        <KpiTile title="ذمم زبائن المندوبين" value={`$${money(sum((r) => r.outstandingUsd))}`} tone="warning" hint="المستحق اليوم على فواتيرهم" />
-        <KpiTile title="العمولات المستحقة" value={`$${money(sum((r) => r.commissionUsd))}`} hint={`${reps.length} مندوب`} />
+        <KpiTile title="صافي المبيعات" value={<Money usd={sum((r) => r.netSalesUsd)} variant="h5" fontWeight={800} />} />
+        <KpiTile title="المحصّل في الفترة" value={<Money usd={sum((r) => r.collectedUsd)} variant="h5" fontWeight={800} />} tone="success" />
+        <KpiTile title="ذمم زبائن المندوبين" value={<Money usd={sum((r) => r.outstandingUsd)} variant="h5" fontWeight={800} />} tone="warning" hint="المستحق اليوم على فواتيرهم" />
+        <KpiTile title="العمولات المستحقة" value={<Money usd={sum((r) => r.commissionUsd)} variant="h5" fontWeight={800} />} hint={`${reps.length} مندوب`} />
       </Box>
       <DataTable columns={columns} rows={reps} getKey={(r) => r.userId} loading={loading} empty="لا يوجد مندوبون — أضف مستخدماً كمندوب" />
       <SalesRepDialog open={editing !== undefined} rep={editing ?? null} onClose={() => setEditing(undefined)} onSaved={reload} />
