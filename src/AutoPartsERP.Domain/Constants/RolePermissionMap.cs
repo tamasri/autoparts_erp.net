@@ -92,6 +92,37 @@ public static class RolePermissionMap
                 PermissionCodes.Receiving.Read
             },
 
+            // Warehouse staff: receiving, putaway, transfers, picking, counts and adjustments. Which warehouses a person works in, and whether
+            // they manage (approve transfers for) them, is set per user by an administrator, not by this role.
+            [RoleCodes.Warehouse] = new[]
+            {
+                PermissionCodes.Items.Read,
+                PermissionCodes.Catalog.Read,
+                PermissionCodes.Inventory.Read,
+                PermissionCodes.Inventory.Transfer,
+                PermissionCodes.Inventory.ViewBatches,
+                PermissionCodes.Receiving.Read,
+                PermissionCodes.Receiving.Create,
+                PermissionCodes.Receiving.Post,
+                PermissionCodes.Receiving.Putaway,
+                PermissionCodes.Transfers.Read,
+                PermissionCodes.Transfers.CreateRequest,
+                PermissionCodes.Transfers.CreateOrder,
+                PermissionCodes.Transfers.Ship,
+                PermissionCodes.Transfers.Receive,
+                PermissionCodes.IssueOrders.Read,
+                PermissionCodes.IssueOrders.Pick,
+                PermissionCodes.IssueOrders.Verify,
+                PermissionCodes.IssueOrders.Issue,
+                PermissionCodes.CycleCounts.Read,
+                PermissionCodes.CycleCounts.Record,
+                PermissionCodes.StockAdjustments.Read,
+                PermissionCodes.StockAdjustments.Create,
+                PermissionCodes.InventoryAlerts.Read,
+                PermissionCodes.InventoryAlerts.Acknowledge,
+                PermissionCodes.Barcodes.Scan
+            },
+
             // Baseline authenticated user: assorted read access.
             [RoleCodes.StandardUser] = new[]
             {

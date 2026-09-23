@@ -7,6 +7,8 @@ export type User = {
 };
 export type CreateUserBody = { userName: string; email: string; firstName: string; lastName: string; password: string; roleIds: string[] };
 export type UpdateUserBody = { email: string; firstName: string; lastName: string };
+/** A warehouse and whether the user works in it and manages it (a manager approves transfers into or out of it). */
+export type UserWarehouse = { warehouseId: string; code: string; name: string; type: string; assigned: boolean; isManager: boolean };
 
 export const usersApi = {
   getUsers: (page = 1, pageSize = 20, search?: string, isActive?: boolean) =>
@@ -19,6 +21,9 @@ export const usersApi = {
     apiClient.post(`/users/${userId}/deactivate`, payload, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
   activateUser: (userId: string) => apiClient.post(`/users/${userId}/activate`),
   resetPassword: (userId: string, newPassword: string) => apiClient.post(`/users/${userId}/password`, { newPassword }),
+  warehouses: (userId: string) => apiClient.get(`/users/${userId}/warehouses`),
+  setWarehouses: (userId: string, warehouses: Array<{ warehouseId: string; isManager: boolean }>) =>
+    apiClient.put(`/users/${userId}/warehouses`, { warehouses }),
   assignRoles: (userId: string, payload: { roleIds: string[] }) =>
     apiClient.post(`/users/${userId}/roles`, payload, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
 };

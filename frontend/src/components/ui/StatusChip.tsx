@@ -4,7 +4,7 @@ type Tone = 'success' | 'warning' | 'error' | 'info' | 'default';
 
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   ACTIVE: { label: 'نشط', tone: 'success' }, INACTIVE: { label: 'غير نشط', tone: 'default' },
-  PENDING: { label: 'معلّق', tone: 'warning' }, APPROVED: { label: 'موافَق عليه', tone: 'success' }, REJECTED: { label: 'مرفوض', tone: 'error' },
+  PENDING: { label: 'معلّق', tone: 'warning' }, IN_REVIEW: { label: 'بانتظار موافقة أخرى', tone: 'info' }, APPROVED: { label: 'موافَق عليه', tone: 'success' }, REJECTED: { label: 'مرفوض', tone: 'error' },
   EXPIRED: { label: 'منتهٍ', tone: 'default' }, SUCCESS: { label: 'نجح', tone: 'success' }, FAILED: { label: 'فشل', tone: 'error' },
   DRAFT: { label: 'مسودة', tone: 'default' }, POSTED: { label: 'مرحّل', tone: 'success' }, VOID: { label: 'ملغى', tone: 'error' },
   OPEN: { label: 'مفتوح', tone: 'warning' }, ACKNOWLEDGED: { label: 'تم الاطلاع', tone: 'info' }, RESOLVED: { label: 'محلول', tone: 'success' },

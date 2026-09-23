@@ -29,6 +29,6 @@ public sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Appr
             .WithOne()
             .HasForeignKey(x => x.ApprovalRequestId)
             .OnDelete(DeleteBehavior.Cascade);
-        builder.Navigation(x => x.Decisions).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(x => x.Decisions).UsePropertyAccessMode(PropertyAccessMode.Field).AutoInclude();
     }
 }

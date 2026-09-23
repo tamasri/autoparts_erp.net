@@ -1,9 +1,9 @@
 namespace AutoPartsERP.Application.Features.Approvals.GetPendingApprovals;
 
 public sealed record GetPendingApprovalsQuery(int Page, int PageSize)
-    : IRequest<Result<PagedResponse<ApprovalRequestDto>>>, IAuthorizedRequest
+    : IRequest<Result<PagedResponse<ApprovalRequestDto>>>
 {
-    public string RequiredPermission => PermissionCodes.ApprovalsRead;
+    // Authorised in IGovernanceService: approvals.read sees every request, a warehouse manager sees the transfers of their warehouses.
 }
 
 public sealed class GetPendingApprovalsQueryValidator : AbstractValidator<GetPendingApprovalsQuery>

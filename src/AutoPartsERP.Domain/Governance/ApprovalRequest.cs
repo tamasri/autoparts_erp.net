@@ -54,14 +54,18 @@ public sealed class ApprovalRequest : AuditableEntity
 
     public IReadOnlyCollection<ApprovalDecision> Decisions => _decisions.AsReadOnly();
 
-    public Result Approve(Guid reviewerUserId, string? comment = null)
+    /// <summary>
+    /// Records an approval. By default the request is complete once <see cref="RequiredApprovals"/> approvals exist; a caller that decides completion
+    /// by another rule (a warehouse transfer is complete when every warehouse involved has consented) passes <paramref name="completes"/>.
+    /// </summary>
+    public Result Approve(Guid reviewerUserId, string? comment = null, bool? completes = null)
     {
-        return Review(reviewerUserId, ApprovalStatuses.Approved, comment);
+        return Review(reviewerUserId, ApprovalStatuses.Approved, comment, completes);
     }
 
     public Result Reject(Guid reviewerUserId, string comment)
     {
-        return Review(reviewerUserId, ApprovalStatuses.Rejected, comment);
+        return Review(reviewerUserId, ApprovalStatuses.Rejected, comment, null);
     }
 
     public Result Cancel(string reason)
@@ -78,7 +82,7 @@ public sealed class ApprovalRequest : AuditableEntity
         return Result.Success();
     }
 
-    private Result Review(Guid reviewerUserId, string decisionStatus, string? comment)
+    private Result Review(Guid reviewerUserId, string decisionStatus, string? comment, bool? completes)
     {
         if (ApprovalStatuses.TerminalStatuses.Contains(Status, StringComparer.OrdinalIgnoreCase))
         {
@@ -98,7 +102,7 @@ public sealed class ApprovalRequest : AuditableEntity
             Status = ApprovalStatuses.Rejected;
             CompletedAtUtc = DateTimeOffset.UtcNow;
         }
-        else if (CurrentApprovals >= RequiredApprovals)
+        else if (completes ?? CurrentApprovals >= RequiredApprovals)
         {
             Status = ApprovalStatuses.Approved;
             CompletedAtUtc = DateTimeOffset.UtcNow;

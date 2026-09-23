@@ -13,6 +13,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { extractApiError, toast } from '../../lib/toast';
 import { notifyResult } from '../../lib/notify';
 import ReasonDialog from '../../components/ui/ReasonDialog';
+import UserWarehouses from './UserWarehouses';
 
 type RoleOption = { id: string; code: string; permissionCount: number };
 type Props = { open: boolean; user: User | null; onClose: () => void; onSaved: () => void };
@@ -128,6 +129,8 @@ export default function UserDialog({ open, user, onClose, onSaved }: Props): JSX
 
             {editing ? (
               <>
+                <Divider />
+                <UserWarehouses userId={user.id} readOnly={isSelf} onSaved={onSaved} />
                 <Divider />
                 <Stack direction="row" gap={1} alignItems="center">
                   <TextField size="small" fullWidth type="password" label="كلمة سر جديدة" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />

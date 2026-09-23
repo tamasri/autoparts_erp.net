@@ -99,6 +99,7 @@ global using AutoPartsERP.Application.Features.Users.GetUserById;
 global using AutoPartsERP.Application.Features.Users.GetUsers;
 global using AutoPartsERP.Application.Features.Users.ResetPassword;
 global using AutoPartsERP.Application.Features.Users.UpdateUser;
+global using AutoPartsERP.Application.Features.Users.Warehouses;
 global using AutoPartsERP.Application.Features.Warranty.ClaimWarranty;
 global using AutoPartsERP.Application.Features.Warranty.GetWarrantyRecords;
 global using AutoPartsERP.Application.Features.Warranty.ProcessWarranty;

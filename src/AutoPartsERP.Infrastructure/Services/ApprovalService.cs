@@ -25,11 +25,11 @@ public sealed class ApprovalService : IApprovalService
             INSERT INTO approval_requests (
                 id, correlation_id, request_type, entity_type, entity_id, payload_json,
                 requester_id, requester_notes, reason_code, status, expires_at, created_at,
-                action_code, requested_by_user_id, reason, required_approvals, requested_at_utc, created_at_utc)
+                action_code, requested_by_user_id, reason, required_approvals, requested_at_utc, created_at_utc, scope_warehouse_ids)
             VALUES (
                 @Id, @CorrelationId, @RequestType, @EntityType, COALESCE(@EntityId, ''), CAST(@PayloadJson AS jsonb),
                 @RequesterId, @RequesterNotes, @ReasonCode, 'PENDING', @ExpiresAt, @CreatedAt,
-                @RequestType, @RequesterId, COALESCE(@RequesterNotes, ''), 1, @CreatedAt, @CreatedAt);
+                @RequestType, @RequesterId, COALESCE(@RequesterNotes, ''), @RequiredApprovals, @CreatedAt, @CreatedAt, @ScopeWarehouseIds);
             """,
             new
             {
@@ -42,11 +42,21 @@ public sealed class ApprovalService : IApprovalService
                 submission.RequesterId,
                 submission.RequesterNotes,
                 submission.ReasonCode,
+                RequiredApprovals = Math.Max(submission.RequiredApprovals, 1),
+                ScopeWarehouseIds = submission.ScopeWarehouseIds?.ToArray(),
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(48),
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
         return Result<Guid>.Success(id);
+    }
+
+    public async Task<bool> HasPendingAsync(string requestType, string entityId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
+        return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            "SELECT EXISTS (SELECT 1 FROM approval_requests WHERE request_type = @requestType AND entity_id = @entityId AND status IN ('PENDING', 'IN_REVIEW'));",
+            new { requestType, entityId }, cancellationToken: cancellationToken));
     }
 
     public async Task SaveAsync(ApprovalRequest approvalRequest, CancellationToken cancellationToken = default)

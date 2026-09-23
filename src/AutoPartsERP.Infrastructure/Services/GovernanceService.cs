@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using AutoPartsERP.Application.Common.Governance;
 using AutoPartsERP.Infrastructure.Persistence;
 
 namespace AutoPartsERP.Infrastructure.Services;
@@ -10,6 +11,9 @@ public sealed class GovernanceService : IGovernanceService
     private readonly IMediator _mediator;
     private readonly IApprovalReplayContext _replayContext;
     private readonly ILogger<GovernanceService> _logger;
+    private readonly ICurrentUser _currentUser;
+    private readonly IWarehouseAccess _warehouses;
+    private readonly IManualAuditService _audit;
     private readonly bool _allowSelfApproval;
 
     public GovernanceService(
@@ -18,6 +22,9 @@ public sealed class GovernanceService : IGovernanceService
         IMediator mediator,
         IApprovalReplayContext replayContext,
         ILogger<GovernanceService> logger,
+        ICurrentUser currentUser,
+        IWarehouseAccess warehouses,
+        IManualAuditService audit,
         Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
         _dbContext = dbContext;
@@ -25,6 +32,9 @@ public sealed class GovernanceService : IGovernanceService
         _mediator = mediator;
         _replayContext = replayContext;
         _logger = logger;
+        _currentUser = currentUser;
+        _warehouses = warehouses;
+        _audit = audit;
 
         // Maker-checker means a second person approves. Single-operator installs can opt out explicitly with
         // Governance:AllowSelfApproval=true (env Governance__AllowSelfApproval); the default is the safe one.
@@ -34,6 +44,18 @@ public sealed class GovernanceService : IGovernanceService
     public async Task<Result<PagedResponse<ApprovalRequestDto>>> GetApprovalsAsync(ApprovalListFilter filter, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.ApprovalRequests.AsNoTracking();
+        if (!_currentUser.HasPermission(PermissionCodes.ApprovalsRead))
+        {
+            var managed = await _warehouses.ManagedWarehousesAsync(_currentUser.UserId, cancellationToken);
+            if (managed.Count == 0)
+            {
+                return Result<PagedResponse<ApprovalRequestDto>>.Failure(new Error("Authorization.Forbidden", $"Permission '{PermissionCodes.ApprovalsRead}' is required."));
+            }
+
+            var visible = await ApprovalsTouchingAsync(managed.ToArray(), cancellationToken);
+            query = query.Where(x => visible.Contains(x.Id));
+        }
+
         if (filter.ExcludeCurrentUserRequests && !_allowSelfApproval && filter.CurrentUserId.HasValue)
         {
             query = query.Where(x => x.RequestedByUserId != filter.CurrentUserId.Value);
@@ -46,7 +68,9 @@ public sealed class GovernanceService : IGovernanceService
             .Take(filter.PageSize)
             .ToListAsync(cancellationToken);
 
-        return Result<PagedResponse<ApprovalRequestDto>>.Success(new PagedResponse<ApprovalRequestDto>(items.Select(ToDto).ToArray(), filter.PageNumber, filter.PageSize, total));
+        var names = await WarehouseNamesAsync(items.Select(x => x.Id).ToArray(), cancellationToken);
+        return Result<PagedResponse<ApprovalRequestDto>>.Success(new PagedResponse<ApprovalRequestDto>(
+            items.Select(x => ToDto(x, names.GetValueOrDefault(x.Id))).ToArray(), filter.PageNumber, filter.PageSize, total));
     }
 
     public async Task<Result<ApprovalRequestDto>> GetApprovalByIdAsync(Guid approvalId, CancellationToken cancellationToken = default)
@@ -81,7 +105,13 @@ public sealed class GovernanceService : IGovernanceService
             return Result<ApprovalRequestDto>.Failure(new Error("approval.self-approval-forbidden", "You cannot approve a request you submitted; another approver must review it."));
         }
 
-        var result = entity.Approve(reviewerUserId, comment);
+        var review = await AuthorizeReviewAsync(entity, approving: true, cancellationToken);
+        if (review.IsFailure)
+        {
+            return Result<ApprovalRequestDto>.Failure(review.Error);
+        }
+
+        var result = entity.Approve(reviewerUserId, comment, review.Value);
         if (result.IsFailure)
         {
             return Result<ApprovalRequestDto>.Failure(result.Error);
@@ -163,6 +193,12 @@ public sealed class GovernanceService : IGovernanceService
         if (entity is null)
         {
             return Result<ApprovalRequestDto>.Failure(new Error("Approvals.NotFound", "Approval request was not found."));
+        }
+
+        var review = await AuthorizeReviewAsync(entity, approving: false, cancellationToken);
+        if (review.IsFailure)
+        {
+            return Result<ApprovalRequestDto>.Failure(review.Error);
         }
 
         var result = entity.Reject(reviewerUserId, comment);
@@ -357,7 +393,88 @@ public sealed class GovernanceService : IGovernanceService
         return Result<IReadOnlyCollection<AuditEntryDto>>.Success(rows);
     }
 
-    private static ApprovalRequestDto ToDto(ApprovalRequest approval)
+    /// <summary>
+    /// Who may review a request, decided in this one place. A warehouse transfer is reviewed by the managers of its warehouses under
+    /// <see cref="TransferApprovalPolicy"/> (the returned value says whether this approval completes it); anything else needs approvals.review.
+    /// SYSTEM_ADMIN may review everything.
+    /// </summary>
+    private async Task<Result<bool?>> AuthorizeReviewAsync(ApprovalRequest entity, bool approving, CancellationToken cancellationToken)
+    {
+        var isAdmin = _currentUser.HasRole(RoleCodes.SystemAdministrator);
+        var scope = await ScopeAsync(entity.Id, cancellationToken);
+        if (scope.Length == 0)
+        {
+            return isAdmin || _currentUser.HasPermission(PermissionCodes.ApprovalsReview)
+                ? Result<bool?>.Success(null)
+                : await RefuseAsync(new Error("Authorization.Forbidden", $"Permission '{PermissionCodes.ApprovalsReview}' is required."), cancellationToken);
+        }
+
+        var reviewerManaged = await _warehouses.ManagedWarehousesAsync(_currentUser.UserId, cancellationToken);
+        if (!approving)
+        {
+            return TransferApprovalPolicy.CanReject(scope, reviewerManaged, isAdmin)
+                ? Result<bool?>.Success(null)
+                : await RefuseAsync(TransferApprovalPolicy.NotAManager, cancellationToken);
+        }
+
+        var earlier = new List<IReadOnlySet<Guid>>();
+        foreach (var decision in entity.Decisions.Where(d => d.IsApproval))
+        {
+            earlier.Add(await _warehouses.ManagedWarehousesAsync(decision.ReviewerUserId, cancellationToken));
+        }
+
+        var outcome = TransferApprovalPolicy.EvaluateApproval(
+            scope, await _warehouses.ManagedWarehousesAsync(entity.RequestedByUserId, cancellationToken), earlier, reviewerManaged, isAdmin);
+        return outcome.Allowed ? Result<bool?>.Success(outcome.Completes) : await RefuseAsync(outcome.Error!, cancellationToken);
+    }
+
+    private async Task<Result<bool?>> RefuseAsync(Error error, CancellationToken cancellationToken)
+    {
+        await _audit.LogRejectionAsync(
+            new RejectionEntry(_currentUser.CorrelationId, _currentUser.UserId, _currentUser.Username, "ReviewApproval", PermissionCodes.ApprovalsReview, error.Message, _currentUser.IpAddress),
+            cancellationToken);
+        return Result<bool?>.Failure(error);
+    }
+
+    /// <summary>The warehouses a held transfer touches (empty for every other kind of request).</summary>
+    private async Task<Guid[]> ScopeAsync(Guid approvalId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
+        return await connection.ExecuteScalarAsync<Guid[]?>(new CommandDefinition(
+            "SELECT scope_warehouse_ids FROM approval_requests WHERE id = @approvalId;", new { approvalId }, cancellationToken: cancellationToken)) ?? [];
+    }
+
+    private async Task<Guid[]> ApprovalsTouchingAsync(Guid[] warehouses, CancellationToken cancellationToken)
+    {
+        await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
+        return (await connection.QueryAsync<Guid>(new CommandDefinition(
+            "SELECT id FROM approval_requests WHERE scope_warehouse_ids && @warehouses;", new { warehouses }, cancellationToken: cancellationToken))).ToArray();
+    }
+
+    /// <summary>Names of the warehouses each held transfer touches, in order (source first).</summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<string>>> WarehouseNamesAsync(Guid[] ids, CancellationToken cancellationToken)
+    {
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        await using var connection = await _dbConnectionFactory.CreateAsync(cancellationToken);
+        var rows = await connection.QueryAsync<(Guid Id, string Name, int Position)>(new CommandDefinition(
+            """
+            SELECT a.id AS Id, l.name AS Name, s.ord::int AS Position
+            FROM approval_requests a
+            CROSS JOIN LATERAL unnest(a.scope_warehouse_ids) WITH ORDINALITY AS s(warehouse_id, ord)
+            INNER JOIN locations l ON l.id = s.warehouse_id
+            WHERE a.id = ANY(@ids);
+            """,
+            new { ids }, cancellationToken: cancellationToken));
+        return rows.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.OrderBy(r => r.Position).Select(r => r.Name).ToList());
+    }
+
+    private static ApprovalRequestDto ToDto(ApprovalRequest approval) => ToDto(approval, null);
+
+    private static ApprovalRequestDto ToDto(ApprovalRequest approval, IReadOnlyList<string>? warehouses)
     {
         return new ApprovalRequestDto(
             approval.Id,
@@ -371,7 +488,8 @@ public sealed class GovernanceService : IGovernanceService
             approval.CurrentApprovals,
             approval.RequestedAtUtc,
             approval.CompletedAtUtc,
-            approval.Decisions.Select(x => new ApprovalDecisionDto(x.Id, x.ReviewerUserId, x.Status, x.Comment, x.ReviewedAtUtc)).ToArray());
+            approval.Decisions.Select(x => new ApprovalDecisionDto(x.Id, x.ReviewerUserId, x.Status, x.Comment, x.ReviewedAtUtc)).ToArray(),
+            warehouses ?? []);
     }
 
     private static PeriodLockDto ToDto(PeriodLock periodLock)

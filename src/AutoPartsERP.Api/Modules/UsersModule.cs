@@ -40,6 +40,12 @@ public sealed class UsersModule : ICarterModule
         group.MapPost("/{userId:guid}/password", async Task<IResult> (Guid userId, ResetUserPasswordRequest request, ISender sender, CancellationToken cancellationToken) =>
             (await sender.Send(new ResetUserPasswordCommand(userId, request.NewPassword), cancellationToken)).ToApiResult());
 
+        group.MapGet("/{userId:guid}/warehouses", async Task<IResult> (Guid userId, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new GetUserWarehousesQuery(userId), cancellationToken)).ToApiResult());
+
+        group.MapPut("/{userId:guid}/warehouses", async Task<IResult> (Guid userId, SetUserWarehousesRequest request, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new SetUserWarehousesCommand(userId, request), cancellationToken)).ToApiResult());
+
         group.MapGet("/", async Task<IResult> (
                 int page,
                 int pageSize,

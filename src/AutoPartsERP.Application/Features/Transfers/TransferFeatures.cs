@@ -51,7 +51,7 @@ public sealed record CreateTransferRequestCommand(
     Guid DestinationWarehouseId,
     IReadOnlyCollection<CreateTransferOrderLineRequest> Lines,
     string? Notes)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IMakerCheckerRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseTransferRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.CreateRequest;
     public string AuditModule => "TRANSFERS";
@@ -300,11 +300,13 @@ public sealed class CreateTransferOrderCommandHandler : IRequestHandler<CreateTr
     }
 }
 
+/// <summary>Shipping takes the stock out of the source warehouse, so it is the step the warehouses' managers approve.</summary>
 public sealed record ShipTransferOrderCommand(Guid TransferOrderId)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest, IWarehouseTransferRequest
 {
     public string RequiredPermission => PermissionCodes.Transfers.Ship;
     public string AuditModule => "TRANSFERS";
+    public bool RequiresApproval => true;
 }
 
 public sealed class ShipTransferOrderCommandHandler : IRequestHandler<ShipTransferOrderCommand, Result<Guid>>
@@ -341,10 +343,11 @@ public sealed class ShipTransferOrderCommandHandler : IRequestHandler<ShipTransf
             return Result<Guid>.Failure(new Error("Transfer.NotFound", "Transfer order not found."));
         }
 
-        if (order.Status is "RECEIVED" or "CANCELLED")
+        // Only a draft ships: an order already in transit would otherwise take its stock out of the source warehouse a second time.
+        if (order.Status != "DRAFT")
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Transfer.InvalidState", "Transfer order cannot be shipped in current state."));
+            return Result<Guid>.Failure(new Error("Transfer.InvalidState", $"Only a draft transfer order can be shipped; this one is {order.Status}."));
         }
 
         var lines = (await connection.QueryAsync<(Guid ItemId, Guid? BatchId, Guid? SourceLocationId, decimal ShippedQty)>(

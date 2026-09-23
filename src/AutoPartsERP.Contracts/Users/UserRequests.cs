@@ -19,3 +19,11 @@ public sealed record ResetUserPasswordRequest(string NewPassword);
 public sealed record SetUserLockRequest(DateTimeOffset? LockoutEndUtc);
 
 public sealed record AssignUserRolesRequest(IReadOnlyCollection<Guid> RoleIds);
+
+/// <summary>One warehouse a user works in; <c>IsManager</c> lets them approve transfers into or out of it.</summary>
+public sealed record UserWarehouseInput(Guid WarehouseId, bool IsManager);
+
+public sealed record SetUserWarehousesRequest(IReadOnlyList<UserWarehouseInput> Warehouses);
+
+/// <summary>Every warehouse, with whether the user works in it and manages it.</summary>
+public sealed record UserWarehouseDto(Guid WarehouseId, string Code, string Name, string Type, bool Assigned, bool IsManager);

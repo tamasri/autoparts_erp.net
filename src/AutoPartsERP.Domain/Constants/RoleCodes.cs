@@ -10,6 +10,7 @@ public static class RoleCodes
     public const string StandardUser = "STANDARD_USER";
     public const string Accountant = "ACCOUNTANT";
     public const string Purchaser = "PURCHASER";
+    public const string Warehouse = "WAREHOUSE";
 
     public static readonly IReadOnlyCollection<string> All = new[]
     {
@@ -20,6 +21,7 @@ public static class RoleCodes
         Auditor,
         StandardUser,
         Accountant,
-        Purchaser
+        Purchaser,
+        Warehouse
     };
 }

@@ -24,7 +24,7 @@ public sealed class MakerCheckerBehaviorTests
         _user.UserId.Returns(Guid.NewGuid());
         _user.CorrelationId.Returns(Guid.NewGuid());
         _approvals.CreatePendingApprovalAsync(default!, default).ReturnsForAnyArgs(Result<Guid>.Success(Guid.NewGuid()));
-        _behavior = new MakerCheckerBehavior<PostJournalEntryCommand, Result<Guid>>(_approvals, _user, Substitute.For<IManualAuditService>(), _replay);
+        _behavior = new MakerCheckerBehavior<PostJournalEntryCommand, Result<Guid>>(_approvals, _user, Substitute.For<IManualAuditService>(), _replay, Substitute.For<IWarehouseAccess>());
     }
 
     private Task<Result<Guid>> Run(out Func<bool> nextRan)

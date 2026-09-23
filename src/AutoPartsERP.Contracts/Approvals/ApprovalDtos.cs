@@ -19,4 +19,5 @@ public sealed record ApprovalRequestDto(
     int CurrentApprovals,
     DateTimeOffset RequestedAtUtc,
     DateTimeOffset? CompletedAtUtc,
-    IReadOnlyCollection<ApprovalDecisionDto> Decisions);
+    IReadOnlyCollection<ApprovalDecisionDto> Decisions,
+    IReadOnlyList<string> Warehouses);

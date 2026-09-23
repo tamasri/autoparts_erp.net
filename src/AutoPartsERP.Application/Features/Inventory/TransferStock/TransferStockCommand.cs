@@ -10,10 +10,13 @@ public sealed record TransferStockCommand(
     decimal Quantity,
     string? Notes,
     string IdempotencyKey)
-    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest
+    : IRequest<Result<Guid>>, IAuthorizedRequest, IIdempotentRequest, IAuditableRequest, IWarehouseTransferRequest
 {
     public string RequiredPermission => PermissionCodes.Inventory.Transfer;
     public string AuditModule => "INVENTORY";
+
+    /// <summary>Between two warehouses the managers approve it; inside one warehouse it runs directly.</summary>
+    public bool RequiresApproval => true;
 }
 
 public sealed class TransferStockCommandValidator : AbstractValidator<TransferStockCommand>

@@ -1,9 +1,9 @@
 namespace AutoPartsERP.Application.Features.Approvals.ApproveRequest;
 
 public sealed record ApproveRequestCommand(Guid RequestId, string? Notes)
-    : IRequest<Result<ApprovalRequestDto>>, IAuthorizedRequest, IAuditableRequest
+    : IRequest<Result<ApprovalRequestDto>>, IAuditableRequest
 {
-    public string RequiredPermission => PermissionCodes.ApprovalsReview;
+    // Authorised in IGovernanceService: approvals.review for ordinary requests, the warehouses' managers for a transfer.
     public string AuditModule => "APPROVALS";
 }
 
