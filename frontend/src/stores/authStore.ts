@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 type AuthUser = {
   id: string;
@@ -8,50 +7,52 @@ type AuthUser = {
   roles: string[];
 };
 
-type LoginPayload = {
+export type SessionPayload = {
   token: string;
-  refreshToken: string;
   user: AuthUser;
   permissions?: string[];
 };
 
+/**
+ * The signed-in session, kept in memory only. The access token is never written to localStorage (an injected script could read
+ * it there); the refresh token is an HttpOnly cookie the page cannot see at all. After a reload the session is restored by one
+ * call to /auth/refresh (see lib/session.ts). `checking` is true until that first call has answered.
+ */
 type AuthState = {
   token: string | null;
-  refreshToken: string | null;
   user: AuthUser | null;
   permissions: string[];
   isAuthenticated: boolean;
-  login: (payload: LoginPayload) => void;
+  checking: boolean;
+  login: (payload: SessionPayload) => void;
   logout: () => void;
+  doneChecking: () => void;
 };
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
+// Sessions saved by earlier versions (tokens in localStorage) are removed on load.
+try { localStorage.removeItem('autoparts-erp-auth'); } catch { /* storage unavailable */ }
+
+export const useAuthStore = create<AuthState>()((set) => ({
+  token: null,
+  user: null,
+  permissions: [],
+  isAuthenticated: false,
+  checking: true,
+  login: (payload) =>
+    set({
+      token: payload.token,
+      user: payload.user,
+      permissions: payload.permissions ?? [],
+      isAuthenticated: true,
+      checking: false,
+    }),
+  logout: () =>
+    set({
       token: null,
-      refreshToken: null,
       user: null,
       permissions: [],
       isAuthenticated: false,
-      login: (payload) =>
-        set({
-          token: payload.token,
-          refreshToken: payload.refreshToken,
-          user: payload.user,
-          permissions: payload.permissions ?? [],
-          isAuthenticated: payload.token !== null,
-        }),
-      logout: () =>
-        set({
-          token: null,
-          refreshToken: null,
-          user: null,
-          permissions: [],
-          isAuthenticated: false,
-        }),
+      checking: false,
     }),
-    {
-      name: 'autoparts-erp-auth',
-    },
-  ),
-);
+  doneChecking: () => set({ checking: false }),
+}));

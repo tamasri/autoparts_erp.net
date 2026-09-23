@@ -8,18 +8,25 @@ public sealed class AuthService : IAuthService
     private readonly RoleManager<AppRole> _roleManager;
     private readonly ITokenService _tokenService;
     private readonly IManualAuditService _manualAuditService;
+    private readonly JwtSettings _jwt;
 
     public AuthService(
         UserManager<AppUser> userManager,
         RoleManager<AppRole> roleManager,
         ITokenService tokenService,
-        IManualAuditService manualAuditService)
+        IManualAuditService manualAuditService,
+        IOptions<JwtSettings> jwt)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _tokenService = tokenService;
         _manualAuditService = manualAuditService;
+        _jwt = jwt.Value;
     }
+
+    private DateTimeOffset AccessExpiry => DateTimeOffset.UtcNow.AddMinutes(_jwt.AccessTokenExpiryMinutes);
+
+    private DateTimeOffset RefreshExpiry => DateTimeOffset.UtcNow.AddDays(_jwt.RefreshTokenExpiryDays);
 
     public async Task<Result<AuthTokenResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
@@ -89,13 +96,7 @@ public sealed class AuthService : IAuthService
             UserAgent: request.UserAgent), cancellationToken);
 
         var userDto = ToUserSummary(user, roles.Select(x => new UserRoleDto(Guid.Empty, x, x)).ToArray());
-        var response = new AuthTokenResponse(
-            accessToken,
-            refreshToken,
-            DateTimeOffset.UtcNow.AddMinutes(15),
-            DateTimeOffset.UtcNow.AddDays(7),
-            userDto,
-            permissions);
+        var response = new AuthTokenResponse(accessToken, refreshToken, AccessExpiry, RefreshExpiry, userDto, permissions);
 
         return Result<AuthTokenResponse>.Success(response);
     }
@@ -114,6 +115,12 @@ public sealed class AuthService : IAuthService
             return Result<AuthTokenResponse>.Failure(new Error("Auth.UserNotFound", "User was not found."));
         }
 
+        // Deactivation is a permanent lockout: without this check a deactivated user kept renewing the session for the refresh lifetime.
+        if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTimeOffset.UtcNow)
+        {
+            return Result<AuthTokenResponse>.Failure(new Error("Auth.LockedOut", "Account is locked out."));
+        }
+
         var roles = await _userManager.GetRolesAsync(user);
         var permissions = await ResolvePermissionsAsync(roles);
 
@@ -128,13 +135,7 @@ public sealed class AuthService : IAuthService
         var newRefreshToken = await _tokenService.GenerateRefreshTokenAsync(user.Id, cancellationToken);
         var userDto = ToUserSummary(user, roles.Select(x => new UserRoleDto(Guid.Empty, x, x)).ToArray());
 
-        var response = new AuthTokenResponse(
-            accessToken,
-            newRefreshToken,
-            DateTimeOffset.UtcNow.AddMinutes(15),
-            DateTimeOffset.UtcNow.AddDays(7),
-            userDto,
-            permissions);
+        var response = new AuthTokenResponse(accessToken, newRefreshToken, AccessExpiry, RefreshExpiry, userDto, permissions);
 
         return Result<AuthTokenResponse>.Success(response);
     }

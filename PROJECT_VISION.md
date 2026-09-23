@@ -99,7 +99,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 
 | Domain | Backend | Frontend | Status |
 |---|---|---|---|
-| Auth | Login/refresh/logout/me | `Login.tsx`, `authStore` | ✅ |
+| Auth | Login/refresh/logout/me; refresh token in an HttpOnly cookie, access token in memory, silent renewal on 401 | `Login.tsx`, `authStore`, `lib/session.ts` | ✅ (2026-09-23) |
 | Dashboard / KPIs | **`GET /dashboard/summary`** (server-aggregated) + `/kpi/admin/*` definitions | `Dashboard.tsx` (cards, 30-day chart, recent invoices, top customers), `KpiDashboard.tsx` | ✅ |
 | Users | create, edit profile, assign roles (governed), password reset, activate/deactivate (governed); guards: no self role/status change, last system administrator protected | `Users.tsx` + `UserDialog` (paged, status filter) | ✅ (warehouse assignment: open, item 9) |
 | Roles & permissions | create, grant/revoke | list/partial | 🟡 |

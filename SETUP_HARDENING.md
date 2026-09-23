@@ -178,6 +178,7 @@ The API user needs create/write on **Sales Person** (reps), read on **Cost Cente
 - [x] Scripted deploy with health verification; CI green; approval replay and Hangfire queues fixed.
 - [x] Scalar/OpenAPI are **not proxied** by nginx, and since 2026-09-23 are mapped only in Development (H-6).
 - [x] 2026-09-23: no fallback admin password in any environment (the dev settings script generates one); nginx sends a CSP (scripts `'self'` only; styles allow inline for MUI; Google Fonts; `blob:` frames for print; ws/wss for SignalR; none on `/hangfire`), `Permissions-Policy`, `client_max_body_size 6m`, and limits `/auth/refresh` per IP (20/min) as well as login (H-12); the API limits exports, PDFs, imports and AI to 30 per minute per user (`RateLimiting.Heavy`, 429) (H-13); unused packages removed (SemanticKernel, Extensions.AI, Pgvector, FluentEmail, ZXing, SkiaSharp; frontend react-table, zxing, x-data-grid, playwright).
+- [x] 2026-09-23 (H-11): the refresh token is only an `erp_rt` cookie — `HttpOnly`, `SameSite=Strict`, `Secure` outside Development, `Path=/api/v1/auth` — never in a response body; the access token lives in page memory only (nothing in localStorage; old saved sessions are deleted on load). Refresh and logout require `X-Requested-With` (CSRF). Refresh is single-use (rotated), refused for locked/deactivated users (previously a deactivated user could renew for 7 days), and logout revokes it server-side (previously sign-out never reached the server).
 - [x] 2026-09-23: every `/api` response is `Cache-Control: no-store` (H-12); the unused CI deploy job no longer hides failures — the impossible `dotnet ef … || true` (no SDK in the runtime image; the API migrates on start-up) was replaced by a health wait that fails the job (H-15).
 
 **Pending**
@@ -193,7 +194,6 @@ The API user needs create/write on **Sales Person** (reps), read on **Cost Cente
 - [ ] **H-7** Server upgrade (RAM/CPU) before production load; monitor swap.
 - [ ] **H-8** Set GitHub secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` so CI can deploy (currently skipped).
 - [ ] **H-9** Decide migration policy for production (auto-migrate on boot vs a controlled step) and take a backup first.
-- [ ] **H-11 Tokens in localStorage:** the access and refresh tokens are persisted by the auth store (an XSS could read them). Preferred: refresh token in an `HttpOnly; Secure; SameSite` cookie with CSRF protection, access token in memory. A CSP now limits scripts to the app itself (2026-09-23), which narrows but does not close this.
 - [ ] **H-14 Pin versions (rest):** GitHub Actions to commit SHAs, Docker images to versions/digests (`latest` for Prometheus/Grafana/Loki/Tempo in the prod compose), dependency and image scanning in CI. Dependabot is on since 2026-09-23 (`.github/dependabot.yml`: weekly, grouped minor/patch PRs for NuGet, npm, Actions, Docker).
 - [ ] **H-10** AI/notification keys (`AI_*`, `SMTP_*`) live only in `.env.vps`; document their rotation.
 

@@ -4,15 +4,16 @@ import { useAuthStore } from '../stores/authStore';
 import { toast } from '../lib/toast';
 
 export function useSignalR(): void {
-  const token = useAuthStore((s) => s.token);
+  const signedIn = useAuthStore((s) => s.isAuthenticated);
   const connectionRef = useRef<signalR.HubConnection | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!signedIn) return;
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/hubs/erp', {
-        accessTokenFactory: () => token,
+        // Read on every (re)connect, so a renewed access token is picked up without rebuilding the connection.
+        accessTokenFactory: () => useAuthStore.getState().token ?? '',
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets,
       })
@@ -48,5 +49,5 @@ export function useSignalR(): void {
       void connection.stop();
       connectionRef.current = null;
     };
-  }, [token]);
+  }, [signedIn]);
 }

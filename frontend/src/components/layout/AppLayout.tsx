@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useAuthStore } from '../../stores/authStore';
+import { signOut } from '../../lib/session';
 import { useDisplayStore, type PrimaryCurrency } from '../../stores/displayStore';
 import { NAV_GROUPS, QUICK_ACTIONS, type NavItem, type NavTab } from './navigation';
 
@@ -83,7 +84,6 @@ export default function AppLayout(): JSX.Element {
   const narrow = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const [collapsedByUser, setCollapsedByUser] = useState(false);
   const primary = useDisplayStore((st) => st.primary);
   const setPrimary = useDisplayStore((st) => st.setPrimary);
@@ -127,7 +127,7 @@ export default function AppLayout(): JSX.Element {
             <Menu anchorEl={account} open={Boolean(account)} onClose={() => setAccount(null)}>
               <MenuItem disabled>{name}</MenuItem>
               <Divider />
-              <MenuItem onClick={() => { setAccount(null); logout(); navigate('/login'); }}>تسجيل الخروج</MenuItem>
+              <MenuItem onClick={() => { setAccount(null); void signOut().then(() => navigate('/login')); }}>تسجيل الخروج</MenuItem>
             </Menu>
           </Toolbar>
         </AppBar>

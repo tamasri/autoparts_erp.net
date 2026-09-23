@@ -9,10 +9,11 @@
  *
  * feat(frontend): React.lazy + ErrorBoundary on all routes (phase6)
  */
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuthStore } from './stores/authStore';
+import { refreshSession } from './lib/session';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // ── Lazy route imports ────────────────────────────────────────────────────────
@@ -70,8 +71,11 @@ function PageLoader(): JSX.Element {
 }
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
+// The session is in memory only; after a reload it is restored from the HttpOnly refresh cookie before any screen is shown.
 function PrivateRoute({ children }: { children: JSX.Element }): JSX.Element {
   const token = useAuthStore((s) => s.token);
+  const checking = useAuthStore((s) => s.checking);
+  if (checking) return <PageLoader />;
   return token ? children : <Navigate to="/login" replace />;
 }
 
@@ -90,6 +94,10 @@ function RouteWrapper({ children }: { children: JSX.Element }): JSX.Element {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App(): JSX.Element {
+  useEffect(() => {
+    if (useAuthStore.getState().checking) void refreshSession();
+  }, []);
+
   return (
     <Routes>
       <Route

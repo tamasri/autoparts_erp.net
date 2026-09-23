@@ -31,28 +31,59 @@ public sealed class AuthIntegrationTests : IClassFixture<ErpWebFactory>
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
-    public async Task Refresh_ShouldReturnBadRequest_WhenTokenMissing()
+    private static HttpRequestMessage Post(string path, bool csrfHeader)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/refresh", new RefreshTokenRequest(string.Empty));
+        var request = new HttpRequestMessage(HttpMethod.Post, path);
+        if (csrfHeader)
+        {
+            request.Headers.Add("X-Requested-With", "XMLHttpRequest");
+        }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        return request;
     }
 
     [Fact]
-    public async Task Refresh_ShouldReturnBadRequest_WhenTokenWhitespace()
+    public async Task Refresh_ShouldBeForbidden_WithoutTheCsrfHeader()
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/refresh", new RefreshTokenRequest(" "));
+        var response = await _client.SendAsync(Post("/api/v1/auth/refresh", csrfHeader: false));
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
-    public async Task Logout_ShouldReturnUnauthorized_WhenNoBearerToken()
+    public async Task Refresh_ShouldReturnUnauthorized_WithoutTheSessionCookie()
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/logout", new LogoutRequest("token"));
+        var response = await _client.SendAsync(Post("/api/v1/auth/refresh", csrfHeader: true));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Refresh_IgnoresATokenInTheBody()
+    {
+        var request = Post("/api/v1/auth/refresh", csrfHeader: true);
+        request.Content = JsonContent.Create(new { refreshToken = "anything" });
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Logout_ShouldBeForbidden_WithoutTheCsrfHeader()
+    {
+        var response = await _client.SendAsync(Post("/api/v1/auth/logout", csrfHeader: false));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Logout_ClearsTheSessionCookie()
+    {
+        var response = await _client.SendAsync(Post("/api/v1/auth/logout", csrfHeader: true));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.GetValues("Set-Cookie").Should().Contain(c => c.StartsWith("erp_rt=;") && c.Contains("httponly") && c.Contains("path=/api/v1/auth"));
     }
 
     [Fact]

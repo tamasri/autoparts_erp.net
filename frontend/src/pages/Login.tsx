@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, Avatar, Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, TextField, Typography } from '@mui/material';
 import { authApi } from '../api/endpoints/auth';
 import { useAuthStore } from '../stores/authStore';
-
-type LoginUser = { id?: string; userName?: string; fullName?: string; firstName?: string; lastName?: string; roles?: Array<string | { code?: string; name?: string }> };
-type LoginResponse = { accessToken: string; refreshToken: string; user?: LoginUser; userId?: string; username?: string; fullName?: string; roles?: LoginUser['roles']; permissions?: string[] };
+import { toSession } from '../lib/session';
 
 export default function Login(): JSX.Element {
   const navigate = useNavigate();
@@ -22,17 +20,8 @@ export default function Login(): JSX.Element {
     setError('');
     try {
       const res = await authApi.login(user, pass);
-      const data = (res.data?.data ?? res.data) as LoginResponse;
-      const userNode = data.user ?? {};
-      const rolesRaw = userNode.roles ?? data.roles ?? [];
-      const roles = rolesRaw.map((r) => (typeof r === 'string' ? r : r.code ?? r.name ?? '')).filter(Boolean);
-      const fullName = userNode.fullName || [userNode.firstName, userNode.lastName].filter(Boolean).join(' ') || data.fullName || user;
-      setAuth({
-        token: data.accessToken,
-        refreshToken: data.refreshToken,
-        user: { id: userNode.id ?? data.userId ?? '', username: userNode.userName ?? data.username ?? user, fullName, roles },
-        permissions: data.permissions ?? [],
-      });
+      // The refresh token arrives as an HttpOnly cookie; the body carries only the access token, the user and the permissions.
+      setAuth(toSession(res.data, user));
       navigate('/');
     } catch (err: unknown) {
       const r = err as { response?: { data?: { detail?: string; message?: string; title?: string } } };
