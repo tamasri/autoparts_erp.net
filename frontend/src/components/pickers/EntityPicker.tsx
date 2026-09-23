@@ -27,18 +27,21 @@ export default function EntityPicker({ value, onChange, search, placeholder = 'Ø
   const searchRef = useRef(search);
   searchRef.current = search;
 
+  // The field shows the chosen record's name; reopening the list with that name unchanged lists everything again.
+  const term = value && text === value.label ? '' : text.trim();
+
   useEffect(() => {
     if (!open) return undefined;
     const handle = window.setTimeout(() => {
       const current = ++requestId.current;
       setLoading(true);
-      searchRef.current(text.trim())
+      searchRef.current(term)
         .then((opts) => { if (current === requestId.current) setOptions(opts); })
         .catch(() => { if (current === requestId.current) setOptions([]); })
         .finally(() => { if (current === requestId.current) setLoading(false); });
     }, 250);
     return () => window.clearTimeout(handle);
-  }, [text, open]);
+  }, [term, open]);
 
   return (
     <Autocomplete
@@ -51,7 +54,8 @@ export default function EntityPicker({ value, onChange, search, placeholder = 'Ø
       value={value}
       onChange={(_, v) => onChange(v)}
       inputValue={text}
-      onInputChange={(_, v, reason) => { if (reason === 'input' || reason === 'clear') setText(v); if (reason === 'reset') setText(''); }}
+      // 'reset' carries the chosen option's label, so the field shows what was picked.
+      onInputChange={(_, v) => setText(v)}
       options={value && !options.some((o) => o.id === value.id) ? [value, ...options] : options}
       filterOptions={(x) => x}
       getOptionLabel={(o) => o.label}

@@ -4,7 +4,7 @@
  * Provider stack (outermost → innermost):
  *   CacheProvider (emotion RTL)        — flips all MUI CSS to RTL via stylis-plugin-rtl
  *   QueryClientProvider                — TanStack Query (staleTime 30s, no window-focus refetch)
- *   ThemeProvider                      — MUI theme with direction:'rtl' + Vex tokens
+ *   ThemeProvider                      — MUI theme with direction:'rtl' and the global rules
  *   CssBaseline                        — MUI CSS reset
  *   BrowserRouter → App               — routing (unchanged)
  *   Toaster                            — sonner notifications (unchanged)
@@ -22,7 +22,6 @@ import { ThemeProvider, CssBaseline } from '@mui/material';
 import { Toaster } from 'sonner';
 import { cacheRtl } from './lib/rtlCache';
 import { theme } from './theme/theme';
-import './styles/theme.css';
 import './i18n';
 import App from './App';
 import { useSignalR } from './hooks/useSignalR';

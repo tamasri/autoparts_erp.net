@@ -1,440 +1,193 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+/** One sales invoice or return: lines, how the total is made up, what is paid, and the draft → confirmed → posted steps. */
+import { useCallback, useEffect, useState } from 'react';
+import { Link as RouterLink, useParams } from 'react-router-dom';
+import {
+  Alert, Box, Button, Card, CardContent, Chip, Divider, LinearProgress, Link, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, TextField, Typography,
+} from '@mui/material';
 import { invoicesApi, type InvoiceAmounts } from '../../api/endpoints/invoices';
 import { unwrapNode } from '../../api/apiData';
 import { toast, extractApiError } from '../../lib/toast';
-import ErrorBanner from '../../components/common/ErrorBanner';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import StatusBadge from '../../components/common/StatusBadge';
+import { formatPct, formatQty } from '../../lib/format';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusChip from '../../components/ui/StatusChip';
+import ReasonDialog from '../../components/ui/ReasonDialog';
+import Money from '../../components/ui/Money';
 
 type InvoiceLine = {
-  id: string;
-  skuCode?: string;
-  skuName?: string;
-  quantity?: number;
-  unitPriceSyp?: number;
-  discountPct?: number;
-  lineTotalSyp?: number;
+  id: string; lineNumber: number; skuCode: string; skuName: string; quantity: number;
+  unitPriceSyp: number; unitPriceUsd: number; discountPct: number; lineTotalSyp: number; lineTotalUsd: number; isPriceOverride: boolean;
 };
 
-type PaymentHistory = {
-  id: string;
-  paymentNumber?: string;
-  amountSyp?: number;
-  paymentDate?: string;
+type Invoice = {
+  id: string; invoiceNumber: string; status: string; type: string; customerId: string; customerCode: string; customerName: string;
+  invoiceDate: string; dueDate: string; totalSyp: number; totalUsd: number; paidSyp: number; paidUsd: number; balanceSyp: number; balanceUsd: number;
+  dueDateDisplay: string; totalSypInWords: string; totalUsdInWords: string; lines: InvoiceLine[]; amounts: InvoiceAmounts;
 };
 
-type InvoiceDetail = {
-  id: string;
-  invoiceNumber?: string;
-  status?: string;
-  customerName?: string;
-  invoiceDate?: string;
-  dueDate?: string;
-  amounts?: InvoiceAmounts;
-  totalSyp?: number;
-  totalUsd?: number;
-  totalSypInWords?: string;
-  lines?: InvoiceLine[];
-  payments?: PaymentHistory[];
-};
-
-
-function extractError(e: unknown, fallback: string): string {
-  return extractApiError(e, fallback);
+function Row({ label, children, strong }: { label: string; children: React.ReactNode; strong?: boolean }): JSX.Element {
+  return (
+    <Stack direction="row" justifyContent="space-between" alignItems="center" gap={2}>
+      <Typography variant="body2" color={strong ? 'text.primary' : 'text.secondary'} fontWeight={strong ? 700 : 400}>{label}</Typography>
+      {children}
+    </Stack>
+  );
 }
 
 export default function InvoiceDetail(): JSX.Element {
-  const { id } = useParams();
+  const { id = '' } = useParams();
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  const [voiding, setVoiding] = useState(false);
   const [discountMode, setDiscountMode] = useState<'pct' | 'usd'>('pct');
   const [discountValue, setDiscountValue] = useState('');
 
-  async function load(): Promise<void> {
-    if (!id) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await invoicesApi.getInvoiceById(id);
-      setInvoice(unwrapNode<InvoiceDetail>(res.data));
-    } catch (e: unknown) {
-      setError(extractError(e, 'تعذر تحميل تفاصيل الفاتورة'));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const load = useCallback(async (): Promise<void> => {
+    setLoading(true); setError('');
+    try { setInvoice(unwrapNode<Invoice>((await invoicesApi.getInvoiceById(id)).data)); }
+    catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل تفاصيل الفاتورة')); }
+    finally { setLoading(false); }
   }, [id]);
 
-  async function confirmInvoice(): Promise<void> {
-    if (!id) return;
-    setBusy(true);
-    try {
-      await invoicesApi.confirm(id);
-      toast.success('تم تأكيد الفاتورة');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر تأكيد الفاتورة'));
-      setError(extractApiError(e, 'تعذر تأكيد الفاتورة'));
-    } finally {
-      setBusy(false);
-    }
-  }
+  useEffect(() => { void load(); }, [load]);
 
-  async function postInvoice(): Promise<void> {
-    if (!id) return;
+  async function run(action: () => Promise<unknown>, done: string, fail: string): Promise<void> {
     setBusy(true);
-    try {
-      await invoicesApi.post(id);
-      toast.success('تم ترحيل الفاتورة بنجاح');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر ترحيل الفاتورة'));
-      setError(extractApiError(e, 'تعذر ترحيل الفاتورة'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function voidInvoice(): Promise<void> {
-    if (!id) return;
-    const reason = window.prompt('سبب الإلغاء:') ?? '';
-    if (!reason.trim()) return;
-    setBusy(true);
-    try {
-      await invoicesApi.void(id, reason.trim());
-      toast.success('تم إلغاء الفاتورة');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر إلغاء الفاتورة'));
-      setError(extractApiError(e, 'تعذر إلغاء الفاتورة'));
-    } finally {
-      setBusy(false);
-    }
+    try { await action(); toast.success(done); await load(); }
+    catch (e: unknown) { toast.error(extractApiError(e, fail)); }
+    finally { setBusy(false); }
   }
 
   async function saveDiscount(): Promise<void> {
-    if (!id) return;
     const v = Number(discountValue || 0);
-    setBusy(true);
-    try {
-      await invoicesApi.setDiscount(id, discountMode === 'pct' ? { discountPct: v > 0 ? v : null } : { discountAmountUsd: v > 0 ? v : null });
-      toast.success(v > 0 ? 'تم تطبيق خصم الفاتورة' : 'أُزيل خصم الفاتورة');
-      setDiscountValue('');
-      await load();
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر تطبيق الخصم'));
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      () => invoicesApi.setDiscount(id, discountMode === 'pct' ? { discountPct: v > 0 ? v : null } : { discountAmountUsd: v > 0 ? v : null }),
+      v > 0 ? 'تم تطبيق خصم الفاتورة' : 'أُزيل خصم الفاتورة', 'تعذر تطبيق الخصم');
+    setDiscountValue('');
   }
 
   async function downloadPdf(): Promise<void> {
-    if (!id) return;
     setBusy(true);
     try {
       const res = await invoicesApi.getPdf(id);
-      const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(new Blob([res.data as BlobPart], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
       a.download = `invoice-${invoice?.invoiceNumber ?? id}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: unknown) {
-      toast.error(extractApiError(e, 'تعذر تنزيل ملف PDF'));
-      setError(extractApiError(e, 'تعذر تنزيل ملف PDF'));
-    } finally {
-      setBusy(false);
-    }
+    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر تنزيل ملف PDF')); }
+    finally { setBusy(false); }
   }
 
-  const status = (invoice?.status ?? '').toUpperCase();
-  const lines = useMemo(() => invoice?.lines ?? [], [invoice?.lines]);
-  const payments = useMemo(() => invoice?.payments ?? [], [invoice?.payments]);
-  const amounts = invoice?.amounts;
-  const n = (v?: number | null): string => Math.abs(Number(v ?? 0)).toLocaleString('en-US');
+  if (loading && !invoice) return <LinearProgress />;
+  if (!invoice) return <Stack spacing={2}><Alert severity="error">{error || 'الفاتورة غير موجودة'}</Alert><Link component={RouterLink} to="/invoices">← الفواتير</Link></Stack>;
 
-  if (loading) return <LoadingSpinner />;
+  const status = invoice.status.toUpperCase();
+  const isReturn = invoice.type.toUpperCase() === 'RETURN';
+  const a = invoice.amounts;
+  const abs = (v: number): number => Math.abs(v);
 
   return (
-    <div style={{ direction: 'rtl' }}>
-
-      {/* Page Header */}
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">تفاصيل الفاتورة</h1>
-          <div className="vex-page-header__breadcrumb">
-            <Link to="/invoices" style={{ color: 'var(--clr-primary)', textDecoration: 'none' }}>الفواتير</Link>
-            {' / '}
-            {invoice?.invoiceNumber ?? id}
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void downloadPdf()}
-            className="btn-secondary"
-          >
-            ⬇ تنزيل PDF
-          </button>
-          {status === 'DRAFT' ? (
-            <button type="button" disabled={busy} onClick={() => void confirmInvoice()} className="btn-primary">
-              ✓ تأكيد
-            </button>
-          ) : null}
-          {status === 'CONFIRMED' ? (
-            <button type="button" disabled={busy} onClick={() => void postInvoice()} className="btn-success">
-              ✓ ترحيل
-            </button>
-          ) : null}
-          {status !== 'VOID' && status !== 'POSTED' ? (
-            <button type="button" disabled={busy} onClick={() => void voidInvoice()} className="btn-danger">
-              ✕ إلغاء
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
-
-      {/* ── A4 PAPER ── */}
-      <div className="invoice-paper">
-
-        {/* Header: Title + Logo */}
-        <div className="invoice-paper__header">
-          <div>
-            <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--txt-primary)', margin: 0, letterSpacing: '-0.5px' }}>
-              فاتورة
-            </h2>
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
-                <span style={{ color: 'var(--txt-muted)', marginLeft: 6 }}>رقم الفاتورة:</span>
-                <span style={{ fontWeight: 700, color: 'var(--txt-primary)' }}>{invoice?.invoiceNumber ?? invoice?.id}</span>
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
-                <span style={{ color: 'var(--txt-muted)', marginLeft: 6 }}>تاريخ الإصدار:</span>
-                <span style={{ fontWeight: 600 }}>{invoice?.invoiceDate ?? '-'}</span>
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>
-                <span style={{ color: 'var(--txt-muted)', marginLeft: 6 }}>تاريخ الاستحقاق:</span>
-                <span style={{ fontWeight: 600 }}>{invoice?.dueDate ?? '-'}</span>
-              </div>
-              <div style={{ marginTop: 6 }}>
-                <StatusBadge status={invoice?.status ?? 'UNKNOWN'} type="invoice" />
-              </div>
-            </div>
-          </div>
-
-          {/* Company Logo (right) */}
-          <div style={{ textAlign: 'left' }}>
-            <div style={{
-              width: 64,
-              height: 64,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, #5c54ff, #7b75ff)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 28,
-              fontWeight: 800,
-              color: '#fff',
-              boxShadow: '0 8px 24px rgba(92,84,255,0.25)',
-              marginBottom: 8,
-              marginLeft: 'auto',
-            }}>A</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt-primary)', textAlign: 'left' }}>AutoParts ERP</div>
-            <div style={{ fontSize: 12, color: 'var(--txt-muted)', textAlign: 'left' }}>نظام إدارة قطع الغيار</div>
-          </div>
-        </div>
-
-        {/* Parties: Company (right) / Customer (left) */}
-        <div className="invoice-paper__parties">
-          {/* Company (Sender) — right column in RTL */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-primary)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>
-              من
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-primary)', marginBottom: 4 }}>AutoParts ERP</div>
-            <div style={{ fontSize: 13, color: 'var(--txt-secondary)', lineHeight: 1.7 }}>
-              <div>نظام إدارة قطع الغيار</div>
-              <div>admin@autoparts.local</div>
-            </div>
-          </div>
-
-          {/* Customer (Recipient) — left column in RTL */}
-          <div style={{ borderRight: '1px solid var(--clr-border)', paddingRight: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>
-              إلى
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-primary)', marginBottom: 4 }}>
-              {invoice?.customerName ?? 'غير محدد'}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--txt-secondary)', lineHeight: 1.7 }}>
-              <div>الزبون</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Items Table */}
-        <div className="invoice-paper__table-wrap">
-          <h3 className="vex-section-title">الأصناف والخدمات</h3>
-          <table className="vex-table">
-            <thead>
-              <tr>
-                <th>رمز SKU</th>
-                <th>الاسم / الوصف</th>
-                <th>الكمية</th>
-                <th>سعر الوحدة (ل.س)</th>
-                <th>الخصم %</th>
-                <th>الإجمالي (ل.س)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '28px 0' }}>
-                    لا توجد أسطر
-                  </td>
-                </tr>
-              ) : (
-                lines.map((line) => (
-                  <tr key={line.id}>
-                    <td>
-                      <span style={{
-                        background: 'var(--clr-primary-light)',
-                        color: 'var(--clr-primary-dark)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 12,
-                        fontWeight: 600,
-                      }}>
-                        {line.skuCode ?? '-'}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 500, color: 'var(--txt-primary)' }}>{line.skuName ?? '-'}</td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(line.quantity ?? 0).toLocaleString('en-US')}</td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{Number(line.unitPriceSyp ?? 0).toLocaleString('en-US')}</td>
-                    <td>
-                      {Number(line.discountPct ?? 0) > 0 ? (
-                        <span className="badge badge--warning">{Number(line.discountPct ?? 0)}%</span>
-                      ) : (
-                        <span style={{ color: 'var(--txt-muted)' }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ fontWeight: 700, color: 'var(--txt-primary)' }}>
-                      {Number(line.lineTotalSyp ?? 0).toLocaleString('en-US')}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals Block — bottom right */}
-        <div className="invoice-paper__totals">
-          <div className="invoice-paper__totals-block">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
-                <span>الإجمالي الفرعي</span>
-                <span style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
-                  {n(amounts?.subtotalSyp)} ل.س
-                </span>
-              </div>
-              {Number(amounts?.discountAmountUsd ?? 0) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
-                  <span>خصم الفاتورة{amounts?.discountPct ? ` ${amounts.discountPct}%` : ''}</span>
-                  <span style={{ fontWeight: 600, color: 'var(--clr-danger)' }}>
-                    −{n(amounts?.discountAmountSyp)} ل.س <span style={{ fontSize: 11, color: 'var(--txt-muted)' }}>(${n(amounts?.discountAmountUsd)})</span>
-                  </span>
-                </div>
-              )}
-              {status === 'DRAFT' && (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
-                  <select className="vex-select" style={{ width: 90 }} value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')}>
-                    <option value="pct">خصم %</option>
-                    <option value="usd">خصم $</option>
-                  </select>
-                  <input className="vex-input" type="number" min={0} style={{ width: 90 }} placeholder="0" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
-                  <button type="button" className="btn-secondary" disabled={busy} onClick={() => void saveDiscount()}>تطبيق</button>
-                </div>
-              )}
-              {Number(amounts?.deliveryFeeSyp ?? 0) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--txt-secondary)' }}>
-                  <span>رسوم التوصيل</span>
-                  <span style={{ fontWeight: 600, color: 'var(--txt-primary)' }}>
-                    {n(amounts?.deliveryFeeSyp)} ل.س
-                  </span>
-                </div>
-              )}
-              <hr className="vex-divider" style={{ margin: '4px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-primary)' }}>الإجمالي</span>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--clr-primary)' }}>
-                    {Number(invoice?.totalSyp ?? 0).toLocaleString('en-US')}
-                    <span style={{ fontSize: 13, fontWeight: 500, marginRight: 4, color: 'var(--txt-secondary)' }}>ل.س</span>
-                  </div>
-                  {Number(invoice?.totalUsd ?? 0) > 0 && (
-                    <div style={{ fontSize: 12, color: 'var(--txt-muted)', textAlign: 'left' }}>
-                      ≈ {Number(invoice?.totalUsd ?? 0).toLocaleString('en-US')} $
-                    </div>
-                  )}
-                </div>
-              </div>
-              {invoice?.totalSypInWords && (
-                <div style={{
-                  fontSize: 12,
-                  color: 'var(--txt-muted)',
-                  fontStyle: 'italic',
-                  borderTop: '1px dashed var(--clr-border)',
-                  paddingTop: 8,
-                  marginTop: 4,
-                }}>
-                  {invoice.totalSypInWords}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Payments History */}
-        {payments.length > 0 && (
-          <div className="invoice-paper__payments">
-            <h3 className="vex-section-title">سجل الدفعات</h3>
-            <table className="vex-table">
-              <thead>
-                <tr>
-                  <th>رقم الدفعة</th>
-                  <th>التاريخ</th>
-                  <th>المبلغ (ل.س)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((payment) => (
-                  <tr key={payment.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>
-                      {payment.paymentNumber ?? payment.id.slice(0, 8)}
-                    </td>
-                    <td style={{ color: 'var(--txt-secondary)' }}>{payment.paymentDate ?? '-'}</td>
-                    <td style={{ fontWeight: 700 }}>{Number(payment.amountSyp ?? 0).toLocaleString('en-US')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+    <Box>
+      <PageHeader
+        title={`${isReturn ? 'مرتجع' : 'فاتورة'} ${invoice.invoiceNumber || ''}`}
+        subtitle={`${invoice.customerName} · ${invoice.invoiceDate}`}
+        crumbs={[{ label: 'الفواتير', to: '/invoices' }, { label: invoice.invoiceNumber || invoice.id.slice(0, 8) }]}
+        actions={(
+          <Stack direction="row" gap={1} flexWrap="wrap">
+            <Button variant="outlined" disabled={busy} onClick={() => void downloadPdf()}>⬇ PDF</Button>
+            {status === 'DRAFT' ? <Button variant="contained" disabled={busy} onClick={() => void run(() => invoicesApi.confirm(id), 'تم تأكيد الفاتورة', 'تعذر تأكيد الفاتورة')}>✓ تأكيد</Button> : null}
+            {status === 'CONFIRMED' ? <Button variant="contained" color="success" disabled={busy} onClick={() => void run(() => invoicesApi.post(id), 'تم ترحيل الفاتورة', 'تعذر ترحيل الفاتورة')}>✓ ترحيل</Button> : null}
+            {status !== 'VOID' ? <Button color="error" disabled={busy} onClick={() => setVoiding(true)}>✕ إلغاء</Button> : null}
+          </Stack>
         )}
-      </div>
-    </div>
+      />
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
+        <Stack spacing={2}>
+          <Card variant="outlined" sx={{ borderRadius: 3 }}>
+            <CardContent>
+              <Stack direction="row" gap={3} flexWrap="wrap" alignItems="center">
+                <Box>
+                  <Typography variant="caption" color="text.secondary">الزبون</Typography>
+                  <Link component={RouterLink} to={`/customers/${invoice.customerId}`} display="block" fontWeight={700}>{invoice.customerName}</Link>
+                  <Typography variant="caption" color="text.secondary">{invoice.customerCode}</Typography>
+                </Box>
+                <Box><Typography variant="caption" color="text.secondary">التاريخ</Typography><Typography fontWeight={600}>{invoice.invoiceDate}</Typography></Box>
+                <Box><Typography variant="caption" color="text.secondary">الاستحقاق</Typography><Typography fontWeight={600}>{invoice.dueDate}</Typography><Typography variant="caption" color="text.secondary">{invoice.dueDateDisplay}</Typography></Box>
+                <Box sx={{ mr: 'auto' }}><StatusChip status={invoice.status} />{isReturn ? <Chip size="small" color="warning" label="مرتجع" sx={{ mx: 1 }} /> : null}</Box>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
+                  <TableCell>#</TableCell><TableCell>الصنف</TableCell><TableCell align="left">الكمية</TableCell><TableCell align="left">سعر الوحدة</TableCell>
+                  <TableCell align="left">الخصم</TableCell><TableCell align="left">الإجمالي</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {invoice.lines.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>لا توجد أسطر</TableCell></TableRow>
+                ) : invoice.lines.map((l) => (
+                  <TableRow key={l.id}>
+                    <TableCell>{l.lineNumber}</TableCell>
+                    <TableCell>
+                      <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{l.skuCode}</Typography> {l.skuName}
+                      {l.isPriceOverride ? <Chip size="small" color="warning" variant="outlined" label="سعر مُتجاوَز" sx={{ mx: 1 }} /> : null}
+                    </TableCell>
+                    <TableCell align="left">{formatQty(l.quantity)}</TableCell>
+                    <TableCell align="left"><Money usd={l.unitPriceUsd} syp={l.unitPriceSyp} /></TableCell>
+                    <TableCell align="left">{l.discountPct > 0 ? <Chip size="small" color="warning" label={formatPct(l.discountPct)} /> : '—'}</TableCell>
+                    <TableCell align="left"><Money usd={l.lineTotalUsd} syp={l.lineTotalSyp} fontWeight={700} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+
+        <Card variant="outlined" sx={{ borderRadius: 3, alignSelf: 'start' }}>
+          <CardContent>
+            <Stack spacing={1.2}>
+              <Row label="مجموع البنود"><Money usd={abs(a.subtotalUsd)} syp={abs(a.subtotalSyp)} /></Row>
+              {a.discountAmountUsd > 0 ? (
+                <Row label={`خصم الفاتورة${a.discountPct ? ` ${formatPct(a.discountPct)}` : ''}`}><Money usd={-a.discountAmountUsd} syp={-a.discountAmountSyp} color="error.main" /></Row>
+              ) : null}
+              {a.deliveryFeeUsd > 0 || a.deliveryFeeSyp > 0 ? <Row label="أجور التوصيل"><Money usd={a.deliveryFeeUsd} syp={a.deliveryFeeSyp} /></Row> : null}
+              <Divider />
+              <Row label="الإجمالي" strong><Money usd={invoice.totalUsd} syp={invoice.totalSyp} variant="h6" fontWeight={800} color="primary.main" /></Row>
+              <Typography variant="caption" color="text.secondary">{invoice.totalSypInWords}</Typography>
+              <Divider />
+              <Row label="المدفوع"><Money usd={invoice.paidUsd} syp={invoice.paidSyp} color="success.main" /></Row>
+              <Row label="المتبقي" strong><Money usd={invoice.balanceUsd} syp={invoice.balanceSyp} fontWeight={700} color={invoice.balanceUsd > 0 ? 'error.main' : undefined} /></Row>
+              {status === 'DRAFT' ? (
+                <>
+                  <Divider />
+                  <Typography variant="caption" color="text.secondary">خصم على الفاتورة (المسودة فقط؛ صفر يزيل الخصم)</Typography>
+                  <Stack direction="row" gap={1}>
+                    <TextField select size="small" value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')} sx={{ width: 100 }}>
+                      <MenuItem value="pct">%</MenuItem><MenuItem value="usd">$</MenuItem>
+                    </TextField>
+                    <TextField size="small" type="number" inputProps={{ min: 0 }} placeholder="0" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} sx={{ flex: 1 }} />
+                    <Button variant="outlined" disabled={busy} onClick={() => void saveDiscount()}>تطبيق</Button>
+                  </Stack>
+                </>
+              ) : null}
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
+
+      <ReasonDialog open={voiding} title="سبب إلغاء الفاتورة" confirmLabel="إلغاء الفاتورة" minLength={3}
+        onClose={() => setVoiding(false)}
+        onConfirm={async (reason) => { setVoiding(false); await run(() => invoicesApi.void(id, reason), 'تم إلغاء الفاتورة', 'تعذر إلغاء الفاتورة'); }} />
+    </Box>
   );
 }

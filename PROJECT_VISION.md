@@ -60,7 +60,7 @@
 | Docs | OpenAPI + Scalar (mapped unconditionally; not proxied by nginx) | Debt D6 |
 | Files | **One engine for print/export** (`IDocumentRenderer`: QuestPDF + ClosedXML + embedded Noto fonts, Arabic RTL) behind `POST /api/v1/exports/{pdf|xlsx|csv}`; CsvHelper for imports; QRCoder (QR) | QuestPDF Community licence |
 | Frontend | **React 19, Vite 6, TypeScript 5.7, react-router 7, Zustand 5, axios, sonner, @microsoft/signalr** | |
-| Frontend styling | **MUI v6** (`createTheme`, `direction:'rtl'`) + emotion cache + `stylis-plugin-rtl`; Vex tokens preserved inside theme; `theme.css` phased out per screen | **Adopted 2026-09-19** |
+| Frontend styling | **MUI v6** (`createTheme`, `direction:'rtl'`) + emotion cache + `stylis-plugin-rtl`; the design tokens live in the theme; `theme.css` removed (2026-09-23) | **Adopted 2026-09-19** |
 | Frontend data | **@tanstack/react-query v5** (`useQuery`/`useMutation`, 30s `staleTime`); `lib/apiClient.ts` envelope unwrapper | **Adopted 2026-09-19** |
 | Frontend forms | **react-hook-form v7** + **Zod v3** (`zodResolver`); MUI `Dialog` replaces every `window.prompt` | **Adopted 2026-09-19** |
 | Frontend i18n | **react-i18next** `useTranslation` active; `ar.json`/`en.json` expanded; language switcher in Topbar | **Adopted 2026-09-19** |
@@ -81,7 +81,7 @@
 
 **Governance constraints:**
 1. Vex CSS design tokens (`#5c54ff` palette, 12 px radii, card shadows) are preserved inside `createTheme` — visual identity unchanged.
-2. `theme.css` is deleted section-by-section only as each consumer is migrated — never in bulk.
+2. `theme.css` was deleted once its last consumer was migrated (2026-09-23).
 3. Arabic remains the primary language; the language switcher is additive.
 4. All `window.prompt` calls replaced with Zod-validated MUI `Dialog`s in Phase 3.
 5. Every doc referencing the old prohibition is updated in the same commit as the code change.
@@ -197,7 +197,7 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
       issue orders/transfers also read `dynamic` rows and need the same typed-record fix.
 - [x] **D14 — DONE: rename propagates via rename_doc.** Was: renaming a customer is not propagated to ERPNext (it identifies customers by name).
 - [x] **D15 — DONE (2026-09-20): stock and warehouse balances are kept in step.** Was: **Two stock models.** WMS documents (receiving, putaway, transfer orders, adjustments) change `inventory_balances`; invoices, direct receive/adjust/transfer and (now) issue orders change `inventory_stock`. A periodic job copies stock → balances only, so goods received through a WMS document are **not** sellable until D9 is done. The item-movement ledger is complete for both sides.
-- [ ] **D16 — Old-style screens (about a third left).** On MUI with the shared kit (`components/ui`): shell, dashboard, KPIs, accounts, customer profile, statements, purchasing, invoices list, items list, inventory, alerts, warehouses, movements, the whole accounting section, accounting sync, users, roles, approvals, audit, period locks, FX rates. Still on the Vex CSS classes: **login, invoice workspace and detail, item card, payments, receiving, transfers, issue orders, cycle counts, stock adjustments** and the pickers/line editors they use (`ItemPickerModal`, `LocationSelect`, `EntityPicker`, `FxRateField`, `WmsLinesEditor`).
+- [x] **D16 — DONE (2026-09-23): every screen is on MUI.** The last old-style screens (login, invoice workspace and detail, item card, payments, receiving, transfers, issue orders, cycle counts, stock adjustments) and the pickers/line editors were rebuilt on the shared kit; `theme.css` and the old common components are deleted; the few global rules live in the theme (`MuiCssBaseline`).
 - [ ] **D17 — Dev key in git history.** `appsettings.Development.json` (a dev JWT private key and the dev DB password) was committed in the first commit of a public repository; it is untracked but remains in history. Decide: purge history (force-push) or just treat as public. The VPS uses its own keys.
 - [ ] **D9 — WMS → stock reverse sync** and retiring duplicated sku fields (inventory unification steps 4–5).
 
@@ -246,7 +246,8 @@ Legend — ✅ backend + working UI · 🟡 backend only (no UI or thin UI) · �
 - [x] Purchasing roles (ACCOUNTANT, PURCHASER), supplier statement, cost restored when a bill is voided, period locks per module (SALES / PURCHASES / PAYMENTS).
 - [x] Credit limit kept in USD only (lira shown from the latest saved rate); "العميل" is "الزبون" in every Arabic label.
 - [x] **Per-user warehouses (2026-09-23):** admin assigns warehouses and manager status; transfers between warehouses wait for the managers of the warehouses involved (SYSTEM_ADMIN exempt). Warehouse lists, documents and actions are kept to the user's warehouses (`inventory:all_warehouses` sees all).
-- [ ] Migrate the remaining screens and the shell to MUI (D16); export buttons on customers, inventory, approvals, audit.
+- [x] All screens and the shell on MUI (D16, 2026-09-23).
+- [ ] export buttons on customers, inventory, approvals, audit.
 - [ ] Barcode scanner UI (`@zxing` is installed and unused) and purchase-side statements.
 
 #### PHASE 2 — Sales experience  · `Status: In Progress`

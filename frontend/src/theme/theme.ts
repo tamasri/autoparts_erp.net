@@ -1,9 +1,8 @@
 /**
  * AutoPartsERP — MUI Theme
  *
- * Vex design tokens (theme.css CSS variables) are replicated here as the single
- * source of truth for MUI components. theme.css is kept during migration and its
- * sections deleted only as their last consumer is migrated to MUI.
+ * The single source of the look: colours, type, shapes and the few global rules (CssBaseline overrides).
+ * Every screen uses MUI; the old theme.css and its utility classes were removed on 2026-09-23.
  *
  * direction: 'rtl' is set here once; the emotion cache (rtlCache.ts) does the
  * actual CSS flipping — no per-component `style={{ direction: 'rtl' }}` needed.
@@ -101,6 +100,16 @@ export const theme = createTheme({
   ) as any,
 
   components: {
+    // ── Global rules (were in theme.css) ─────────────────────────────────
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: { WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale', lineHeight: 1.6 },
+        '::-webkit-scrollbar': { width: 6, height: 6 },
+        '::-webkit-scrollbar-track': { background: 'transparent' },
+        '::-webkit-scrollbar-thumb': { background: '#cbd5e1', borderRadius: 99 },
+        '::-webkit-scrollbar-thumb:hover': { background: '#94a3b8' },
+      },
+    },
     // ── Paper / Card ──────────────────────────────────────────────────────
     MuiPaper: {
       defaultProps: { elevation: 2 },

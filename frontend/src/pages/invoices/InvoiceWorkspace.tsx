@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import {
+  Alert, Box, Button, Card, CardContent, Divider, IconButton, MenuItem, Paper, Stack, Step, StepLabel, Stepper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, Typography,
+} from '@mui/material';
+import PageHeader from '../../components/ui/PageHeader';
+import Money from '../../components/ui/Money';
+import { formatQty, formatUsd } from '../../lib/format';
+import { useNavigate } from 'react-router-dom';
 import { invoicesApi, type CreateInvoice } from '../../api/endpoints/invoices';
 import { customersApi } from '../../api/endpoints/customers';
 import { lookupsApi, type PickItem } from '../../api/endpoints/lookups';
 import { salesRepsApi, type SalesRep } from '../../api/endpoints/salesReps';
 import { unwrapNode, unwrapPaged } from '../../api/apiData';
-import ErrorBanner from '../../components/common/ErrorBanner';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
 import FxRateField, { type FxRate } from '../../components/pickers/FxRateField';
 import ItemPickerModal, { type PickedLine } from '../../components/pickers/ItemPickerModal';
@@ -39,7 +45,6 @@ type Line = {
   item: PickItem;
 };
 
-const fmt = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
 // Local calendar date (toISOString() is UTC and shifts the day for users ahead of/behind UTC).
 const toLocalDate = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const today = toLocalDate(new Date());
@@ -60,19 +65,6 @@ const STEPS = [
   { label: 'الأسطر', sublabel: 'الأصناف والكميات' },
   { label: 'المراجعة', sublabel: 'التحقق والحفظ' },
 ];
-
-function StepCircle({ index, currentStep }: { index: number; currentStep: number }): JSX.Element {
-  const state = index < currentStep ? 'completed' : index === currentStep ? 'active' : 'inactive';
-  return (
-    <div className={`vex-stepper__item vex-stepper__item--${state}`}>
-      <div className="vex-stepper__circle">{state === 'completed' ? '✓' : index + 1}</div>
-      <div className="vex-stepper__label">
-        <div style={{ fontWeight: 600 }}>{STEPS[index].label}</div>
-        <div style={{ fontSize: 11, marginTop: 2, opacity: 0.7 }}>{STEPS[index].sublabel}</div>
-      </div>
-    </div>
-  );
-}
 
 const availableFor = (l: Line): number => {
   if (l.item.isBatchTracked && l.batchId) return l.item.batches.find((b) => b.id === l.batchId)?.quantity ?? 0;
@@ -255,7 +247,7 @@ export default function InvoiceWorkspace(): JSX.Element {
     const limit = Number(customerRecord?.creditLimitUsd ?? 0);
     if (!customerRecord || limit <= 0 || isReturn) return '';
     const projected = owedUsd + totals.usd;
-    return projected > limit ? `تجاوز الحد الائتماني: الرصيد بعد الفاتورة ${fmt(projected)} من أصل ${fmt(limit)}` : '';
+    return projected > limit ? `تجاوز الحد الائتماني: الرصيد بعد الفاتورة ${formatUsd(projected)} من أصل ${formatUsd(limit)}` : '';
   }, [customerRecord, owedUsd, totals.usd, isReturn]);
 
   function lineProblems(): string {
@@ -263,7 +255,7 @@ export default function InvoiceWorkspace(): JSX.Element {
     for (const l of lines) {
       if (!(Number(l.quantity) > 0)) return `الكمية غير صحيحة للصنف ${l.code}`;
       if (!l.locationId) return `اختر الموقع للصنف ${l.code}`;
-      if (!isReturn && Number(l.quantity) > availableFor(l)) return `الكمية تتجاوز المتاح للصنف ${l.code} (${fmt(availableFor(l))})`;
+      if (!isReturn && Number(l.quantity) > availableFor(l)) return `الكمية تتجاوز المتاح للصنف ${l.code} (${formatQty(availableFor(l))})`;
       if (!isReturn && l.item.isBatchTracked && !l.batchId) return `اختر الدفعة للصنف ${l.code}`;
       if (belowMinimum(l) && !l.overrideReason.trim()) return `السعر أقل من الحد الأدنى للصنف ${l.code} — اكتب سبب التجاوز`;
     }
@@ -325,267 +317,194 @@ export default function InvoiceWorkspace(): JSX.Element {
   }
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">{isReturn ? 'مرتجع جديد' : 'فاتورة جديدة'}</h1>
-          <div className="vex-page-header__breadcrumb">
-            <Link to="/invoices" style={{ color: 'var(--clr-primary)', textDecoration: 'none' }}>الفواتير</Link>{' / '}إنشاء فاتورة جديدة
-          </div>
-        </div>
-        <button type="button" onClick={() => navigate('/invoices')} className="btn-ghost">← رجوع</button>
-      </div>
+    <Box>
+      <PageHeader
+        title={isReturn ? 'مرتجع جديد' : 'فاتورة جديدة'}
+        crumbs={[{ label: 'الفواتير', to: '/invoices' }, { label: 'إنشاء' }]}
+        actions={<Button onClick={() => navigate('/invoices')}>← رجوع</Button>}
+      />
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
-      {error ? <ErrorBanner message={error} /> : null}
+      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Stepper activeStep={currentStep} alternativeLabel sx={{ mb: 3 }}>
+            {STEPS.map((s) => <Step key={s.label}><StepLabel optional={<Typography variant="caption" color="text.secondary">{s.sublabel}</Typography>}>{s.label}</StepLabel></Step>)}
+          </Stepper>
 
-      <div className="vex-card">
-        <div className="vex-stepper">
-          {STEPS.map((_, i) => <StepCircle key={i} index={i} currentStep={currentStep} />)}
-        </div>
-        <hr className="vex-divider" />
-
-        {/* ── Step 0: header ── */}
-        {currentStep === 0 && (
-          <div>
-            <h2 className="vex-section-title" style={{ marginBottom: 24 }}>المعلومات الأساسية</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-              <label className="vex-label" style={{ gridColumn: 'span 2' }}>
-                الزبون *
-                <EntityPicker id="invoice-customer" value={customer} onChange={setCustomer} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." />
-              </label>
-
-              <label className="vex-label">
-                نوع الفاتورة
-                <select id="invoice-type" value={invoiceType} onChange={(e) => { setInvoiceType(e.target.value); setLines([]); }} className="vex-select">
-                  <option value="SALE">بيع</option>
-                  <option value="RETURN">مرتجع</option>
-                </select>
-              </label>
-
-              <label className="vex-label">
-                تاريخ الفاتورة
-                <input id="invoice-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="vex-input" />
-              </label>
-
-              <label className="vex-label">
-                تاريخ الاستحقاق {customerRecord?.paymentTermsDays ? <span style={{ color: 'var(--txt-muted)', fontWeight: 400 }}>(شروط الزبون: {customerRecord.paymentTermsDays} يوم)</span> : null}
-                <input id="invoice-due-date" type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueTouched(true); }} className="vex-input" />
-              </label>
-
+          {currentStep === 0 ? (
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 2 }}>
+              <Box sx={{ gridColumn: 'span 2' }}>
+                <EntityPicker id="invoice-customer" label="الزبون *" value={customer} onChange={setCustomer} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." />
+              </Box>
+              <TextField id="invoice-type" select size="small" label="نوع الفاتورة" value={invoiceType} onChange={(e) => { setInvoiceType(e.target.value); setLines([]); }}>
+                <MenuItem value="SALE">بيع</MenuItem><MenuItem value="RETURN">مرتجع</MenuItem>
+              </TextField>
+              <TextField id="invoice-date" size="small" type="date" label="تاريخ الفاتورة" InputLabelProps={{ shrink: true }} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <TextField id="invoice-due-date" size="small" type="date" label="تاريخ الاستحقاق" InputLabelProps={{ shrink: true }} value={dueDate}
+                onChange={(e) => { setDueDate(e.target.value); setDueTouched(true); }}
+                helperText={customerRecord?.paymentTermsDays ? `شروط الزبون: ${customerRecord.paymentTermsDays} يوم` : undefined} />
               {reps.length > 0 ? (
-                <label className="vex-label">
-                  المندوب
-                  <select id="invoice-sales-rep" value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} className="vex-select">
-                    <option value="">— بدون مندوب —</option>
-                    {reps.map((r) => <option key={r.userId} value={r.userId}>{r.fullName}</option>)}
-                  </select>
-                </label>
+                <TextField id="invoice-sales-rep" select size="small" label="المندوب" value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}>
+                  <MenuItem value="">— بدون مندوب —</MenuItem>
+                  {reps.map((r) => <MenuItem key={r.userId} value={r.userId}>{r.fullName}</MenuItem>)}
+                </TextField>
               ) : null}
-
-              <div className="vex-label" style={{ gridColumn: 'span 2' }}>
-                سعر الصرف
+              <Box sx={{ gridColumn: 'span 2' }}>
+                <Typography variant="caption" color="text.secondary">سعر الصرف</Typography>
                 <FxRateField value={fxRateId} onChange={(id, rate) => { setFxRateId(id); setFxRate(rate); }} documentDate={invoiceDate} />
-              </div>
+              </Box>
+              <TextField id="invoice-delivery-syp" size="small" type="number" label="أجور التوصيل (ل.س)" inputProps={{ min: 0 }} value={deliveryFeeSyp} onChange={(e) => setDeliveryFeeSyp(Number(e.target.value))} />
+              <TextField id="invoice-delivery-usd" size="small" type="number" label="أجور التوصيل ($)" inputProps={{ min: 0 }} value={deliveryFeeUsd} onChange={(e) => setDeliveryFeeUsd(Number(e.target.value))} />
+            </Box>
+          ) : null}
 
-              <label className="vex-label">
-                رسوم التوصيل ل.س
-                <input id="invoice-delivery-syp" type="number" min={0} value={deliveryFeeSyp} onChange={(e) => setDeliveryFeeSyp(Number(e.target.value))} className="vex-input" />
-              </label>
-              <label className="vex-label">
-                رسوم التوصيل $
-                <input id="invoice-delivery-usd" type="number" min={0} value={deliveryFeeUsd} onChange={(e) => setDeliveryFeeUsd(Number(e.target.value))} className="vex-input" />
-              </label>
-            </div>
-          </div>
-        )}
+          {currentStep === 1 ? (
+            <Stack spacing={2}>
+              <Stack direction="row" gap={1.5} flexWrap="wrap" alignItems="center">
+                <Button variant="contained" onClick={() => { setPickerSearch(''); setPickerOpen(true); }}>🔍 اختيار أصناف (F2)</Button>
+                <TextField size="small" sx={{ flex: '1 1 260px', maxWidth: 420 }} value={scan} placeholder="امسح الباركود أو اكتب الكود ثم Enter"
+                  onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleScan(); } }} />
+                {scanNote ? <Typography variant="body2" color={scanNote.startsWith('✓') ? 'success.main' : 'warning.main'}>{scanNote}</Typography> : null}
+              </Stack>
 
-        {/* ── Step 1: lines ── */}
-        {currentStep === 1 && (
-          <div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-              <button type="button" className="btn-primary" onClick={() => { setPickerSearch(''); setPickerOpen(true); }}>🔍 اختيار أصناف (F2)</button>
-              <input
-                className="vex-input"
-                style={{ flex: '1 1 260px', maxWidth: 420 }}
-                value={scan}
-                placeholder="امسح الباركود أو اكتب الكود ثم Enter"
-                onChange={(e) => setScan(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleScan(); } }}
-              />
-              {scanNote ? <span style={{ fontSize: 13, color: scanNote.startsWith('✓') ? 'var(--clr-success)' : 'var(--clr-warning)' }}>{scanNote}</span> : null}
-            </div>
-
-            {lines.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--txt-muted)', border: '1px dashed var(--clr-border)', borderRadius: 'var(--radius-md)' }}>
-                لا توجد أصناف بعد — اضغط «اختيار أصناف» أو امسح الباركود
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="vex-table" style={{ minWidth: 1040 }}>
-                  <thead>
-                    <tr>
-                      <th>#</th><th>الصنف</th><th>الموقع</th>{!isReturn ? <th>الدفعة</th> : null}<th style={{ width: 100 }}>الكمية</th>
-                      <th style={{ width: 120 }}>السعر ل.س</th><th style={{ width: 100 }}>السعر $</th><th style={{ width: 80 }}>خصم %</th><th>الإجمالي</th><th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((l, idx) => {
-                      const avail = availableFor(l);
-                      const over = !isReturn && Number(l.quantity) > avail;
-                      const below = belowMinimum(l);
-                      const t = lineTotals(l);
-                      const stockOpts = l.item.stock.filter((s) => isReturn || s.available > 0 || s.locationId === l.locationId);
-                      const batches = l.item.batches.filter((b) => b.locationId === l.locationId);
-                      return (
-                        <tr key={l.key}>
-                          <td>{idx + 1}</td>
-                          <td>
-                            <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-primary)' }}>{l.code}</div>
-                            <div style={{ fontSize: 13 }}>{l.name}</div>
-                            {below ? (
-                              <input
-                                className="vex-input"
-                                style={{ marginTop: 6, fontSize: 12, borderColor: 'var(--clr-warning)' }}
-                                placeholder={`سعر أقل من الحد الأدنى — سبب التجاوز *`}
-                                value={l.overrideReason}
-                                onChange={(e) => patchLine(l.key, { overrideReason: e.target.value })}
-                              />
+              {lines.length === 0 ? (
+                <Paper variant="outlined" sx={{ textAlign: 'center', py: 5, color: 'text.secondary', borderStyle: 'dashed', borderRadius: 2 }}>لا توجد أصناف بعد — اضغط «اختيار أصناف» أو امسح الباركود</Paper>
+              ) : (
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                  <Table size="small" sx={{ minWidth: 1040 }}>
+                    <TableHead>
+                      <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
+                        <TableCell>#</TableCell><TableCell>الصنف</TableCell><TableCell sx={{ minWidth: 150 }}>الموقع</TableCell>{!isReturn ? <TableCell sx={{ minWidth: 140 }}>الدفعة</TableCell> : null}
+                        <TableCell sx={{ width: 110 }}>الكمية</TableCell><TableCell sx={{ width: 130 }}>السعر ل.س</TableCell><TableCell sx={{ width: 110 }}>السعر $</TableCell>
+                        <TableCell sx={{ width: 90 }}>خصم %</TableCell><TableCell align="left">الإجمالي</TableCell><TableCell />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {lines.map((l, idx) => {
+                        const avail = availableFor(l);
+                        const over = !isReturn && Number(l.quantity) > avail;
+                        const below = belowMinimum(l);
+                        const t = lineTotals(l);
+                        const stockOpts = l.item.stock.filter((s) => isReturn || s.available > 0 || s.locationId === l.locationId);
+                        const batches = l.item.batches.filter((b) => b.locationId === l.locationId);
+                        return (
+                          <TableRow key={l.key}>
+                            <TableCell>{idx + 1}</TableCell>
+                            <TableCell>
+                              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700 }} color="primary">{l.code}</Typography>
+                              <Typography variant="body2">{l.name}</Typography>
+                              {below ? <TextField size="small" fullWidth color="warning" focused sx={{ mt: 0.5 }} placeholder="سعر أقل من الحد الأدنى — سبب التجاوز *" value={l.overrideReason} onChange={(e) => patchLine(l.key, { overrideReason: e.target.value })} /> : null}
+                            </TableCell>
+                            <TableCell>
+                              <TextField select size="small" fullWidth value={l.locationId} onChange={(e) => patchLine(l.key, { locationId: e.target.value })}>
+                                {stockOpts.map((s) => <MenuItem key={s.locationId} value={s.locationId}>{s.locationCode} ({formatQty(s.available)})</MenuItem>)}
+                              </TextField>
+                            </TableCell>
+                            {!isReturn ? (
+                              <TableCell>
+                                {l.item.isBatchTracked ? (
+                                  <TextField select size="small" fullWidth value={l.batchId} onChange={(e) => patchLine(l.key, { batchId: e.target.value })} SelectProps={{ displayEmpty: true }}>
+                                    <MenuItem value=""><em>— اختر —</em></MenuItem>
+                                    {batches.map((b) => <MenuItem key={b.id} value={b.id}>{b.batchNumber} ({formatQty(b.quantity)})</MenuItem>)}
+                                  </TextField>
+                                ) : '—'}
+                              </TableCell>
                             ) : null}
-                          </td>
-                          <td>
-                            <select className="vex-select" value={l.locationId} onChange={(e) => patchLine(l.key, { locationId: e.target.value })}>
-                              {stockOpts.map((s) => <option key={s.locationId} value={s.locationId}>{s.locationCode} ({fmt(s.available)})</option>)}
-                            </select>
-                          </td>
-                          {!isReturn ? (
-                            <td>
-                              {l.item.isBatchTracked ? (
-                                <select className="vex-select" value={l.batchId} onChange={(e) => patchLine(l.key, { batchId: e.target.value })}>
-                                  <option value="">— اختر —</option>
-                                  {batches.map((b) => <option key={b.id} value={b.id}>{b.batchNumber} ({fmt(b.quantity)})</option>)}
-                                </select>
-                              ) : <span style={{ color: 'var(--txt-muted)' }}>—</span>}
-                            </td>
-                          ) : null}
-                          <td>
-                            <input type="number" min={0} className="vex-input" style={over ? { borderColor: 'var(--clr-danger)' } : undefined} value={l.quantity} onChange={(e) => patchLine(l.key, { quantity: Number(e.target.value) })} />
-                            {!isReturn ? <div style={{ fontSize: 11, color: over ? 'var(--clr-danger)' : 'var(--txt-muted)' }}>متاح {fmt(avail)}</div> : null}
-                          </td>
-                          <td><input type="number" min={0} className="vex-input" value={l.unitPriceSyp} onChange={(e) => patchLine(l.key, { unitPriceSyp: Number(e.target.value) })} /></td>
-                          <td><input type="number" min={0} className="vex-input" value={l.unitPriceUsd} onChange={(e) => patchLine(l.key, { unitPriceUsd: Number(e.target.value) })} /></td>
-                          <td><input type="number" min={0} max={100} className="vex-input" value={l.discountPct} onChange={(e) => patchLine(l.key, { discountPct: Number(e.target.value) })} /></td>
-                          <td style={{ whiteSpace: 'nowrap' }}>
-                            <div style={{ fontWeight: 700 }}>{fmt(t.syp)} ل.س</div>
-                            <div style={{ fontSize: 12, color: 'var(--txt-secondary)' }}>${fmt(t.usd)}</div>
-                          </td>
-                          <td><button type="button" className="btn-danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}>✕</button></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                            <TableCell>
+                              <TextField size="small" type="number" inputProps={{ min: 0 }} error={over} value={l.quantity} onChange={(e) => patchLine(l.key, { quantity: Number(e.target.value) })}
+                                helperText={!isReturn ? `متاح ${formatQty(avail)}` : undefined} FormHelperTextProps={{ sx: { mx: 0 } }} />
+                            </TableCell>
+                            <TableCell><TextField size="small" type="number" inputProps={{ min: 0 }} value={l.unitPriceSyp} onChange={(e) => patchLine(l.key, { unitPriceSyp: Number(e.target.value) })} /></TableCell>
+                            <TableCell><TextField size="small" type="number" inputProps={{ min: 0 }} value={l.unitPriceUsd} onChange={(e) => patchLine(l.key, { unitPriceUsd: Number(e.target.value) })} /></TableCell>
+                            <TableCell><TextField size="small" type="number" inputProps={{ min: 0, max: 100 }} value={l.discountPct} onChange={(e) => patchLine(l.key, { discountPct: Number(e.target.value) })} /></TableCell>
+                            <TableCell align="left"><Money usd={t.usd} syp={t.syp} fontWeight={700} /></TableCell>
+                            <TableCell><IconButton size="small" color="error" aria-label="حذف السطر" onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}>✕</IconButton></TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
 
-            <div style={{ marginTop: 20, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <label className="vex-label" style={{ minWidth: 160 }}>
-                خصم على الفاتورة
-                <select id="invoice-discount-mode" className="vex-select" value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')}>
-                  <option value="pct">نسبة %</option>
-                  <option value="usd">مبلغ $</option>
-                </select>
-              </label>
-              <label className="vex-label" style={{ width: 140 }}>
-                {discountMode === 'pct' ? 'النسبة %' : 'المبلغ $'}
-                <input id="invoice-discount-value" type="number" min={0} max={discountMode === 'pct' ? 100 : undefined} className="vex-input" value={discountValue} onChange={(e) => setDiscountValue(Number(e.target.value))} />
-              </label>
-              <span style={{ fontSize: 13, color: 'var(--txt-secondary)', paddingBottom: 10 }}>
-                مجموع البنود {fmt(subtotal.syp)} ل.س · ${fmt(subtotal.usd)}
-                {discount.usd > 0 ? <> — الخصم {fmt(discount.syp)} ل.س · ${fmt(discount.usd)}</> : null}
-              </span>
-            </div>
+              <Stack direction="row" gap={1.5} alignItems="flex-start" flexWrap="wrap">
+                <TextField id="invoice-discount-mode" select size="small" label="خصم على الفاتورة" value={discountMode} onChange={(e) => setDiscountMode(e.target.value as 'pct' | 'usd')} sx={{ width: 160 }}>
+                  <MenuItem value="pct">نسبة %</MenuItem><MenuItem value="usd">مبلغ $</MenuItem>
+                </TextField>
+                <TextField id="invoice-discount-value" size="small" type="number" label={discountMode === 'pct' ? 'النسبة %' : 'المبلغ $'} inputProps={{ min: 0, max: discountMode === 'pct' ? 100 : undefined }}
+                  value={discountValue} onChange={(e) => setDiscountValue(Number(e.target.value))} sx={{ width: 140 }} />
+                <Typography variant="body2" color="text.secondary" component="div" sx={{ pt: 1 }}>
+                  مجموع البنود <Money usd={subtotal.usd} syp={subtotal.syp} inline variant="body2" />
+                  {discount.usd > 0 ? <> — الخصم <Money usd={discount.usd} syp={discount.syp} inline variant="body2" /></> : null}
+                </Typography>
+              </Stack>
 
-            <div style={{ marginTop: 20, padding: '16px 20px', background: 'var(--clr-primary-light)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--clr-primary-dark)' }}>الإجمالي التقديري (شامل رسوم التوصيل)</span>
-              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--clr-primary)' }}>
-                {fmt(totals.syp)} <span style={{ fontSize: 14, fontWeight: 500 }}>ل.س</span>
-                <span style={{ fontSize: 14, fontWeight: 600, marginInlineStart: 14 }}>${fmt(totals.usd)}</span>
-              </span>
-            </div>
-            {creditWarning ? <div className="badge badge--warning" style={{ marginTop: 10 }}>⚠ {creditWarning}</div> : null}
-          </div>
-        )}
+              <Paper sx={{ p: 2, borderRadius: 2, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography fontWeight={600}>الإجمالي التقديري (شامل أجور التوصيل)</Typography>
+                <Money usd={totals.usd} syp={totals.syp} variant="h5" fontWeight={800} color="inherit" />
+              </Paper>
+              {creditWarning ? <Alert severity="warning">{creditWarning}</Alert> : null}
+            </Stack>
+          ) : null}
 
-        {/* ── Step 2: review ── */}
-        {currentStep === 2 && (
-          <div>
-            <h2 className="vex-section-title" style={{ marginBottom: 24 }}>مراجعة الفاتورة</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 24 }}>
-              <div style={{ background: 'var(--clr-surface-2)', border: '1px solid var(--clr-border)', borderRadius: 'var(--radius-md)', padding: '16px 20px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', marginBottom: 10 }}>بيانات الفاتورة</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                  <Row label="الزبون" value={customer?.label ?? '-'} />
-                  <Row label="النوع" value={isReturn ? 'مرتجع' : 'بيع'} />
-                  <Row label="المندوب" value={reps.find((r) => r.userId === salesRepId)?.fullName ?? '—'} />
-                  <Row label="التاريخ" value={invoiceDate} />
-                  <Row label="الاستحقاق" value={dueDate} />
-                  <Row label="سعر الصرف" value={fxRate ? `${fmt(fxRate.midRate)} ${fxRate.currencyTo} (${fxRate.rateDate})` : '-'} />
-                </div>
-              </div>
-              <div style={{ background: 'var(--clr-primary-light)', border: '1px solid #c7c4ff', borderRadius: 'var(--radius-md)', padding: '16px 20px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-primary-dark)', marginBottom: 10 }}>الملخص المالي</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                  <Row label="عدد الأسطر" value={String(lines.length)} />
-                  <Row label="مجموع البنود" value={`${fmt(subtotal.syp)} ل.س · $${fmt(subtotal.usd)}`} />
-                  {discount.usd > 0 ? <Row label={discountMode === 'pct' ? `خصم الفاتورة ${fmt(discountValue)}%` : 'خصم الفاتورة'} value={`− ${fmt(discount.syp)} ل.س · $${fmt(discount.usd)}`} /> : null}
-                  <Row label="رسوم التوصيل" value={`${fmt(deliveryFeeSyp)} ل.س · $${fmt(deliveryFeeUsd)}`} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #a5a0ff', paddingTop: 8, marginTop: 4 }}>
-                    <span style={{ fontWeight: 700, color: 'var(--clr-primary-dark)' }}>الإجمالي</span>
-                    <span style={{ fontWeight: 800, color: 'var(--clr-primary)', fontSize: 16 }}>{fmt(totals.syp)} ل.س · ${fmt(totals.usd)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {currentStep === 2 ? (
+            <Stack spacing={2}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 2 }}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>بيانات الفاتورة</Typography>
+                  <Stack spacing={1} sx={{ mt: 1 }}>
+                    <ReviewRow label="الزبون" value={customer?.label ?? '—'} />
+                    <ReviewRow label="النوع" value={isReturn ? 'مرتجع' : 'بيع'} />
+                    <ReviewRow label="المندوب" value={reps.find((r) => r.userId === salesRepId)?.fullName ?? '—'} />
+                    <ReviewRow label="التاريخ" value={invoiceDate} />
+                    <ReviewRow label="الاستحقاق" value={dueDate} />
+                    <ReviewRow label="سعر الصرف" value={fxRate ? `${formatQty(fxRate.midRate)} ${fxRate.currencyTo} (${fxRate.rateDate})` : '—'} />
+                  </Stack>
+                </Paper>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>الملخص المالي</Typography>
+                  <Stack spacing={1} sx={{ mt: 1 }}>
+                    <ReviewRow label="عدد الأسطر" value={String(lines.length)} />
+                    <ReviewRow label="مجموع البنود" value={<Money usd={subtotal.usd} syp={subtotal.syp} inline variant="body2" />} />
+                    {discount.usd > 0 ? <ReviewRow label={discountMode === 'pct' ? `خصم الفاتورة ${discountValue}%` : 'خصم الفاتورة'} value={<Money usd={-discount.usd} syp={-discount.syp} inline variant="body2" />} /> : null}
+                    <ReviewRow label="أجور التوصيل" value={<Money usd={deliveryFeeUsd} syp={deliveryFeeSyp} inline variant="body2" />} />
+                    <Divider />
+                    <ReviewRow label="الإجمالي" value={<Money usd={totals.usd} syp={totals.syp} inline variant="body1" fontWeight={800} color="primary.main" />} />
+                  </Stack>
+                </Paper>
+              </Box>
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                <Table size="small">
+                  <TableHead><TableRow sx={{ '& th': { fontWeight: 700 } }}><TableCell>الصنف</TableCell><TableCell>الموقع</TableCell><TableCell align="left">الكمية</TableCell><TableCell align="left">السعر</TableCell><TableCell align="left">الإجمالي</TableCell></TableRow></TableHead>
+                  <TableBody>
+                    {lines.map((l) => (
+                      <TableRow key={l.key}>
+                        <TableCell><Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{l.code}</Typography> {l.name}</TableCell>
+                        <TableCell>{l.item.stock.find((s) => s.locationId === l.locationId)?.locationCode ?? '—'}</TableCell>
+                        <TableCell align="left">{formatQty(l.quantity)}</TableCell>
+                        <TableCell align="left"><Money usd={l.unitPriceUsd} syp={l.unitPriceSyp} inline /></TableCell>
+                        <TableCell align="left"><Money usd={lineTotals(l).usd} syp={lineTotals(l).syp} inline fontWeight={700} /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {creditWarning ? <Alert severity="warning">{creditWarning}</Alert> : null}
+              <Alert severity="info">ستُحفظ الفاتورة كمسودة. عند ترحيلها تُرسل تلقائياً إلى دفتر الأستاذ (ERPNext) وتظهر حالتها في «مزامنة المحاسبة».</Alert>
+            </Stack>
+          ) : null}
 
-            <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-              <table className="vex-table">
-                <thead><tr><th>الصنف</th><th>الموقع</th><th>الكمية</th><th>السعر ل.س</th><th>الإجمالي ل.س</th></tr></thead>
-                <tbody>
-                  {lines.map((l) => (
-                    <tr key={l.key}>
-                      <td><span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{l.code}</span> <span style={{ color: 'var(--txt-secondary)' }}>{l.name}</span></td>
-                      <td>{l.item.stock.find((s) => s.locationId === l.locationId)?.locationCode ?? '-'}</td>
-                      <td>{fmt(l.quantity)}</td>
-                      <td>{fmt(l.unitPriceSyp)}</td>
-                      <td style={{ fontWeight: 600 }}>{fmt(lineTotals(l).syp)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {creditWarning ? <div className="badge badge--warning" style={{ marginBottom: 12 }}>⚠ {creditWarning}</div> : null}
-            <div style={{ background: 'var(--clr-warning-light)', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '12px 16px', fontSize: 13, color: '#92400e' }}>
-              <strong>ملاحظة:</strong> ستُحفظ الفاتورة كمسودة. عند ترحيلها تُرسل تلقائياً إلى دفتر الأستاذ (ERPNext) وتظهر حالتها في «مزامنة المحاسبة».
-            </div>
-          </div>
-        )}
-
-        <hr className="vex-divider" />
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button type="button" onClick={() => { setError(''); setCurrentStep((s) => Math.max(s - 1, 0)); }} className="btn-ghost" style={{ visibility: currentStep === 0 ? 'hidden' : 'visible' }}>← السابق</button>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <Divider sx={{ my: 3 }} />
+          <Stack direction="row" justifyContent="space-between">
+            <Button sx={{ visibility: currentStep === 0 ? 'hidden' : 'visible' }} onClick={() => { setError(''); setCurrentStep((s) => Math.max(s - 1, 0)); }}>← السابق</Button>
             {currentStep < STEPS.length - 1 ? (
-              <button type="button" onClick={goNext} className="btn-primary">التالي →</button>
+              <Button variant="contained" onClick={goNext}>التالي →</Button>
             ) : (
-              <button id="invoice-submit-btn" type="button" disabled={busy} onClick={() => void submit()} className="btn-primary">
-                {busy ? 'جارٍ الحفظ...' : '💾 حفظ الفاتورة (مسودة)'}
-              </button>
+              <Button id="invoice-submit-btn" variant="contained" disabled={busy} onClick={() => void submit()}>{busy ? 'جارٍ الحفظ...' : '💾 حفظ الفاتورة (مسودة)'}</Button>
             )}
-          </div>
-        </div>
-      </div>
+          </Stack>
+        </CardContent>
+      </Card>
 
       <ItemPickerModal
         open={pickerOpen}
@@ -596,15 +515,15 @@ export default function InvoiceWorkspace(): JSX.Element {
         onPick={addFromPick}
         onClose={() => setPickerOpen(false)}
       />
-    </div>
+    </Box>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }): JSX.Element {
+function ReviewRow({ label, value }: { label: string; value: React.ReactNode }): JSX.Element {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ color: 'var(--txt-muted)' }}>{label}</span>
-      <span style={{ fontWeight: 600, textAlign: 'left' }}>{value}</span>
-    </div>
+    <Stack direction="row" justifyContent="space-between" gap={1.5}>
+      <Typography variant="body2" color="text.secondary">{label}</Typography>
+      <Typography variant="body2" fontWeight={600} component="div">{value}</Typography>
+    </Stack>
   );
 }

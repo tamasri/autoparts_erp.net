@@ -23,8 +23,8 @@ HARD CONTEXT:
   `IErpNextClient`. Users never open ERPNext's UI — every accounting screen must live inside OUR frontend.
 - Frontend: React 19 + Vite 6 + TypeScript + react-router 7 + Zustand + axios + sonner, on **MUI v6** (RTL, one theme in
   `frontend/src/theme`) with a shared kit in `components/ui` (DataTable, ReasonDialog, ImportDialog, RoutedTabs, ...) and hooks (`usePagedList`, `useLoad`,
-  `useCan`, `useConfirm`). TanStack Query, react-hook-form and Zod are used only in `features/customers`. Nine screens still use the old "Vex" CSS classes
-  (`theme.css`): login, invoice workspace/detail, item card, payments, receiving, transfers, issue orders, cycle counts, stock adjustments (debt D16).
+  `useCan`, `useConfirm`). TanStack Query, react-hook-form and Zod are used only in `features/customers`. Every screen is on MUI; `theme.css` and the old "Vex" classes are
+  gone (D16 closed 2026-09-23). Amounts are shown with `components/ui/Money`.
 - Projects: Domain -> Contracts -> Application -> Infrastructure -> Api (dependency rule is absolute).
   Tests: UnitTests, IntegrationTests (need Docker/Testcontainers), E2ETests (empty). SPA in /frontend.
 
@@ -374,3 +374,13 @@ AGENT_ONBOARDING.md                                  [MODIFY]
   profit and loss, ledger statement, journal entries, chart of accounts (USD accounts), warehouses (stock value), sales reps, ERPNext consistency. Exports keep plain dollar numbers.
 - **Deliberate exceptions:** entry forms stay in the currency typed (bills, manual entries, payments); bank reconciliation stays in the account's currency because it is matched line by line with a
   bank statement. The old-style screens (invoice workspace and detail, payments, item card, warehouse documents, pickers) get `Money` as part of their MUI migration (item 4).
+- **Item 4 — the last old-style screens on MUI.** Rebuilt on the shared kit with the same props / API calls: pickers (`EntityPicker` → async MUI Autocomplete, `LocationSelect`,
+  `ReasonCodeSelect`, `FxRateField`, `ItemPickerModal` as an MUI Dialog), `WmsLinesEditor`, and the screens login, invoice workspace (MUI Stepper) and detail, item card
+  (`RoutedTabs`), payments, receiving, transfers, issue orders, cycle counts, stock adjustments. Expandable rows became dialogs (pick/verify/issue, count lines, putaway);
+  every `window.prompt` became `ReasonDialog`; lists use `DataTable` with server paging; amounts use `Money`. Deleted: `styles/theme.css` (its global rules — font smoothing,
+  thin scrollbar — moved to `MuiCssBaseline` in `theme.ts`), `ErrorBanner`, `LoadingSpinner`, `Pagination`, `StatusBadge`, `EmptyState`, `KpiCard`, `SalesChart`, `KpiDashboard`.
+- **Bugs found on the way:** transfers in transit had no "receive" button (the page looked for status SHIPPED, the server sets IN_TRANSIT); the login page showed a "remember me"
+  checkbox and a "forgot password" link that did nothing (removed; the page says the administrator resets passwords); the invoice detail page read a `payments` list the API never returns
+  (now paid / remaining from the invoice itself).
+- **Verified in the browser:** every migrated screen loads its data; item picker adds a line with its available quantity; a sales invoice created end to end through the new
+  workspace (customer → due date from terms → rep default → item → review → saved and opened); payments, item card tabs, login. `tsc` (also with --noUnusedLocals) and the production build clean.

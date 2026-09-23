@@ -1,4 +1,13 @@
 import { useCallback, useState } from 'react';
+import {
+  Alert, Box, Button, Card, CardContent, Checkbox, Chip, FormControlLabel, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow,
+  TextField, Typography,
+} from '@mui/material';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import ReasonDialog from '../../components/ui/ReasonDialog';
+import Money from '../../components/ui/Money';
+import { formatSyp, formatUsd } from '../../lib/format';
 import { paymentsApi, type AllocationLine } from '../../api/endpoints/payments';
 import { customersApi } from '../../api/endpoints/customers';
 import { invoicesApi } from '../../api/endpoints/invoices';
@@ -6,8 +15,6 @@ import { unwrapNode, unwrapPaged } from '../../api/apiData';
 import { usePagedList } from '../../hooks/usePagedList';
 import { toast, extractApiError } from '../../lib/toast';
 import { notifyResult } from '../../lib/notify';
-import Pagination from '../../components/common/Pagination';
-import ErrorBanner from '../../components/common/ErrorBanner';
 import EntityPicker, { type PickerOption } from '../../components/pickers/EntityPicker';
 import ExportMenu from '../../components/ui/ExportMenu';
 import { num, ymd, type ExportDocument } from '../../lib/exportClient';
@@ -29,7 +36,6 @@ const METHODS = [
   { value: 'CHEQUE', label: 'شيك' },
 ];
 const methodLabel = (m: string): string => METHODS.find((x) => x.value === m)?.label ?? m;
-const money = (v: number): string => Number(v ?? 0).toLocaleString('en-US');
 const today = (): string => new Date().toLocaleDateString('en-CA');
 
 /** Oldest-first allocation of a receipt over the customer's open invoices, per currency. */
@@ -71,7 +77,6 @@ export default function Payments(): JSX.Element {
   const [openInvoices, setOpenInvoices] = useState<OpenInvoice[]>([]);
   const [autoApply, setAutoApply] = useState(true);
   const [reverseId, setReverseId] = useState('');
-  const [reverseReason, setReverseReason] = useState('');
 
   const buildExport = async (): Promise<ExportDocument> => {
     const data = unwrapPaged<Payment>((await paymentsApi.list({ page: 1, pageSize: 200, customerId: filterCustomer?.id, paymentMethod: filterMethod || undefined })).data);
@@ -131,147 +136,121 @@ export default function Payments(): JSX.Element {
     finally { setBusy(''); }
   }
 
-  async function reverse(): Promise<void> {
-    if (reverseReason.trim().length < 5) { toast.error('اكتب سبب العكس (5 أحرف على الأقل)'); return; }
+  async function reverse(reason: string): Promise<void> {
     setBusy(reverseId);
     try {
-      const res = await paymentsApi.reverse(reverseId, reverseReason.trim());
+      const res = await paymentsApi.reverse(reverseId, reason);
       notifyResult(res, 'تم عكس الدفعة وإعادة الرصيد للفواتير');
-      setReverseId(''); setReverseReason(''); list.reload();
+      setReverseId(''); list.reload();
     } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر عكس الدفعة')); }
     finally { setBusy(''); }
   }
 
   return (
-    <div style={{ direction: 'rtl' }}>
-      <div className="vex-page-header">
-        <div>
-          <h1 className="vex-page-header__title">الدفعات والقبض</h1>
-          <div className="vex-page-header__breadcrumb">سندات قبض الزبائن وتوزيعها على الفواتير المفتوحة</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <ExportMenu build={buildExport} />
-          <button type="button" onClick={() => setShowForm((s) => !s)} className={showForm ? 'btn-ghost' : 'btn-primary'}>
-            {showForm ? '✕ إلغاء' : '＋ سند قبض'}
-          </button>
-        </div>
-      </div>
-
-      {list.error ? <ErrorBanner message={list.error} /> : null}
+    <Box>
+      <PageHeader
+        title="الدفعات والقبض" subtitle="سندات قبض الزبائن وتوزيعها على الفواتير المفتوحة"
+        actions={<Stack direction="row" gap={1}><ExportMenu build={buildExport} /><Button variant={showForm ? 'outlined' : 'contained'} onClick={() => setShowForm((s) => !s)}>{showForm ? '✕ إلغاء' : '＋ سند قبض'}</Button></Stack>}
+      />
+      {list.error ? <Alert severity="error" sx={{ mb: 2 }}>{list.error}</Alert> : null}
 
       {showForm ? (
-        <div className="vex-card" style={{ marginBottom: 20 }}>
-          <h2 className="vex-section-title">سند قبض جديد</h2>
-          {formError ? <ErrorBanner message={formError} /> : null}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, marginBottom: 16 }}>
-            <label className="vex-label">الزبون *<EntityPicker value={customer} onChange={(c) => void pickCustomer(c)} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." /></label>
-            <label className="vex-label">طريقة الدفع
-              <select value={method} onChange={(e) => setMethod(e.target.value)} className="vex-select">{METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</select>
-            </label>
-            <label className="vex-label">المبلغ ({isUsd ? 'USD' : 'ل.س'}) *<input type="number" min={0} value={amount || ''} onChange={(e) => setAmount(Number(e.target.value))} className="vex-input" /></label>
-            <label className="vex-label">تاريخ الدفعة<input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="vex-input" /></label>
-            {method === 'BANK_TRANSFER' ? (
-              <>
-                <label className="vex-label">المصرف<input value={bankName} onChange={(e) => setBankName(e.target.value)} className="vex-input" /></label>
-                <label className="vex-label">رقم الحوالة<input value={reference} onChange={(e) => setReference(e.target.value)} className="vex-input" /></label>
-              </>
-            ) : null}
-            {method === 'CHEQUE' ? (
-              <>
-                <label className="vex-label">رقم الشيك *<input value={chequeNumber} onChange={(e) => setChequeNumber(e.target.value)} className="vex-input" /></label>
-                <label className="vex-label">تاريخ الشيك<input type="date" value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} className="vex-input" /></label>
-                <label className="vex-label">المصرف<input value={bankName} onChange={(e) => setBankName(e.target.value)} className="vex-input" /></label>
-              </>
-            ) : null}
-            <label className="vex-label">ملاحظات<input value={notes} onChange={(e) => setNotes(e.target.value)} className="vex-input" /></label>
-          </div>
+        <Card variant="outlined" sx={{ borderRadius: 3, mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>سند قبض جديد</Typography>
+            {formError ? <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert> : null}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 2, mb: 2 }}>
+              <EntityPicker label="الزبون *" value={customer} onChange={(c) => void pickCustomer(c)} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." />
+              <TextField select size="small" label="طريقة الدفع" value={method} onChange={(e) => setMethod(e.target.value)}>
+                {METHODS.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
+              </TextField>
+              <TextField size="small" type="number" label={`المبلغ (${isUsd ? '$' : 'ل.س'}) *`} inputProps={{ min: 0 }} value={amount || ''} onChange={(e) => setAmount(Number(e.target.value))}
+                helperText={amount > 0 && sellRate > 0 ? `≈ ${isUsd ? formatSyp(amount * sellRate) : formatUsd(amount / sellRate)}` : undefined} />
+              <TextField size="small" type="date" label="تاريخ الدفعة" InputLabelProps={{ shrink: true }} value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              {method === 'BANK_TRANSFER' ? (
+                <>
+                  <TextField size="small" label="المصرف" value={bankName} onChange={(e) => setBankName(e.target.value)} />
+                  <TextField size="small" label="رقم الحوالة" value={reference} onChange={(e) => setReference(e.target.value)} />
+                </>
+              ) : null}
+              {method === 'CHEQUE' ? (
+                <>
+                  <TextField size="small" label="رقم الشيك *" value={chequeNumber} onChange={(e) => setChequeNumber(e.target.value)} />
+                  <TextField size="small" type="date" label="تاريخ الشيك" InputLabelProps={{ shrink: true }} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} />
+                  <TextField size="small" label="المصرف" value={bankName} onChange={(e) => setBankName(e.target.value)} />
+                </>
+              ) : null}
+              <TextField size="small" label="ملاحظات" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </Box>
+            <Box sx={{ mb: 2 }}>
+              <FxRateField value={fxRateId} onChange={(id, r) => { setFxRateId(id); setSellRate(r?.midRate ?? 0); }} documentDate={paymentDate} />
+            </Box>
 
-          <div style={{ marginBottom: 16 }}>
-            <FxRateField value={fxRateId} onChange={(id, r) => { setFxRateId(id); setSellRate(r?.midRate ?? 0); }} documentDate={paymentDate} />
-            {amount > 0 && sellRate > 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--txt-muted)', marginTop: 6 }}>
-                {isUsd ? `≈ ${money(amount * sellRate)} ل.س` : `≈ ${money(amount / sellRate)} USD`} بسعر {money(sellRate)}
-              </div>
+            {customer ? (
+              <Box sx={{ mb: 2 }}>
+                <FormControlLabel control={<Checkbox checked={autoApply} onChange={(e) => setAutoApply(e.target.checked)} />} label="توزيع تلقائي على الفواتير المفتوحة (الأقدم استحقاقاً أولاً)" />
+                {openInvoices.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">لا توجد فواتير مرحّلة بأرصدة مفتوحة لهذا الزبون — ستُسجَّل الدفعة كرصيد دائن غير موزّع.</Typography>
+                ) : (
+                  <Paper variant="outlined" sx={{ borderRadius: 2 }}>
+                    <Table size="small">
+                      <TableHead><TableRow sx={{ '& th': { fontWeight: 700 } }}><TableCell>الفاتورة</TableCell><TableCell>الاستحقاق</TableCell><TableCell align="left">الرصيد</TableCell><TableCell align="left">سيُسدَّد</TableCell></TableRow></TableHead>
+                      <TableBody>
+                        {openInvoices.map((i) => {
+                          const p = plan.find((x) => x.invoiceId === i.id);
+                          return (
+                            <TableRow key={i.id}>
+                              <TableCell sx={{ fontWeight: 600 }}>{i.invoiceNumber}</TableCell><TableCell>{i.dueDate}</TableCell>
+                              <TableCell align="left"><Money usd={i.balanceUsd} syp={i.balanceSyp} /></TableCell>
+                              <TableCell align="left">{p ? <Typography component="span" fontWeight={700} color="success.main">{[p.allocatedSyp > 0 ? formatSyp(p.allocatedSyp) : '', p.allocatedUsd > 0 ? formatUsd(p.allocatedUsd) : ''].filter(Boolean).join(' · ')}</Typography> : '—'}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </Paper>
+                )}
+                {plan.length > 0 ? <Typography variant="caption" color="text.secondary">{plan.map((p) => invName(p.invoiceId)).join('، ')}</Typography> : null}
+              </Box>
             ) : null}
-          </div>
 
-          {customer ? (
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 8 }}>
-                <input type="checkbox" checked={autoApply} onChange={(e) => setAutoApply(e.target.checked)} />
-                توزيع تلقائي على الفواتير المفتوحة (الأقدم استحقاقاً أولاً)
-              </label>
-              {openInvoices.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--txt-muted)' }}>لا توجد فواتير مرحّلة بأرصدة مفتوحة لهذا الزبون — ستُسجَّل الدفعة كرصيد دائن غير موزّع.</div>
-              ) : (
-                <table className="vex-table">
-                  <thead><tr><th>الفاتورة</th><th>الاستحقاق</th><th>الرصيد (ل.س)</th><th>الرصيد ($)</th><th>سيُسدَّد</th></tr></thead>
-                  <tbody>
-                    {openInvoices.map((i) => {
-                      const p = plan.find((x) => x.invoiceId === i.id);
-                      return (
-                        <tr key={i.id}>
-                          <td style={{ fontWeight: 600 }}>{i.invoiceNumber}</td><td>{i.dueDate}</td><td>{money(i.balanceSyp)}</td><td>{money(i.balanceUsd)}</td>
-                          <td style={{ color: 'var(--clr-success)', fontWeight: 700 }}>{p ? (p.allocatedSyp > 0 ? `${money(p.allocatedSyp)} ل.س ` : '') + (p.allocatedUsd > 0 ? `${money(p.allocatedUsd)} $` : '') : '—'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-              {plan.length > 0 ? <div style={{ fontSize: 12, color: 'var(--txt-muted)', marginTop: 6 }}>{plan.map((p) => invName(p.invoiceId)).join('، ')}</div> : null}
-            </div>
-          ) : null}
-
-          <button type="button" disabled={busy === 'create'} onClick={() => void create()} className="btn-primary">💾 تسجيل الدفعة</button>
-        </div>
+            <Button variant="contained" disabled={busy === 'create'} onClick={() => void create()}>💾 تسجيل الدفعة</Button>
+          </CardContent>
+        </Card>
       ) : null}
 
-      <div className="vex-card" style={{ marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <label className="vex-label" style={{ minWidth: 260 }}>الزبون<EntityPicker value={filterCustomer} onChange={setFilterCustomer} search={searchCustomers} placeholder="كل الزبائن" /></label>
-        <label className="vex-label">الطريقة
-          <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} className="vex-select"><option value="">الكل</option>{METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</select>
-        </label>
-      </div>
+      <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mb: 2 }}>
+        <Box sx={{ minWidth: 260 }}><EntityPicker label="الزبون" value={filterCustomer} onChange={setFilterCustomer} search={searchCustomers} placeholder="كل الزبائن" /></Box>
+        <TextField select size="small" label="الطريقة" value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">الكل</MenuItem>{METHODS.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
+        </TextField>
+      </Stack>
 
-      <div className="vex-card vex-card--no-pad" style={{ opacity: list.loading ? 0.6 : 1 }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="vex-table">
-            <thead><tr><th>رقم السند</th><th>الزبون</th><th>التاريخ</th><th>الطريقة</th><th>المبلغ</th><th>غير الموزّع</th><th>الحالة</th><th /></tr></thead>
-            <tbody>
-              {list.items.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--txt-muted)', padding: '32px 0' }}>لا توجد دفعات</td></tr>
-              ) : list.items.map((p) => (
-                <tr key={p.id} style={p.isReversed ? { opacity: 0.55 } : undefined}>
-                  <td style={{ fontWeight: 600, color: 'var(--clr-primary)' }}>{p.paymentNumber}</td>
-                  <td>{p.customerName}</td>
-                  <td style={{ color: 'var(--txt-secondary)' }}>{p.paymentDate}</td>
-                  <td>{methodLabel(p.paymentMethod)}</td>
-                  <td style={{ fontWeight: 700 }}>{p.amountUsd > 0 ? `${money(p.amountUsd)} $` : `${money(p.amountSyp)} ل.س`}</td>
-                  <td>{p.unallocatedUsd > 0 ? `${money(p.unallocatedUsd)} $` : p.unallocatedSyp > 0 ? `${money(p.unallocatedSyp)} ل.س` : '—'}</td>
-                  <td>{p.isReversed ? <span className="badge badge--danger">معكوسة</span> : <span className="badge badge--success">فعّالة</span>}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}><DocumentViewButton load={async () => paymentDocument(p, methodLabel(p.paymentMethod))} />{' '}{!p.isReversed ? <button type="button" className="btn-ghost" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => { setReverseId(p.id); setReverseReason(''); }}>↩ عكس</button> : null}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pageSize={list.pageSize} totalCount={list.totalCount} onPageChange={list.setPage} onPageSizeChange={list.changePageSize} />
-      </div>
+      <DataTable
+        rows={list.items} getKey={(p) => p.id} loading={list.loading} empty="لا توجد دفعات"
+        paging={{ page: list.page - 1, pageSize: list.pageSize, total: list.totalCount, onPage: (p) => list.setPage(p + 1), onPageSize: list.changePageSize }}
+        columns={[
+          { header: 'رقم السند', render: (p) => <Typography fontWeight={700} color="primary" sx={{ opacity: p.isReversed ? 0.55 : 1 }}>{p.paymentNumber}</Typography>, nowrap: true },
+          { header: 'الزبون', render: (p) => p.customerName },
+          { header: 'التاريخ', render: (p) => p.paymentDate, nowrap: true },
+          { header: 'الطريقة', render: (p) => methodLabel(p.paymentMethod) },
+          { header: 'المبلغ', render: (p) => <Money usd={p.amountUsd} syp={p.amountSyp} fontWeight={700} />, numeric: true },
+          { header: 'غير الموزّع', render: (p) => (p.unallocatedUsd > 0 || p.unallocatedSyp > 0 ? <Money usd={p.unallocatedUsd} syp={p.unallocatedSyp} /> : '—'), numeric: true },
+          { header: 'الحالة', render: (p) => <Chip size="small" variant="outlined" color={p.isReversed ? 'error' : 'success'} label={p.isReversed ? 'معكوسة' : 'فعّالة'} /> },
+          {
+            header: ' ', nowrap: true,
+            render: (p) => (
+              <Stack direction="row" gap={1}>
+                <DocumentViewButton load={async () => paymentDocument(p, methodLabel(p.paymentMethod))} />
+                {!p.isReversed ? <Button size="small" color="error" onClick={() => setReverseId(p.id)}>↩ عكس</Button> : null}
+              </Stack>
+            ),
+          },
+        ]}
+      />
 
-      {reverseId ? (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="vex-card" style={{ width: 420, maxWidth: '92vw' }}>
-            <h2 className="vex-section-title">عكس الدفعة</h2>
-            <p style={{ fontSize: 13, color: 'var(--txt-secondary)' }}>ستُعاد المبالغ الموزّعة إلى أرصدة الفواتير ويُلغى القيد في المحاسبة.</p>
-            <label className="vex-label">السبب *<input value={reverseReason} onChange={(e) => setReverseReason(e.target.value)} className="vex-input" /></label>
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button type="button" disabled={busy === reverseId} className="btn-danger" onClick={() => void reverse()}>تأكيد العكس</button>
-              <button type="button" className="btn-ghost" onClick={() => setReverseId('')}>إلغاء</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+      <ReasonDialog open={Boolean(reverseId)} title="عكس الدفعة — ستُعاد المبالغ الموزّعة إلى أرصدة الفواتير ويُلغى القيد في المحاسبة" confirmLabel="تأكيد العكس" minLength={5}
+        onClose={() => setReverseId('')} onConfirm={reverse} />
+    </Box>
   );
 }

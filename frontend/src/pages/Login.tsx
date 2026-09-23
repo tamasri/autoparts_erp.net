@@ -1,236 +1,83 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Alert, Avatar, Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, TextField, Typography } from '@mui/material';
 import { authApi } from '../api/endpoints/auth';
 import { useAuthStore } from '../stores/authStore';
 
-export default function Login() {
+type LoginUser = { id?: string; userName?: string; fullName?: string; firstName?: string; lastName?: string; roles?: Array<string | { code?: string; name?: string }> };
+type LoginResponse = { accessToken: string; refreshToken: string; user?: LoginUser; userId?: string; username?: string; fullName?: string; roles?: LoginUser['roles']; permissions?: string[] };
+
+export default function Login(): JSX.Element {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.login);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [showPass, setShowPass] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
-    if (!user || !pass) {
-      setError('يرجى إدخال اسم المستخدم وكلمة المرور');
-      return;
-    }
-
+  async function handleLogin(): Promise<void> {
+    if (!user || !pass) { setError('يرجى إدخال اسم المستخدم وكلمة المرور'); return; }
     setLoading(true);
     setError('');
-
     try {
       const res = await authApi.login(user, pass);
-      const data = res.data?.data ?? res.data;
+      const data = (res.data?.data ?? res.data) as LoginResponse;
       const userNode = data.user ?? {};
       const rolesRaw = userNode.roles ?? data.roles ?? [];
-      const roles = Array.isArray(rolesRaw)
-        ? rolesRaw.map((r: any) => (typeof r === 'string' ? r : r.code ?? r.name ?? '')).filter(Boolean)
-        : [];
-      const fullName = userNode.fullName
-        ?? [userNode.firstName, userNode.lastName].filter(Boolean).join(' ')
-        ?? data.fullName
-        ?? user;
-
+      const roles = rolesRaw.map((r) => (typeof r === 'string' ? r : r.code ?? r.name ?? '')).filter(Boolean);
+      const fullName = userNode.fullName || [userNode.firstName, userNode.lastName].filter(Boolean).join(' ') || data.fullName || user;
       setAuth({
         token: data.accessToken,
         refreshToken: data.refreshToken,
-        user: {
-          id: userNode.id ?? data.userId ?? '',
-          username: userNode.userName ?? data.username ?? user,
-          fullName,
-          roles,
-        },
+        user: { id: userNode.id ?? data.userId ?? '', username: userNode.userName ?? data.username ?? user, fullName, roles },
         permissions: data.permissions ?? [],
       });
-
       navigate('/');
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail
-        ?? err?.response?.data?.message
-        ?? err?.response?.data?.title
-        ?? 'فشل تسجيل الدخول — تحقق من البيانات';
-      setError(msg);
+    } catch (err: unknown) {
+      const r = err as { response?: { data?: { detail?: string; message?: string; title?: string } } };
+      setError(r.response?.data?.detail ?? r.response?.data?.message ?? r.response?.data?.title ?? 'فشل تسجيل الدخول — تحقق من البيانات');
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  const onEnter = (e: React.KeyboardEvent): void => { if (e.key === 'Enter') void handleLogin(); };
 
   return (
-    <div className="login-bg">
-      <div
-        id="login-card"
-        style={{
-          background: '#fff',
-          padding: '44px 40px 40px',
-          borderRadius: 'var(--radius-xl)',
-          width: '100%',
-          maxWidth: 440,
-          boxShadow: 'var(--shadow-lg)',
-          direction: 'rtl',
-        }}
-      >
-        {/* Logo */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            background: 'linear-gradient(135deg, #5c54ff, #7b75ff)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 24,
-            fontWeight: 800,
-            color: '#fff',
-            boxShadow: '0 8px 24px rgba(92,84,255,0.35)',
-            marginBottom: 16,
-          }}>A</div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--txt-primary)', margin: 0 }}>
-            مرحباً بعودتك
-          </h1>
-          <p style={{ fontSize: 13.5, color: 'var(--txt-secondary)', marginTop: 6, margin: '6px 0 0' }}>
-            AutoParts ERP — نظام إدارة قطع الغيار
-          </p>
-        </div>
+    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2, background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}22, ${t.palette.background.default})` }}>
+      <Paper id="login-card" elevation={6} sx={{ width: '100%', maxWidth: 420, p: { xs: 3, sm: 5 }, borderRadius: 4 }}>
+        <Stack alignItems="center" spacing={1} sx={{ mb: 3 }}>
+          <Avatar sx={{ width: 56, height: 56, bgcolor: 'primary.main', fontWeight: 800, fontSize: 24 }}>A</Avatar>
+          <Typography variant="h5" fontWeight={800}>مرحباً بعودتك</Typography>
+          <Typography variant="body2" color="text.secondary">AutoParts ERP — نظام إدارة قطع الغيار</Typography>
+        </Stack>
 
-        {/* Error */}
-        {error && (
-          <div className="vex-alert vex-alert--error">
-            <span className="vex-alert__icon">⚠</span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Username */}
-        <div style={{ marginBottom: 18 }}>
-          <label
-            htmlFor="login-username"
-            style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--txt-secondary)', marginBottom: 6 }}
-          >
-            البريد الإلكتروني أو اسم المستخدم
-          </label>
-          <input
-            id="login-username"
-            type="text"
-            className="vex-input"
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            placeholder="admin"
-            autoFocus
-            autoComplete="username"
+        <Stack spacing={2}>
+          {error ? <Alert severity="error">{error}</Alert> : null}
+          <TextField
+            id="login-username" label="البريد الإلكتروني أو اسم المستخدم" value={user} onChange={(e) => setUser(e.target.value)} onKeyDown={onEnter}
+            autoFocus autoComplete="username" fullWidth
           />
-        </div>
-
-        {/* Password */}
-        <div style={{ marginBottom: 14 }}>
-          <label
-            htmlFor="login-password"
-            style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--txt-secondary)', marginBottom: 6 }}
-          >
-            كلمة المرور
-          </label>
-          <div style={{ position: 'relative' }}>
-            <input
-              id="login-password"
-              type={showPass ? 'text' : 'password'}
-              className="vex-input"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              style={{ paddingLeft: 40 }}
-            />
-            <button
-              type="button"
-              id="toggle-password-btn"
-              onClick={() => setShowPass((v) => !v)}
-              style={{
-                position: 'absolute',
-                left: 10,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--txt-muted)',
-                fontSize: 16,
-                padding: 4,
-                lineHeight: 1,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-              title={showPass ? 'إخفاء' : 'إظهار'}
-            >
-              {showPass ? '🙈' : '👁'}
-            </button>
-          </div>
-        </div>
-
-        {/* Remember me + Forgot */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 24,
-        }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--txt-secondary)', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              style={{
-                accentColor: 'var(--clr-primary)',
-                width: 15,
-                height: 15,
-                cursor: 'pointer',
-              }}
-            />
-            تذكرني
-          </label>
-          <button
-            type="button"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--clr-primary)',
-              fontSize: 13,
-              cursor: 'pointer',
-              fontWeight: 500,
-              padding: 0,
+          <TextField
+            id="login-password" label="كلمة المرور" type={showPass ? 'text' : 'password'} value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={onEnter}
+            autoComplete="current-password" fullWidth
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton id="toggle-password-btn" size="small" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}>
+                    {showPass ? '🙈' : '👁'}
+                  </IconButton>
+                </InputAdornment>
+              ),
             }}
-          >
-            نسيت كلمة المرور؟
-          </button>
-        </div>
-
-        {/* Sign In Button */}
-        <button
-          id="login-submit-btn"
-          type="button"
-          onClick={handleLogin}
-          disabled={loading}
-          className="btn-primary btn-primary--lg"
-          style={{ width: '100%', borderRadius: 'var(--radius-pill)', fontSize: 15, fontWeight: 700 }}
-        >
-          {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
-              <span className="vex-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-              جارٍ الدخول...
-            </span>
-          ) : 'تسجيل الدخول'}
-        </button>
-
-        {/* Footer note */}
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--txt-muted)', marginTop: 24, lineHeight: 1.5 }}>
-          بتسجيل الدخول تؤكد موافقتك على سياسة الاستخدام
-        </p>
-      </div>
-    </div>
+          />
+          <Button id="login-submit-btn" variant="contained" size="large" disabled={loading} onClick={() => void handleLogin()} sx={{ borderRadius: 5, py: 1.2, fontWeight: 700 }}>
+            {loading ? <><CircularProgress size={18} color="inherit" sx={{ mx: 1 }} />جارٍ الدخول...</> : 'تسجيل الدخول'}
+          </Button>
+          <Typography variant="caption" color="text.secondary" textAlign="center">نسيت كلمة المرور؟ يعيد مسؤول النظام تعيينها من شاشة المستخدمين.</Typography>
+        </Stack>
+      </Paper>
+    </Box>
   );
 }
