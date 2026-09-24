@@ -70,6 +70,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   cp "$ENV_TEMPLATE" "$ENV_FILE"
   echo "Created $ENV_FILE from template."
 fi
+chmod 600 "$ENV_FILE"
 
 set -a
 source "$ENV_FILE"
