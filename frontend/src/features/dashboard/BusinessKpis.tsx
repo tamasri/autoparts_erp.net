@@ -9,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { chartColors } from '../../theme/theme';
 import { dashboardApi, type BusinessKpis as Kpis, type KpiAgeing, type KpiFilters, type KpiRank } from '../../api/endpoints/dashboard';
 import { salesRepsApi, type SalesRep } from '../../api/endpoints/salesReps';
 import { customersApi } from '../../api/endpoints/customers';
@@ -194,6 +195,7 @@ export default function BusinessKpis(): JSX.Element {
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2 }}>
             <Typography fontWeight={700}>آخر 12 شهراً ($)</Typography>
             <BarChart
+              colors={chartColors}
               height={280}
               xAxis={[{ scaleType: 'band', data: data.months.map((m) => `${MONTHS[m.month - 1]} ${String(m.year).slice(2)}`) }]}
               series={[

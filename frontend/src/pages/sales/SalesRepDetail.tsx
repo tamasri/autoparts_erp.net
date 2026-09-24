@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Box, Button, Link, Paper, Stack, TextField, Typography } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { chartColors, chartTargetColor } from '../../theme/theme';
 import { salesRepsApi, SALES_REPS, type SalesRepDetail as Detail } from '../../api/endpoints/salesReps';
 import { unwrapNode } from '../../api/apiData';
 import { useLoad } from '../../hooks/useLoad';
@@ -102,10 +103,11 @@ export default function SalesRepDetail(): JSX.Element {
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
               <Typography fontWeight={700} sx={{ mb: 1 }}>الهدف والإنجاز شهرياً — آخر 12 شهراً ($)</Typography>
               <BarChart
+                colors={chartColors}
                 height={250}
                 xAxis={[{ scaleType: 'band', data: monthLabels }]}
                 series={[
-                  { data: (data?.months ?? []).map((m) => m.targetUsd), label: 'الهدف', color: '#b0bec5' },
+                  { data: (data?.months ?? []).map((m) => m.targetUsd), label: 'الهدف', color: chartTargetColor },
                   { data: (data?.months ?? []).map((m) => m.netSalesUsd), label: 'صافي المبيعات' },
                 ]}
                 margin={{ top: 40, bottom: 30, left: 60, right: 10 }}
@@ -116,6 +118,7 @@ export default function SalesRepDetail(): JSX.Element {
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2 }}>
             <Typography fontWeight={700} sx={{ mb: 1 }}>الربح الإجمالي والعمولة والتحصيل — آخر 12 شهراً ($)</Typography>
             <BarChart
+              colors={chartColors}
               height={260}
               xAxis={[{ scaleType: 'band', data: monthLabels }]}
               series={[

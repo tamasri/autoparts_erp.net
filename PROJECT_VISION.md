@@ -83,7 +83,9 @@
 **Rationale (audit, 7,686 LOC read):** All libraries were already in `package.json`. The app had 641 inline `style={{}}` objects, 6 `window.prompt` calls for critical input, zero caching, and i18next completely unused. Migration installs nothing new — it activates the existing stack.
 
 **Governance constraints:**
-1. Vex CSS design tokens (`#5c54ff` palette, 12 px radii, card shadows) are preserved inside `createTheme` — visual identity unchanged.
+1. ~~Vex CSS design tokens (`#5c54ff`)~~ — replaced 2026-09-24 by the owner's visual identity (below); 12 px radii and card shadows kept.
+
+**Visual identity (owner-approved 2026-09-24).** A light interface: white surfaces on a pale ivory page (`#F7F6F1`). Primary Emerald Shadow `#054239` → Forest `#002623` (buttons, headings), Mountain Teal `#428177` (outlines, links); secondary Golden Wheat `#988561` / Antique Sand `#B9A779`; errors Damask Red `#6B1F2A`; text Charcoal `#161616` / Stone `#3D3A3B`; table heads Ivory Mist `#EDEBE0`. White menu (option B). The geometric eight-point-star pattern (`theme/pattern.ts`) at low opacity behind every page, across the menu, in dialog titles, KPI tiles and on the sign-in screen. Colours live only in `theme.ts` (`brand`, `chartColors`); screens use the palette, never literals.
 2. `theme.css` was deleted once its last consumer was migrated (2026-09-23).
 3. Arabic remains the primary language; the language switcher is additive.
 4. All `window.prompt` calls replaced with Zod-validated MUI `Dialog`s in Phase 3.

@@ -6,8 +6,9 @@ import { unwrapList } from '../../api/apiData';
 import { useConfirm } from '../../hooks/useConfirm';
 import { extractApiError, toast } from '../../lib/toast';
 import { tagChipSx } from './TagChips';
+import { brand } from '../../theme/theme';
 
-const PALETTE = ['#5c54ff', '#ff8800', '#2e9e5b', '#d64545', '#0f8fa8', '#8e44ad', '#6b7280'];
+const PALETTE = [brand.emerald, brand.wheat, brand.damask, brand.teal, brand.stone, brand.cherry, brand.forest];
 
 export default function TagsDialog({ open, onClose, onChanged }: { open: boolean; onClose: () => void; onChanged: () => void }): JSX.Element {
   const [tags, setTags] = useState<Tag[]>([]);

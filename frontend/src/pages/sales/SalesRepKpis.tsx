@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Box, Button, Chip, Paper, Stack, TextField, Typography } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { chartColors, chartTargetColor } from '../../theme/theme';
 import { salesRepsApi, type SalesRep } from '../../api/endpoints/salesReps';
 import { unwrapNode } from '../../api/apiData';
 import { useLoad } from '../../hooks/useLoad';
@@ -106,6 +107,7 @@ export default function SalesRepKpis(): JSX.Element {
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
             <Typography fontWeight={700} sx={{ mb: 1 }}>نسبة الإنجاز من الهدف (%)</Typography>
             <BarChart
+              colors={chartColors}
               height={Math.max(180, ranked.length * 42)}
               layout="horizontal"
               yAxis={[{ scaleType: 'band', data: ranked.map((r) => r.fullName) }]}
@@ -117,10 +119,11 @@ export default function SalesRepKpis(): JSX.Element {
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
             <Typography fontWeight={700} sx={{ mb: 1 }}>صافي المبيعات والربح الإجمالي والعمولة ($)</Typography>
             <BarChart
+              colors={chartColors}
               height={Math.max(180, ranked.length * 42)}
               xAxis={[{ scaleType: 'band', data: ranked.map((r) => r.fullName) }]}
               series={[
-                { data: ranked.map((r) => r.targetUsd), label: 'الهدف', color: '#b0bec5' },
+                { data: ranked.map((r) => r.targetUsd), label: 'الهدف', color: chartTargetColor },
                 { data: ranked.map((r) => r.netSalesUsd), label: 'صافي المبيعات' },
                 { data: ranked.map((r) => r.grossProfitUsd), label: 'الربح الإجمالي' },
                 { data: ranked.map((r) => r.commissionUsd), label: 'العمولة' },

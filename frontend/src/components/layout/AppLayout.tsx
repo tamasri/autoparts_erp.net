@@ -5,7 +5,8 @@ import {
   AppBar, Avatar, Badge, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tab, Tabs, ToggleButton, ToggleButtonGroup, Toolbar, Tooltip, Typography,
   useMediaQuery,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
+import { patternImage } from '../../theme/pattern';
 import { useAuthStore } from '../../stores/authStore';
 import { signOut } from '../../lib/session';
 import { useDisplayStore, type PrimaryCurrency } from '../../stores/displayStore';
@@ -27,7 +28,7 @@ const initials = (name: string): string => {
 
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }): JSX.Element {
   const theme = useTheme();
-  const bg = theme.palette.vex.sidebarBg;
+  const { brand } = theme.palette;
   const { pathname } = useLocation();
   // Live counts on the menu: requests waiting for this user, open stock alerts (a section counts its tabs).
   const pendingApprovals = useRealtimeStore((st) => st.pendingApprovals);
@@ -38,13 +39,22 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     <Box
       component="aside"
       sx={{
-        width: collapsed ? WIDTH_COLLAPSED : WIDTH, flexShrink: 0, bgcolor: bg, color: 'rgba(255,255,255,0.78)', position: 'sticky', top: 0, height: '100vh',
+        width: collapsed ? WIDTH_COLLAPSED : WIDTH, flexShrink: 0, color: brand.stone, position: 'sticky', top: 0, height: '100vh',
         display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'width 160ms ease', zIndex: 10,
+        // A white menu over the identity pattern, separated from the page by a thin line.
+        bgcolor: 'background.paper', backgroundImage: patternImage(brand.sand, 0.16, 1), backgroundSize: '72px 72px',
+        borderInlineEnd: 1, borderColor: 'divider',
       }}
     >
-      <Box sx={{ height: 64, px: 2, display: 'flex', alignItems: 'center', gap: 1.5, borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-        <Avatar variant="rounded" sx={{ bgcolor: 'primary.main', fontWeight: 800, width: 36, height: 36 }}>A</Avatar>
-        {!collapsed ? <Typography fontWeight={700} color="#fff" noWrap>AutoParts ERP</Typography> : null}
+      <Box
+        sx={{
+          height: 64, px: 2, display: 'flex', alignItems: 'center', gap: 1.5, borderBottom: 1, borderColor: 'divider', flexShrink: 0,
+          // The brand band: the pattern at full strength.
+          bgcolor: 'background.paper', backgroundImage: patternImage(brand.wheat, 0.28, 1.2), backgroundSize: '48px 48px',
+        }}
+      >
+        <Avatar variant="rounded" sx={{ bgcolor: brand.emerald, color: brand.sand, fontWeight: 800, width: 36, height: 36 }}>A</Avatar>
+        {!collapsed ? <Typography fontWeight={800} color={brand.forest} noWrap sx={{ bgcolor: alpha('#fff', 0.85), px: 0.75, borderRadius: 1 }}>AutoParts ERP</Typography> : null}
       </Box>
 
       <Box component="nav" sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
@@ -53,8 +63,8 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             key={group.title}
             dense
             disablePadding
-            subheader={collapsed ? <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', my: 1 }} /> : (
-              <ListSubheader disableSticky sx={{ bgcolor: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, lineHeight: '30px', mt: 1 }}>{group.title}</ListSubheader>
+            subheader={collapsed ? <Divider sx={{ my: 1 }} /> : (
+              <ListSubheader disableSticky sx={{ bgcolor: 'transparent', color: brand.wheat, fontSize: 11, fontWeight: 700, lineHeight: '30px', mt: 1 }}>{group.title}</ListSubheader>
             )}
           >
             {group.items.map((item) => (
@@ -65,9 +75,10 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                   selected={itemMatches(item, pathname)}
                   sx={{
                     mx: 1, my: 0.25, borderRadius: 2, minHeight: 40, color: 'inherit', justifyContent: collapsed ? 'center' : 'flex-start',
-                    '&.Mui-selected': { bgcolor: 'rgba(92,84,255,0.28)', color: '#fff', fontWeight: 700 },
-                    '&.Mui-selected:hover': { bgcolor: 'rgba(92,84,255,0.36)' },
-                    '&:hover': { bgcolor: 'rgba(255,255,255,0.07)' },
+                    // Selected: tinted, with an emerald bar on the reading edge (written LTR; the RTL cache flips it).
+                    '&.Mui-selected': { bgcolor: brand.primaryTint, color: brand.forest, fontWeight: 700, boxShadow: `inset 3px 0 0 ${brand.emerald}` },
+                    '&.Mui-selected:hover': { bgcolor: alpha(brand.emerald, 0.14) },
+                    '&:hover': { bgcolor: alpha(brand.emerald, 0.06) },
                   }}
                 >
                   <ListItemIcon sx={{ color: 'inherit', minWidth: collapsed ? 0 : 34, justifyContent: 'center', fontSize: 16 }}>
@@ -81,8 +92,8 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         ))}
       </Box>
 
-      <Box sx={{ p: 1, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <Button fullWidth size="small" onClick={onToggle} sx={{ color: 'rgba(255,255,255,0.7)' }}>{collapsed ? '»' : '« طيّ القائمة'}</Button>
+      <Box sx={{ p: 1, borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Button fullWidth size="small" onClick={onToggle} sx={{ color: 'text.secondary' }}>{collapsed ? '»' : '« طيّ القائمة'}</Button>
       </Box>
     </Box>
   );
@@ -106,7 +117,7 @@ export default function AppLayout(): JSX.Element {
   const name = user?.fullName || user?.username || 'مستخدم';
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsedByUser((v) => !v)} />
 
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -132,7 +143,7 @@ export default function AppLayout(): JSX.Element {
               <Typography variant="caption" color="text.secondary">{user?.roles?.[0] ?? ''}</Typography>
             </Box>
             <IconButton onClick={(e) => setAccount(e.currentTarget)} size="small">
-              <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: 14, fontWeight: 700 }}>{initials(name)}</Avatar>
+              <Avatar sx={{ bgcolor: 'primary.main', color: theme.palette.brand.sand, width: 36, height: 36, fontSize: 14, fontWeight: 700 }}>{initials(name)}</Avatar>
             </IconButton>
             <Menu anchorEl={account} open={Boolean(account)} onClose={() => setAccount(null)}>
               <MenuItem disabled>{name}</MenuItem>
