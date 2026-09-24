@@ -839,7 +839,11 @@ erpnext_section() {
   local erp_containers; erp_containers=$(docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}' | grep -Ei 'frappe|erpnext' || true)
   if [[ -n "$erp_containers" ]]; then
     echo "$erp_containers"
-    grep -viE '\bUp\b' <<<"$erp_containers" | grep -q . && flag FAIL "an ERPNext container is not running: $(grep -viE '\bUp\b' <<<"$erp_containers" | cut -f1 | tr '\n' ' ')"
+    # create-site and configurator are one-shot setup jobs in frappe_docker's own compose file:
+    # they are meant to run once and exit 0, not stay up. Only a container that is neither
+    # running nor cleanly finished (crashed, exited non-zero, restarting, ...) is a real failure.
+    local down_containers; down_containers=$(grep -viE '\bUp\b' <<<"$erp_containers" | grep -viE 'Exited \(0\)')
+    [[ -n "$down_containers" ]] && flag FAIL "an ERPNext container is not running: $(cut -f1 <<<"$down_containers" | tr '\n' ' ')"
     local backend; backend=$(docker ps --format '{{.Names}}\t{{.Image}}' | grep -Ei 'frappe|erpnext' | grep -Ei 'backend' | head -1 | cut -f1)
     [[ -z "$backend" ]] && backend=$(docker ps --format '{{.Names}}\t{{.Image}}' | grep -Ei 'frappe|erpnext' | grep -viE 'db|mariadb|redis|nginx|frontend|proxy|websocket|socketio' | head -1 | cut -f1)
     if [[ -n "$backend" ]]; then
