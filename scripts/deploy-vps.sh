@@ -268,7 +268,7 @@ echo "Backups scheduled: daily 02:30, restore check Sundays 04:15, log $BACKUP_L
 step "Deployment completed"
 echo "VPS deployment is up."
 echo "App URL: https://<your-domain-or-vps-ip>"
-echo "Health:  https://localhost/health (from VPS shell)"
+echo "Health:  docker compose --env-file .env.vps -f docker-compose.vps.yml exec -T api wget -qO- http://localhost:8080/health/ready"
 echo
 if [[ "$seed_admin_generated" == "1" ]]; then
   echo "!! Save this admin login now - it will not be shown again !!"

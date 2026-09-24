@@ -190,20 +190,30 @@ app_section() {
 
   sub "HTTP checks through nginx"
   local path code
-  for path in /health /health/ready / /robots.txt /api/v1/auth/me; do
+  # /health and /metrics are private on purpose (nginx allows only its own loopback): 403 from here is correct.
+  # The API's real health is checked inside its container further down.
+  for path in / /robots.txt /api/v1/auth/me /health /metrics; do
     code=$(curl -sk -o /dev/null -m 15 -w '%{http_code} %{time_total}s' "https://localhost$path" 2>&1)
     echo "  GET https://localhost$path -> $code"
   done
-  code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' https://localhost/health/ready || true)
-  [[ "$code" == "200" ]] || flag FAIL "https://localhost/health/ready answered $code"
+  code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' https://localhost/ || true)
+  [[ "$code" == "200" ]] || flag FAIL "https://localhost/ answered $code"
+  for path in /health /metrics; do
+    code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' "https://localhost$path" || true)
+    [[ "$code" == "200" ]] && flag WARN "https://localhost$path is reachable through nginx (it should be private)"
+  done
   code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' https://localhost/api/v1/auth/me || true)
   [[ "$code" == "401" ]] || flag WARN "an unauthenticated /api/v1/auth/me answered $code (expected 401)"
   code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' http://localhost/ || true)
   echo "  GET http://localhost/ -> $code (a redirect to https is expected)"
   sub "Security headers"
-  run sh -c "curl -skI -m 15 https://localhost/ | grep -iE '^(strict-transport|content-security|x-frame|x-content-type|referrer-policy|permissions-policy|x-robots|server):'"
-  sub "Health endpoint body"
-  run sh -c "curl -sk -m 15 https://localhost/health/ready; echo"
+  local headers h; headers=$(curl -skI -m 15 https://localhost/ 2>/dev/null)
+  grep -iE '^(strict-transport-security|content-security-policy|x-frame-options|x-content-type-options|referrer-policy|permissions-policy|x-robots-tag|server):' <<<"$headers"
+  if [[ -n "$headers" ]]; then
+    for h in strict-transport-security content-security-policy x-frame-options x-content-type-options; do
+      grep -qi "^$h:" <<<"$headers" || flag WARN "security header $h is missing on https://localhost/"
+    done
+  fi
 
   sub "API log: errors in the last $SINCE"
   local log; log=$("${COMPOSE[@]}" logs --no-color --since "$SINCE" api 2>/dev/null)
@@ -822,11 +832,7 @@ erpnext_section() {
   [[ "${recent:-0}" -gt 0 ]] && flag WARN "$recent ERPNext Error Log entries since yesterday"
   echo "failed scheduled jobs (latest):"
   erp_get "/api/resource/Scheduled Job Log?fields=[\"scheduled_job_type\",\"status\",\"creation\"]&filters=[[\"status\",\"=\",\"Failed\"]]&order_by=creation%20desc&limit_page_length=15"
-  echo "background workers (RQ Worker):"
-  local workers; workers=$(erp_get "/api/resource/RQ Worker?fields=[\"name\",\"status\",\"queue\",\"last_heartbeat\",\"failed_job_count\"]&limit_page_length=20"); echo "$workers"
-  [[ "$workers" == *"HTTP 200"* && "$workers" != *'"name"'* ]] && flag FAIL "no ERPNext background worker is running (deletions, emails, reports wait forever)"
-  echo "failed background jobs (RQ Job):"
-  erp_get "/api/resource/RQ Job?fields=[\"job_name\",\"status\",\"queue\",\"exc_info\"]&filters=[[\"status\",\"=\",\"failed\"]]&limit_page_length=10"
+  # Background workers are checked with bench doctor below (the RQ Worker / RQ Job list API fails inside Frappe 16 itself).
   echo "Transaction Deletion Records:"
   erp_get "/api/resource/Transaction Deletion Record?fields=[\"name\",\"company\",\"status\",\"creation\"]&order_by=creation%20desc&limit_page_length=5"
 
@@ -849,7 +855,8 @@ erpnext_section() {
     if [[ -n "$backend" ]]; then
       echo "-- bench in $backend --"
       run docker exec "$backend" bench version
-      run docker exec "$backend" bench doctor
+      local doctor; doctor=$(docker exec "$backend" bench doctor 2>&1); echo "$doctor"
+      grep -qE 'Workers online: [1-9]' <<<"$doctor" || flag FAIL "no ERPNext background worker is online (deletions, emails, reports wait forever)"
       run docker exec "$backend" bash -lc 'ls sites | grep -vE "\.(json|txt)$|^assets$"'
       run docker exec "$backend" bash -lc 'for s in $(ls sites | grep -vE "\.(json|txt)$|^assets$|^apps"); do echo "site $s:"; bench --site "$s" scheduler status 2>&1 | tail -2; done'
     fi
@@ -922,7 +929,21 @@ security_section() {
   have fail2ban-client || flag INFO "fail2ban is not installed"
   sub "Ports open to the internet (published by Docker or listening on all addresses)"
   have ss && ss -tulpn 2>/dev/null | awk 'NR>1 && ($5 ~ /^(0\.0\.0\.0|\*|\[::\]):/) {print $1, $5, $7}'
-  if have ss && ss -tlnp 2>/dev/null | awk '{print $4}' | grep -qE '^(0\.0\.0\.0|\*|\[::\]):5432$'; then flag FAIL "PostgreSQL (5432) listens on all addresses"; fi
+  if have ss && ss -tlnp 2>/dev/null | awk '{print $4}' | grep -qE '^(0\.0\.0\.0|\*|\[::\]):5432$'; then
+    if have ufw && ufw status 2>/dev/null | grep -q 'Status: active' && ! ufw status 2>/dev/null | grep -E '^5432(/tcp)? ' | grep -q 'Anywhere'; then
+      flag WARN "PostgreSQL (5432) listens on all addresses (the firewall limits it; listen_addresses could be narrower)"
+    else
+      flag FAIL "PostgreSQL (5432) listens on all addresses and the firewall does not limit it"
+    fi
+  fi
+  # A port Docker publishes on all addresses is reachable from the internet whatever ufw says (Docker writes its own rules).
+  local published
+  published=$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E '0\.0\.0\.0:[0-9]+' | grep -vE '0\.0\.0\.0:(80|443)->' || true)
+  if [[ -n "$published" ]]; then
+    echo "-- containers publishing ports other than 80/443 on all addresses --"; echo "$published"
+    grep -Ei 'frappe|erpnext' <<<"$published" | grep -q . \
+      && flag WARN "ERPNext is published on all addresses ($(grep -Ei 'frappe|erpnext' <<<"$published" | grep -oE '0\.0\.0\.0:[0-9]+' | head -1)) — reachable from the internet over plain HTTP"
+  fi
   if have ss && ss -tlnp 2>/dev/null | awk '{print $4}' | grep -qE '^(0\.0\.0\.0|\*|\[::\]):6379$'; then flag FAIL "Redis (6379) listens on all addresses"; fi
   sub "Files that must not be here"
   local f
@@ -933,10 +954,15 @@ security_section() {
   git ls-files --error-unmatch .env.vps >/dev/null 2>&1 && flag FAIL ".env.vps is tracked by git"
   sub "Public exposure of internal pages"
   local p code
-  for p in /hangfire /metrics /swagger /swagger/index.html /.env /.git/config; do
+  # The SPA answers unknown paths with its own index.html (200), so a 200 alone proves nothing: compare with the app shell.
+  local shell body
+  shell=$(curl -sk -m 10 https://localhost/ | sha256sum)
+  for p in /hangfire /metrics /swagger /swagger/index.html /.env /.git/config /appsettings.json; do
     code=$(curl -sk -o /dev/null -m 10 -w '%{http_code}' "https://localhost$p" || true)
+    body=$(curl -sk -m 10 "https://localhost$p" | sha256sum)
+    if [[ "$code" == "200" && "$body" == "$shell" ]]; then echo "  https://localhost$p -> 200 (the app's own page, not a file)"; continue; fi
     echo "  https://localhost$p -> $code"
-    [[ "$code" == "200" && "$p" =~ ^/(\.env|\.git) ]] && flag FAIL "$p is downloadable from the web"
+    [[ "$code" == "200" ]] && flag FAIL "$p is served to the web"
   done
 }
 
