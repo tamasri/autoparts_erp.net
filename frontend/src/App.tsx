@@ -36,6 +36,7 @@ const IssueOrders      = lazy(() => import('./pages/inventory/IssueOrders'));
 const Purchasing       = lazy(() => import('./pages/purchasing/Purchasing'));
 const SalesReps        = lazy(() => import('./pages/sales/SalesReps'));
 const SalesRepDetail   = lazy(() => import('./pages/sales/SalesRepDetail'));
+const SalesRepKpis     = lazy(() => import('./pages/sales/SalesRepKpis'));
 const Warehouses       = lazy(() => import('./pages/inventory/Warehouses'));
 const Movements        = lazy(() => import('./pages/inventory/Movements'));
 const InventoryAlerts  = lazy(() => import('./pages/inventory/InventoryAlerts'));
@@ -129,6 +130,7 @@ export default function App(): JSX.Element {
         <Route path="invoices"                element={<RouteWrapper><Invoices /></RouteWrapper>} />
         <Route path="payments"                element={<RouteWrapper><Payments /></RouteWrapper>} />
         <Route path="sales-reps"              element={<RouteWrapper><SalesReps /></RouteWrapper>} />
+        <Route path="sales-reps/kpis"         element={<RouteWrapper><SalesRepKpis /></RouteWrapper>} />
         <Route path="sales-reps/:userId"      element={<RouteWrapper><SalesRepDetail /></RouteWrapper>} />
         <Route path="invoices/new"            element={<RouteWrapper><InvoiceWorkspace /></RouteWrapper>} />
         <Route path="invoices/:id"            element={<RouteWrapper><InvoiceDetail /></RouteWrapper>} />

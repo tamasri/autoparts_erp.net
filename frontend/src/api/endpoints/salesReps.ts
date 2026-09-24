@@ -1,6 +1,10 @@
 import { apiClient } from '../client';
 
-/** A rep and their figures for the chosen period (posted invoices, dollars). */
+/**
+ * A rep and their figures for the chosen period (posted invoices, dollars). Gross profit = revenue after discounts, without delivery
+ * and tax, minus the cost of the goods; the commission is a percentage of it. The target is in net sales. Percentages are null when
+ * there is nothing to divide by.
+ */
 export type SalesRep = {
   userId: string;
   userName: string;
@@ -15,17 +19,23 @@ export type SalesRep = {
   salesUsd: number;
   returnsUsd: number;
   netSalesUsd: number;
+  grossProfitUsd: number;
+  grossMarginPct: number | null;
   collectedUsd: number;
   outstandingUsd: number;
   commissionUsd: number;
   targetUsd: number;
+  achievementPct: number | null;
+  averageInvoiceUsd: number;
+  returnRatePct: number | null;
+  collectionRatePct: number | null;
 };
 
 export type SalesRepDetail = {
   rep: SalesRep;
-  months: Array<{ year: number; month: number; netSalesUsd: number; collectedUsd: number }>;
+  months: Array<{ year: number; month: number; targetUsd: number; netSalesUsd: number; grossProfitUsd: number; commissionUsd: number; collectedUsd: number }>;
   customers: Array<{ id: string; code: string; name: string; phone?: string | null; outstandingUsd: number; lastInvoiceDate?: string | null }>;
-  invoices: Array<{ id: string; invoiceNumber?: string | null; type: string; invoiceDate: string; customerName: string; totalUsd: number; balanceUsd: number }>;
+  invoices: Array<{ id: string; invoiceNumber?: string | null; type: string; invoiceDate: string; customerName: string; totalUsd: number; balanceUsd: number; grossProfitUsd: number }>;
 };
 
 export type SalesRepCandidate = { userId: string; userName: string; fullName: string };

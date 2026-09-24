@@ -1,4 +1,7 @@
-/** One rep: headline figures for the period, a twelve-month trend, their customers (with what each owes) and their invoices. */
+/**
+ * One rep: headline figures for the period (commission on gross profit), the target and how much of it was reached, a twelve-month
+ * trend of target vs achieved and of gross profit vs commission, their customers (with what each owes) and their invoices.
+ */
 import { useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Box, Button, Link, Paper, Stack, TextField, Typography } from '@mui/material';
@@ -15,7 +18,7 @@ import KpiTile from '../../components/ui/KpiTile';
 import ExportMenu from '../../components/ui/ExportMenu';
 import SalesRepDialog from '../../features/salesReps/SalesRepDialog';
 import AssignCustomersDialog from '../../features/salesReps/AssignCustomersDialog';
-import { TargetBar } from './SalesReps';
+import TargetGauge from '../../features/salesReps/TargetGauge';
 import Money from '../../components/ui/Money';
 
 const MONTHS = ['كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران', 'تموز', 'آب', 'أيلول', 'تشرين الأول', 'تشرين الثاني', 'كانون الأول'];
@@ -33,19 +36,21 @@ export default function SalesRepDetail(): JSX.Element {
     async () => unwrapNode<Detail>((await salesRepsApi.detail(userId, { from, to })).data) as Detail,
     [userId, from, to], 'تعذر تحميل بيانات المندوب');
   const rep = data?.rep;
+  const monthLabels = (data?.months ?? []).map((m) => `${MONTHS[m.month - 1]} ${String(m.year).slice(2)}`);
 
   const buildExport = async (): Promise<ExportDocument> => ({
     title: `كشف المندوب ${rep?.fullName ?? ''}`, subtitle: `${from} — ${to}`, fileName: `sales-rep-${rep?.userName ?? userId}-${from}-${to}`,
     fields: rep ? [
       { label: 'صافي المبيعات ($)', value: money(rep.netSalesUsd) }, { label: 'المحصّل ($)', value: money(rep.collectedUsd) },
-      { label: 'ذمم الزبائن ($)', value: money(rep.outstandingUsd) }, { label: `العمولة ${rep.commissionPct}% ($)`, value: money(rep.commissionUsd) },
-      { label: 'الهدف ($)', value: money(rep.targetUsd) },
+      { label: 'ذمم الزبائن ($)', value: money(rep.outstandingUsd) }, { label: 'الربح الإجمالي ($)', value: money(rep.grossProfitUsd) },
+      { label: `العمولة ${rep.commissionPct}% من الربح ($)`, value: money(rep.commissionUsd) },
+      { label: 'الهدف ($)', value: money(rep.targetUsd) }, { label: 'نسبة الإنجاز', value: rep.achievementPct === null ? '—' : `${rep.achievementPct}%` },
     ] : [],
     tables: [
       {
-        title: 'الفواتير', columns: ['الرقم', 'النوع', 'التاريخ', 'الزبون', 'الإجمالي ($)', 'المتبقي ($)'],
-        rows: (data?.invoices ?? []).map((i) => [i.invoiceNumber ?? '', i.type === 'RETURN' ? 'مرتجع' : 'بيع', ymd(i.invoiceDate), i.customerName, num(i.totalUsd), num(i.balanceUsd)]),
-        numericColumns: [4, 5],
+        title: 'الفواتير', columns: ['الرقم', 'النوع', 'التاريخ', 'الزبون', 'الإجمالي ($)', 'الربح الإجمالي ($)', 'المتبقي ($)'],
+        rows: (data?.invoices ?? []).map((i) => [i.invoiceNumber ?? '', i.type === 'RETURN' ? 'مرتجع' : 'بيع', ymd(i.invoiceDate), i.customerName, num(i.totalUsd), num(i.grossProfitUsd), num(i.balanceUsd)]),
+        numericColumns: [4, 5, 6],
       },
       {
         title: 'الزبائن', columns: ['الكود', 'الزبون', 'الهاتف', 'الذمة ($)', 'آخر فاتورة'],
@@ -81,20 +86,41 @@ export default function SalesRepDetail(): JSX.Element {
             <KpiTile title="صافي المبيعات" value={<Money usd={rep.netSalesUsd} variant="h5" fontWeight={800} />} hint={`${rep.invoiceCount} فاتورة`} />
             <KpiTile title="المحصّل" value={<Money usd={rep.collectedUsd} variant="h5" fontWeight={800} />} tone="success" />
             <KpiTile title="ذمم زبائنه" value={<Money usd={rep.outstandingUsd} variant="h5" fontWeight={800} />} tone="warning" hint={`${rep.customerCount} زبون`} />
-            <KpiTile title="العمولة" value={<Money usd={rep.commissionUsd} variant="h5" fontWeight={800} />} hint={`${rep.commissionPct}% من الصافي بدون التوصيل`} />
+            <KpiTile title="الربح الإجمالي" value={<Money usd={rep.grossProfitUsd} variant="h5" fontWeight={800} />} tone="success"
+              hint={rep.grossMarginPct === null ? 'بعد الخصومات وتكلفة البضاعة' : `هامش ${rep.grossMarginPct}% بعد الخصومات وتكلفة البضاعة`} />
+            <KpiTile title="العمولة" value={<Money usd={rep.commissionUsd} variant="h5" fontWeight={800} />} hint={`${rep.commissionPct}% من الربح الإجمالي`} />
+          </Box>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '260px 1fr' }, gap: 2, mb: 2 }}>
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-              <Typography variant="caption" color="text.secondary">الهدف للفترة</Typography>
-              <Box sx={{ mt: 1 }}><TargetBar value={rep.netSalesUsd} target={rep.targetUsd} /></Box>
+              <Typography fontWeight={700} sx={{ mb: 1 }}>الهدف وما أُنجز منه</Typography>
+              <TargetGauge achieved={rep.netSalesUsd} target={rep.targetUsd} achievementPct={rep.achievementPct} size={190} />
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1, textAlign: 'center' }}>
+                الهدف بصافي المبيعات للفترة ({from} — {to})
+              </Typography>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <Typography fontWeight={700} sx={{ mb: 1 }}>الهدف والإنجاز شهرياً — آخر 12 شهراً ($)</Typography>
+              <BarChart
+                height={250}
+                xAxis={[{ scaleType: 'band', data: monthLabels }]}
+                series={[
+                  { data: (data?.months ?? []).map((m) => m.targetUsd), label: 'الهدف', color: '#b0bec5' },
+                  { data: (data?.months ?? []).map((m) => m.netSalesUsd), label: 'صافي المبيعات' },
+                ]}
+                margin={{ top: 40, bottom: 30, left: 60, right: 10 }}
+              />
             </Paper>
           </Box>
 
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2 }}>
-            <Typography fontWeight={700} sx={{ mb: 1 }}>آخر 12 شهراً ($)</Typography>
+            <Typography fontWeight={700} sx={{ mb: 1 }}>الربح الإجمالي والعمولة والتحصيل — آخر 12 شهراً ($)</Typography>
             <BarChart
               height={260}
-              xAxis={[{ scaleType: 'band', data: (data?.months ?? []).map((m) => `${MONTHS[m.month - 1]} ${String(m.year).slice(2)}`) }]}
+              xAxis={[{ scaleType: 'band', data: monthLabels }]}
               series={[
-                { data: (data?.months ?? []).map((m) => m.netSalesUsd), label: 'صافي المبيعات' },
+                { data: (data?.months ?? []).map((m) => m.grossProfitUsd), label: 'الربح الإجمالي' },
+                { data: (data?.months ?? []).map((m) => m.commissionUsd), label: 'العمولة' },
                 { data: (data?.months ?? []).map((m) => m.collectedUsd), label: 'المحصّل' },
               ]}
               margin={{ top: 40, bottom: 30, left: 60, right: 10 }}
@@ -124,6 +150,7 @@ export default function SalesRepDetail(): JSX.Element {
               { header: 'التاريخ', render: (i) => ymd(i.invoiceDate), nowrap: true },
               { header: 'الزبون', render: (i) => i.customerName },
               { header: 'الإجمالي', render: (i) => <Money usd={i.totalUsd} />, numeric: true },
+              { header: 'الربح الإجمالي', render: (i) => <Money usd={i.grossProfitUsd} color={i.grossProfitUsd < 0 ? 'error.main' : undefined} />, numeric: true },
               { header: 'المتبقي', render: (i) => <Money usd={i.balanceUsd} />, numeric: true },
             ]}
           />

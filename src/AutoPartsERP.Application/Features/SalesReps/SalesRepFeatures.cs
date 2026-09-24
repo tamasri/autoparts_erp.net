@@ -23,26 +23,38 @@ internal static class SalesRepScope
 
 internal static class SalesRepReader
 {
+    /// <summary>
+    /// One row per posted sale or return of a rep: its total, balance, revenue (after line and invoice discounts, without delivery fees
+    /// and tax) and gross profit (revenue minus the cost of the goods at the time of sale). A return counts negative.
+    /// </summary>
+    public const string InvoiceFigures = """
+        SELECT i.id, i.sales_rep_id AS rep, i.invoice_type AS kind, i.invoice_date AS day, i.total_usd AS total, i.balance_usd AS balance,
+               i.total_usd - s.sign * (i.delivery_fee_usd + i.tax_amount_usd) AS revenue,
+               i.total_usd - s.sign * (i.delivery_fee_usd + i.tax_amount_usd) - s.sign * c.cost AS gross_profit
+        FROM invoices i
+        CROSS JOIN LATERAL (SELECT CASE WHEN i.invoice_type = 'RETURN' THEN -1 ELSE 1 END AS sign) s
+        CROSS JOIN LATERAL (SELECT COALESCE(sum(l.quantity * l.cost_price_usd), 0) AS cost FROM invoice_lines l WHERE l.invoice_id = i.id) c
+        WHERE i.status = 'POSTED' AND i.invoice_type IN ('SALE', 'RETURN') AND i.sales_rep_id IS NOT NULL
+        """;
+
     private sealed record Row(
         Guid UserId, string UserName, string FullName, string? Phone, decimal CommissionPct, decimal MonthlyTargetUsd, bool IsActive, string? Notes,
-        int CustomerCount, int InvoiceCount, decimal SalesUsd, decimal ReturnsUsd, decimal CommissionBaseUsd, decimal CollectedUsd, decimal OutstandingUsd);
+        int CustomerCount, int InvoiceCount, decimal SalesUsd, decimal ReturnsUsd, decimal RevenueUsd, decimal GrossProfitUsd, decimal CollectedUsd,
+        decimal OutstandingUsd);
 
-    /// <summary>Posted sales and returns only; the commission base leaves out delivery fees and tax (a return counts negative).</summary>
+    /// <summary>Posted sales and returns only; see <see cref="SalesRepDto"/> for what each figure means.</summary>
     public static async Task<IReadOnlyList<SalesRepDto>> ListAsync(
         DbConnection connection, DateOnly from, DateOnly to, Guid? onlyUser, bool includeInactive, CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<Row>(new CommandDefinition(
-            """
-            WITH inv AS (
-                SELECT i.sales_rep_id AS rep, i.invoice_type AS kind, i.invoice_date AS day, i.total_usd AS total, i.balance_usd AS balance,
-                       i.total_usd - CASE WHEN i.invoice_type = 'RETURN' THEN -1 ELSE 1 END * (i.delivery_fee_usd + i.tax_amount_usd) AS base
-                FROM invoices i
-                WHERE i.status = 'POSTED' AND i.invoice_type IN ('SALE', 'RETURN') AND i.sales_rep_id IS NOT NULL
+            $"""
+            WITH inv AS ({InvoiceFigures}
             ), period AS (
                 SELECT rep, count(*) FILTER (WHERE kind = 'SALE') AS invoices,
                        COALESCE(sum(total) FILTER (WHERE kind = 'SALE'), 0) AS sales,
                        COALESCE(-sum(total) FILTER (WHERE kind = 'RETURN'), 0) AS returns,
-                       COALESCE(sum(base), 0) AS base
+                       COALESCE(sum(revenue), 0) AS revenue,
+                       COALESCE(sum(gross_profit), 0) AS gross_profit
                 FROM inv WHERE day BETWEEN @from AND @to GROUP BY rep
             ), owed AS (
                 SELECT rep, sum(balance) AS outstanding FROM inv WHERE kind = 'SALE' GROUP BY rep
@@ -59,7 +71,8 @@ internal static class SalesRepReader
             SELECT r.user_id AS UserId, u.user_name AS UserName, COALESCE(NULLIF(u.full_name, ''), u.user_name) AS FullName, u.phone_number AS Phone,
                    r.commission_pct AS CommissionPct, r.monthly_target_usd AS MonthlyTargetUsd, r.is_active AS IsActive, r.notes AS Notes,
                    COALESCE(c.n, 0)::int AS CustomerCount, COALESCE(p.invoices, 0)::int AS InvoiceCount,
-                   COALESCE(p.sales, 0) AS SalesUsd, COALESCE(p.returns, 0) AS ReturnsUsd, COALESCE(p.base, 0) AS CommissionBaseUsd,
+                   COALESCE(p.sales, 0) AS SalesUsd, COALESCE(p.returns, 0) AS ReturnsUsd, COALESCE(p.revenue, 0) AS RevenueUsd,
+                   COALESCE(p.gross_profit, 0) AS GrossProfitUsd,
                    COALESCE(col.amount, 0) AS CollectedUsd, COALESCE(o.outstanding, 0) AS OutstandingUsd
             FROM sales_reps r
             INNER JOIN asp_net_users u ON u.id = r.user_id
@@ -72,10 +85,17 @@ internal static class SalesRepReader
             """,
             new { from, to, onlyUser, includeInactive }, cancellationToken: cancellationToken));
 
-        return rows.Select(r => new SalesRepDto(
-            r.UserId, r.UserName, r.FullName, r.Phone, r.CommissionPct, r.MonthlyTargetUsd, r.IsActive, r.Notes,
-            r.CustomerCount, r.InvoiceCount, r.SalesUsd, r.ReturnsUsd, r.SalesUsd - r.ReturnsUsd, r.CollectedUsd, r.OutstandingUsd,
-            SalesRepMetrics.Commission(r.CommissionBaseUsd, r.CommissionPct), SalesRepMetrics.Target(r.MonthlyTargetUsd, from, to))).ToList();
+        return rows.Select(r =>
+        {
+            var net = r.SalesUsd - r.ReturnsUsd;
+            var target = SalesRepMetrics.Target(r.MonthlyTargetUsd, from, to);
+            return new SalesRepDto(
+                r.UserId, r.UserName, r.FullName, r.Phone, r.CommissionPct, r.MonthlyTargetUsd, r.IsActive, r.Notes,
+                r.CustomerCount, r.InvoiceCount, r.SalesUsd, r.ReturnsUsd, net, r.GrossProfitUsd, SalesRepMetrics.Margin(r.GrossProfitUsd, r.RevenueUsd),
+                r.CollectedUsd, r.OutstandingUsd, SalesRepMetrics.Commission(r.GrossProfitUsd, r.CommissionPct), target, SalesRepMetrics.Achievement(net, target),
+                r.InvoiceCount == 0 ? 0 : Math.Round(r.SalesUsd / r.InvoiceCount, 2), SalesRepMetrics.Share(r.ReturnsUsd, r.SalesUsd),
+                SalesRepMetrics.Share(r.CollectedUsd, net));
+        }).ToList();
     }
 }
 
@@ -144,22 +164,26 @@ public sealed class GetSalesRepDetailQueryHandler : IRequestHandler<GetSalesRepD
             return Result<SalesRepDetailDto>.Failure(new Error("SalesRep.NotFound", "Sales representative was not found."));
         }
 
-        // Twelve months ending with the period's last month, so a trend is visible whatever period is chosen.
+        // Twelve months ending with the period's last month, so a trend is visible whatever period is chosen: each month's target, what was
+        // achieved against it, its gross profit and the commission that earned.
         var firstMonth = new DateOnly(to.Year, to.Month, 1).AddMonths(-11);
-        var months = (await connection.QueryAsync<SalesRepMonthDto>(new CommandDefinition(
-            """
-            WITH m AS (SELECT generate_series(@firstMonth::date, date_trunc('month', @to::date)::date, interval '1 month')::date AS month)
+        var months = (await connection.QueryAsync<(int Year, int Month, decimal NetSalesUsd, decimal GrossProfitUsd, decimal CollectedUsd)>(new CommandDefinition(
+            $"""
+            WITH inv AS ({SalesRepReader.InvoiceFigures} AND i.sales_rep_id = @UserId),
+                 m AS (SELECT generate_series(@firstMonth::date, date_trunc('month', @to::date)::date, interval '1 month')::date AS month)
             SELECT extract(year FROM m.month)::int AS Year, extract(month FROM m.month)::int AS Month,
-                   COALESCE((SELECT sum(i.total_usd) FROM invoices i
-                             WHERE i.sales_rep_id = @UserId AND i.status = 'POSTED' AND i.invoice_type IN ('SALE', 'RETURN')
-                               AND date_trunc('month', i.invoice_date)::date = m.month), 0) AS NetSalesUsd,
+                   COALESCE((SELECT sum(total) FROM inv WHERE date_trunc('month', day)::date = m.month), 0) AS NetSalesUsd,
+                   COALESCE((SELECT sum(gross_profit) FROM inv WHERE date_trunc('month', day)::date = m.month), 0) AS GrossProfitUsd,
                    COALESCE((SELECT sum(a.allocated_usd) FROM payment_allocations a
                              INNER JOIN payments p ON p.id = a.payment_id AND NOT p.is_reversed
                              INNER JOIN invoices i ON i.id = a.invoice_id
                              WHERE i.sales_rep_id = @UserId AND date_trunc('month', a.allocation_date)::date = m.month), 0) AS CollectedUsd
             FROM m ORDER BY m.month;
             """,
-            new { request.UserId, firstMonth, to }, cancellationToken: cancellationToken))).ToList();
+            new { request.UserId, firstMonth, to }, cancellationToken: cancellationToken)))
+            .Select(m => new SalesRepMonthDto(m.Year, m.Month, rep.MonthlyTargetUsd, m.NetSalesUsd, m.GrossProfitUsd,
+                SalesRepMetrics.Commission(m.GrossProfitUsd, rep.CommissionPct), m.CollectedUsd))
+            .ToList();
 
         var customers = (await connection.QueryAsync<SalesRepCustomerDto>(new CommandDefinition(
             """
@@ -173,12 +197,12 @@ public sealed class GetSalesRepDetailQueryHandler : IRequestHandler<GetSalesRepD
             new { request.UserId }, cancellationToken: cancellationToken))).ToList();
 
         var invoices = (await connection.QueryAsync<SalesRepInvoiceDto>(new CommandDefinition(
-            """
+            $"""
+            WITH inv AS ({SalesRepReader.InvoiceFigures} AND i.sales_rep_id = @UserId AND i.invoice_date BETWEEN @from AND @to)
             SELECT i.id AS Id, i.invoice_number AS InvoiceNumber, i.invoice_type AS Type, i.invoice_date AS InvoiceDate, c.name AS CustomerName,
-                   i.total_usd AS TotalUsd, i.balance_usd AS BalanceUsd
-            FROM invoices i INNER JOIN customers c ON c.id = i.customer_id
-            WHERE i.sales_rep_id = @UserId AND i.status = 'POSTED' AND i.invoice_type IN ('SALE', 'RETURN') AND i.invoice_date BETWEEN @from AND @to
-            ORDER BY i.invoice_date DESC, i.invoice_number DESC
+                   i.total_usd AS TotalUsd, i.balance_usd AS BalanceUsd, inv.gross_profit AS GrossProfitUsd
+            FROM inv INNER JOIN invoices i ON i.id = inv.id INNER JOIN customers c ON c.id = i.customer_id
+            ORDER BY i.invoice_date DESC, i.serial_no DESC
             LIMIT 500;
             """,
             new { request.UserId, from, to }, cancellationToken: cancellationToken))).ToList();

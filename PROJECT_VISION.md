@@ -52,6 +52,7 @@
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
 | Cache | Redis (StackExchange.Redis, distributed cache) | |
 | Jobs | **Hangfire** (Postgres storage), queues `default` + `governance`; **Outbox** dispatcher hosted service | |
+| Rep performance | `/sales-reps`, `/sales-reps/kpis` | commission on gross profit, target gauge and monthly target vs achieved per rep, KPI comparison of all reps |
 | Landed cost | migration 28, `/landed-costs`, `LandedCostDialog` | ERPNext-style Landed Cost Voucher: charges split by value/qty/equally, capitalized on stock on hand, the sold share to COGS; suppliers owed get service bills |
 | Returns | migration 27, `…/returns` endpoints, `ReturnDialog` | sales and purchase returns against their invoice (ERPNext `is_return` / `return_against`), capped by DB triggers, costed at the original cost, credited to the original |
 | Numbering | `document_series` + triggers (migration 26) | one gapless series per document kind / entry type; recorded Super Admin deletion; previous/next in every document view |

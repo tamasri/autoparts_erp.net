@@ -26,11 +26,28 @@ public sealed class SalesRepMetricsTests
     [Theory]
     [InlineData(1000, 2.5, 25)]
     [InlineData(333.33, 3, 10)]      // rounded to cents
+    [InlineData(46.9, 5, 2.35)]      // half a cent rounds up (2.345 → 2.35), not to even
     [InlineData(0, 10, 0)]
-    [InlineData(-50, 10, 0)]         // more returns than sales earns nothing, not a negative commission
-    public void Commission_IsPercentOfNetBase(double baseUsd, double pct, double expected)
+    [InlineData(-50, 10, 0)]         // a period that lost money earns nothing, not a negative commission
+    public void Commission_IsPercentOfGrossProfit(double grossProfitUsd, double pct, double expected)
     {
-        SalesRepMetrics.Commission((decimal)baseUsd, (decimal)pct).Should().Be((decimal)expected);
+        SalesRepMetrics.Commission((decimal)grossProfitUsd, (decimal)pct).Should().Be((decimal)expected);
+    }
+
+    [Fact]
+    public void Achievement_IsPercentOfTarget_AndNothingWithoutATarget()
+    {
+        SalesRepMetrics.Achievement(750m, 1000m).Should().Be(75m);
+        SalesRepMetrics.Achievement(1234m, 1000m).Should().Be(123.4m);
+        SalesRepMetrics.Achievement(500m, 0m).Should().BeNull();
+    }
+
+    [Fact]
+    public void Margin_IsGrossProfitOverRevenue()
+    {
+        SalesRepMetrics.Margin(25m, 100m).Should().Be(25m);
+        SalesRepMetrics.Margin(-10m, 80m).Should().Be(-12.5m);
+        SalesRepMetrics.Margin(10m, 0m).Should().BeNull();
     }
 
     [Fact]
