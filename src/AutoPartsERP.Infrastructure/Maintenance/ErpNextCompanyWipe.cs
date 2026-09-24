@@ -8,12 +8,13 @@ namespace AutoPartsERP.Infrastructure.Maintenance;
 /// <summary>
 /// Empties the ERPNext company of trial data, using ERPNext's own tool for that:
 /// <list type="number">
-/// <item>A <c>Transaction Deletion Record</c> for the company (System Manager). ERPNext deletes every transaction of the company in the
+/// <item>A <c>Transaction Deletion Record</c> for the company, requested the way ERPNext's Company → Delete Transactions does
+/// (<c>create_transaction_deletion_request</c>, System Manager). ERPNext deletes every transaction of the company in the
 /// background — invoices, payments, journal entries, GL and stock ledger — and keeps its setup: chart of accounts, cost centres,
 /// warehouses, taxes, company. We wait until it reports Completed.</item>
 /// <item>The masters that tool deliberately leaves: item prices, items, sales persons (not the group nodes), customers, suppliers.</item>
 /// </list>
-/// Works on Frappe v15 and v16 (v16 needs its "to delete" list generated before submitting; v15 has no such method).
+/// Works on ERPNext v15 and v16 (the method exists in both).
 /// </summary>
 public sealed class ErpNextCompanyWipe
 {
@@ -116,32 +117,22 @@ public sealed class ErpNextCompanyWipe
 
     private async Task<bool> DeleteTransactionsAsync(string company, TimeSpan timeout, CancellationToken ct)
     {
-        var created = await _http.PostAsJsonAsync("api/resource/Transaction Deletion Record", new JsonObject { ["company"] = company }, ct);
-        var body = await created.Content.ReadAsStringAsync(ct);
-        if (!created.IsSuccessStatusCode)
+        // ERPNext's own "Delete Transactions" action (Company → Manage). System Manager has no create/submit right on the record itself
+        // (v16), so creating it through the resource API is refused; this method checks System Manager and delete on the company, then
+        // creates, lists (v16) and submits the record in one call. The record's name is the one that was not there before.
+        var existing = await ListAsync("Transaction Deletion Record", [["company", "=", company]], ct);
+        var requested = await _http.PostAsJsonAsync("api/method/erpnext.setup.doctype.company.company.create_transaction_deletion_request",
+            new JsonObject { ["company"] = company }, ct);
+        if (!requested.IsSuccessStatusCode)
         {
-            _log($"ERPNext: could not create the Transaction Deletion Record: {ErpNextErrors.Describe(created.StatusCode, body)}");
+            _log($"ERPNext: the transaction deletion was refused: {ErpNextErrors.Describe(requested.StatusCode, await requested.Content.ReadAsStringAsync(ct))}");
             return false;
         }
 
-        var name = JsonNode.Parse(body)?["data"]?["name"]?.GetValue<string>() ?? throw new InvalidOperationException("No record name returned.");
-        _log($"ERPNext: Transaction Deletion Record {name} created.");
+        var name = (await ListAsync("Transaction Deletion Record", [["company", "=", company]], ct)).Except(existing).FirstOrDefault()
+            ?? throw new InvalidOperationException("ERPNext accepted the deletion but no new Transaction Deletion Record was found.");
 
-        // v16: the list of doctypes to delete must exist before submitting (v15 builds it itself and has no such method).
-        var listed = await _http.PostAsJsonAsync("api/method/run_doc_method",
-            new JsonObject { ["dt"] = "Transaction Deletion Record", ["dn"] = name, ["method"] = "generate_to_delete_list" }, ct);
-        _log(listed.IsSuccessStatusCode ? "ERPNext: to-delete list generated." : "ERPNext: no to-delete list method (older ERPNext) — continuing.");
-
-        var doc = await GetDocAsync("Transaction Deletion Record", name, ct)
-            ?? throw new InvalidOperationException($"Transaction Deletion Record {name} could not be read back.");
-        var submitted = await _http.PostAsJsonAsync("api/method/frappe.client.submit", new JsonObject { ["doc"] = doc.DeepClone() }, ct);
-        if (!submitted.IsSuccessStatusCode)
-        {
-            _log($"ERPNext: submitting {name} failed: {ErpNextErrors.Describe(submitted.StatusCode, await submitted.Content.ReadAsStringAsync(ct))}");
-            return false;
-        }
-
-        _log("ERPNext: deletion started; waiting for it to finish (runs in ERPNext's background workers)…");
+        _log($"ERPNext: deletion {name} started; waiting for it to finish (runs in ERPNext's background workers)…");
         var deadline = DateTime.UtcNow + timeout;
         var last = string.Empty;
         while (DateTime.UtcNow < deadline)
