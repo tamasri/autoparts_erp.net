@@ -150,7 +150,8 @@ public sealed record ErpNextPurchaseInvoiceSync(
     DateOnly DueDate,
     bool IsReturn,
     IReadOnlyList<ErpNextInvoiceLineSync> Lines,
-    decimal DiscountAmount = 0);
+    decimal DiscountAmount = 0,
+    string? ReturnAgainst = null);
 
 public sealed record ErpNextSupplierPaymentSync(
     Guid LocalPaymentId,

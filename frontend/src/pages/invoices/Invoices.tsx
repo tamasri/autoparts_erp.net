@@ -41,7 +41,15 @@ export default function Invoices(): JSX.Element {
   };
 
   const columns: Column<Invoice>[] = [
-    { header: 'رقم الفاتورة', render: (i) => <Button size="small" component={RouterLink} to={`/invoices/${i.id}`} sx={{ fontWeight: 700 }}>{i.invoiceNumber ?? i.id.slice(0, 8)}</Button> },
+    {
+      header: 'رقم الفاتورة',
+      render: (i) => (
+        <>
+          <Button size="small" component={RouterLink} to={`/invoices/${i.id}`} sx={{ fontWeight: 700 }}>{i.invoiceNumber ?? i.id.slice(0, 8)}</Button>
+          {i.type === 'RETURN' ? <Chip size="small" color="warning" label="مرتجع" /> : i.type === 'CREDIT_NOTE' ? <Chip size="small" label="إشعار دائن" /> : null}
+        </>
+      ),
+    },
     { header: 'الزبون', render: (i) => i.customerName ?? '—' },
     { header: 'التاريخ', render: (i) => i.invoiceDate ?? '—' },
     {

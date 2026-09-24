@@ -37,7 +37,8 @@ public sealed class PurchaseErpNextSyncer
         var bill = await connection.QuerySingleOrDefaultAsync<BillRow>(new CommandDefinition(
             """
             SELECT p.bill_number AS BillNumber, pa.id AS PartyId, COALESCE(NULLIF(pa.display_name, ''), pa.display_name_ar) AS SupplierName,
-                   pa.tax_number AS TaxNumber, p.bill_date AS BillDate, p.due_date AS DueDate, p.discount_amount_usd AS DiscountAmountUsd
+                   pa.tax_number AS TaxNumber, p.bill_date AS BillDate, p.due_date AS DueDate, p.discount_amount_usd AS DiscountAmountUsd,
+                   p.is_return AS IsReturn, p.return_against_id AS ReturnAgainstId
             FROM purchase_invoices p INNER JOIN parties pa ON pa.id = p.supplier_party_id
             WHERE p.id = @billId AND p.status = 'POSTED';
             """,
@@ -58,6 +59,25 @@ public sealed class PurchaseErpNextSyncer
             """,
             new { billId }, cancellationToken: cancellationToken))).ToList();
 
+        // A return names the bill it returns (ERPNext return_against), so that bill goes first.
+        string? returnAgainst = null;
+        if (bill.ReturnAgainstId is { } againstId)
+        {
+            returnAgainst = await ErpNextSyncLogWriter.FindSyncedNameAsync(connection, InvoiceEntity, againstId, InvoiceDoctype, cancellationToken);
+            if (returnAgainst is null && _erpNextClient.IsEnabled)
+            {
+                await SyncInvoiceAsync(againstId, cancellationToken);
+                returnAgainst = await ErpNextSyncLogWriter.FindSyncedNameAsync(connection, InvoiceEntity, againstId, InvoiceDoctype, cancellationToken);
+            }
+
+            if (returnAgainst is null && _erpNextClient.IsEnabled)
+            {
+                await ErpNextSyncLogWriter.WriteAsync(connection, InvoiceEntity, billId, InvoiceDoctype, null, StatusOf(false),
+                    "The returned bill is not in ERPNext yet; the return will be retried.", cancellationToken);
+                return;
+            }
+        }
+
         var prerequisite = await EnsureMasterDataAsync(connection, bill, lines, cancellationToken);
         if (prerequisite.IsFailure)
         {
@@ -67,9 +87,9 @@ public sealed class PurchaseErpNextSyncer
 
         var result = await _erpNextClient.SyncPurchaseInvoiceAsync(
             new ErpNextPurchaseInvoiceSync(
-                billId, bill.BillNumber, prerequisite.Value!, bill.BillDate, bill.DueDate, false,
+                billId, bill.BillNumber, prerequisite.Value!, bill.BillDate, bill.DueDate, bill.IsReturn,
                 lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitCost, l.DiscountPercent)).ToList(),
-                bill.DiscountAmountUsd),
+                bill.DiscountAmountUsd, returnAgainst),
             cancellationToken);
 
         await ErpNextSyncLogWriter.WriteAsync(connection, InvoiceEntity, billId, InvoiceDoctype, result.IsSuccess ? result.Value : null,
@@ -215,7 +235,9 @@ public sealed class PurchaseErpNextSyncer
         return Result<string>.Success(supplier.Value!);
     }
 
-    private sealed record BillRow(string BillNumber, Guid PartyId, string SupplierName, string? TaxNumber, DateOnly BillDate, DateOnly DueDate, decimal DiscountAmountUsd);
+    private sealed record BillRow(
+        string BillNumber, Guid PartyId, string SupplierName, string? TaxNumber, DateOnly BillDate, DateOnly DueDate, decimal DiscountAmountUsd,
+        bool IsReturn, Guid? ReturnAgainstId);
 
     private sealed record BillLineRow(Guid SkuId, string ItemCode, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice, decimal Quantity, decimal UnitCost, decimal DiscountPercent);
 

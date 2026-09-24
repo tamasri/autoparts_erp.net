@@ -91,9 +91,9 @@ public sealed class CreatePurchaseInvoiceCommandHandler : IRequestHandler<Create
             """
             INSERT INTO purchase_invoices (
                 id, supplier_party_id, supplier_ref, bill_date, due_date, warehouse_id, status, fx_rate_id,
-                subtotal_usd, discount_pct, discount_amount_usd, total_usd, paid_usd, balance_usd, notes, created_by)
+                subtotal_usd, discount_pct, discount_amount_usd, total_usd, paid_usd, notes, created_by)
             VALUES (
-                @id, @SupplierPartyId, @SupplierRef, @BillDate, @DueDate, @WarehouseId, 'DRAFT', @FxRateId, @Subtotal, @DiscountPct, @DiscountAmount, @Total, 0, 0, @Notes, @By);
+                @id, @SupplierPartyId, @SupplierRef, @BillDate, @DueDate, @WarehouseId, 'DRAFT', @FxRateId, @Subtotal, @DiscountPct, @DiscountAmount, @Total, 0, @Notes, @By);
             """,
             new
             {
@@ -161,7 +161,7 @@ public sealed class GetPurchaseInvoicesQueryHandler : IRequestHandler<GetPurchas
             SELECT p.id AS Id, p.bill_number AS BillNumber, p.supplier_party_id AS SupplierPartyId,
                    COALESCE(NULLIF(pa.display_name_ar, ''), pa.display_name) AS SupplierName, p.supplier_ref AS SupplierRef,
                    p.bill_date AS BillDate, p.due_date AS DueDate, p.status AS Status,
-                   p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd, p.balance_usd AS BalanceUsd
+                   p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd, p.balance_usd AS BalanceUsd, p.is_return AS IsReturn
             FROM purchase_invoices p
             INNER JOIN parties pa ON pa.id = p.supplier_party_id
             {where}
@@ -193,7 +193,7 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
     private sealed record Header(
         Guid Id, string BillNumber, Guid SupplierPartyId, string SupplierName, string? SupplierRef, DateOnly BillDate, DateOnly DueDate, string Status,
         decimal TotalUsd, decimal PaidUsd, decimal BalanceUsd, Guid WarehouseId, string? Notes, string? VoidReason, DateTimeOffset? PostedAt,
-        decimal SubtotalUsd, decimal? DiscountPct, decimal DiscountAmountUsd);
+        decimal SubtotalUsd, decimal? DiscountPct, decimal DiscountAmountUsd, bool IsReturn, decimal CreditAppliedUsd, Guid? ReturnAgainstId);
 
     public async Task<Result<PurchaseInvoiceDetailDto>> Handle(GetPurchaseInvoiceByIdQuery request, CancellationToken cancellationToken)
     {
@@ -204,7 +204,8 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
                    COALESCE(NULLIF(pa.display_name_ar, ''), pa.display_name) AS SupplierName, p.supplier_ref AS SupplierRef,
                    p.bill_date AS BillDate, p.due_date AS DueDate, p.status AS Status, p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd,
                    p.balance_usd AS BalanceUsd, p.warehouse_id AS WarehouseId, p.notes AS Notes, p.void_reason AS VoidReason, p.posted_at AS PostedAt,
-                   p.subtotal_usd AS SubtotalUsd, p.discount_pct AS DiscountPct, p.discount_amount_usd AS DiscountAmountUsd
+                   p.subtotal_usd AS SubtotalUsd, p.discount_pct AS DiscountPct, p.discount_amount_usd AS DiscountAmountUsd,
+                   p.is_return AS IsReturn, p.credit_applied_usd AS CreditAppliedUsd, p.return_against_id AS ReturnAgainstId
             FROM purchase_invoices p INNER JOIN parties pa ON pa.id = p.supplier_party_id
             WHERE p.id = @Id;
             """,
@@ -218,22 +219,36 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
             """
             SELECT l.id AS Id, l.line_number AS LineNumber, l.item_id AS ItemId, i.part_number AS ItemCode,
                    COALESCE(NULLIF(i.name_ar, ''), i.name_en) AS ItemName, l.quantity AS Quantity, l.unit_cost_usd AS UnitCostUsd,
-                   l.discount_pct AS DiscountPct, l.line_total_usd AS LineTotalUsd
+                   l.discount_pct AS DiscountPct, l.line_total_usd AS LineTotalUsd, l.return_of_line_id AS ReturnOfLineId
             FROM purchase_invoice_lines l INNER JOIN items i ON i.id = l.item_id
             WHERE l.purchase_invoice_id = @Id ORDER BY l.line_number;
             """,
             new { request.Id }, cancellationToken: cancellationToken))).ToArray();
 
-        var list = new PurchaseInvoiceListDto(h.Id, h.BillNumber, h.SupplierPartyId, h.SupplierName, h.SupplierRef, h.BillDate, h.DueDate, h.Status, h.TotalUsd, h.PaidUsd, h.BalanceUsd);
-        return Result<PurchaseInvoiceDetailDto>.Success(new PurchaseInvoiceDetailDto(list, h.WarehouseId, h.Notes, h.VoidReason, h.PostedAt, lines, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountUsd));
+        // The bill a return gives back to, or the returns made against a bill.
+        var links = (await connection.QueryAsync<DocumentLinkDto>(new CommandDefinition(
+            """
+            SELECT id AS Id, bill_number AS Number, status AS Status, bill_date AS Date, total_usd AS TotalUsd
+            FROM purchase_invoices WHERE id = @ReturnAgainstId OR return_against_id = @Id
+            ORDER BY serial_no;
+            """,
+            new { request.Id, h.ReturnAgainstId }, cancellationToken: cancellationToken))).ToList();
+
+        var list = new PurchaseInvoiceListDto(h.Id, h.BillNumber, h.SupplierPartyId, h.SupplierName, h.SupplierRef, h.BillDate, h.DueDate, h.Status, h.TotalUsd, h.PaidUsd, h.BalanceUsd, h.IsReturn);
+        return Result<PurchaseInvoiceDetailDto>.Success(new PurchaseInvoiceDetailDto(
+            list, h.WarehouseId, h.Notes, h.VoidReason, h.PostedAt, lines, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountUsd, h.CreditAppliedUsd,
+            links.FirstOrDefault(l => l.Id == h.ReturnAgainstId), links.Where(l => l.Id != h.ReturnAgainstId).ToList()));
     }
 }
 
 // ---------------------------------------------------------------- post
 
 /// <summary>
-/// Posting a bill is what receives the goods: stock goes into the warehouse (sellable at once), the item ledger records it, the
-/// item cost becomes the weighted average of what was on hand and what was bought, and the bill is handed to ERPNext.
+/// Posting a bill receives the goods: stock goes into the warehouse (sellable at once), the item ledger records it, the item cost
+/// becomes the weighted average of what was on hand and what was bought, and the bill is handed to ERPNext.
+/// Posting a purchase return sends goods back: they leave the bill's warehouse at the cost they came in with (the average goes back
+/// to what it was without them), and the return's credit is applied to the bill it returns (what exceeds the bill's outstanding stays
+/// as the supplier's debit to us). The database refuses a return that would give back more than was bought.
 /// </summary>
 public sealed record PostPurchaseInvoiceCommand(Guid Id)
     : IRequest<Result<Guid>>, IAuthorizedRequest, IAuditableRequest
@@ -260,86 +275,83 @@ public sealed class PostPurchaseInvoiceCommandHandler : IRequestHandler<PostPurc
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var bill = await connection.QuerySingleOrDefaultAsync<(Guid Id, string BillNumber, string Status, Guid WarehouseId, DateOnly BillDate, decimal Total, Guid? FxRateId)>(new CommandDefinition(
-            """
-            SELECT id AS Id, bill_number AS BillNumber, status AS Status, warehouse_id AS WarehouseId, bill_date AS BillDate,
-                   total_usd AS Total, fx_rate_id AS FxRateId
-            FROM purchase_invoices WHERE id = @Id FOR UPDATE;
-            """,
-            new { request.Id }, transaction, cancellationToken: cancellationToken));
-        if (bill.Id == Guid.Empty)
+        var bill = await PurchaseDocuments.LockAsync(connection, transaction, request.Id, cancellationToken);
+        if (bill is null)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Purchase.NotFound", "Purchase invoice was not found."));
+            return Result<Guid>.Failure(PurchaseDocuments.NotFound);
         }
 
         if (bill.Status != "DRAFT")
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Purchase.InvalidState", "Only a draft bill can be posted."));
+            return Result<Guid>.Failure(new Error("Purchase.InvalidState", "Only a draft can be posted."));
         }
 
-        if (await _periodLock.IsLockedAsync(bill.BillDate.Year, bill.BillDate.Month, "PURCHASES", cancellationToken))
+        if (await _periodLock.IsLockedAsync(bill.BillDate.Year, bill.BillDate.Month, PurchaseDocuments.Module, cancellationToken))
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Period.Locked", "The accounting period of this bill is locked."));
+            return Result<Guid>.Failure(PurchaseDocuments.PeriodLocked);
         }
 
-        var fx = await connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
-            "SELECT COALESCE((SELECT mid_rate FROM fx_rates WHERE id = @FxRateId), (SELECT mid_rate FROM fx_rates WHERE is_active ORDER BY rate_date DESC, created_at DESC LIMIT 1));",
-            new { bill.FxRateId }, transaction, cancellationToken: cancellationToken)) ?? 0m;
-
-        var lines = (await connection.QueryAsync<(Guid ItemId, Guid SkuId, decimal Qty, decimal NetCost)>(new CommandDefinition(
-            """
-            SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty,
-                   round(l.unit_cost_usd * (1 - l.discount_pct / 100) * CASE WHEN p.subtotal_usd = 0 THEN 1 ELSE p.total_usd / p.subtotal_usd END, 6) AS NetCost
-            FROM purchase_invoice_lines l
-            INNER JOIN items i ON i.id = l.item_id
-            INNER JOIN purchase_invoices p ON p.id = l.purchase_invoice_id
-            WHERE l.purchase_invoice_id = @Id;
-            """,
-            new { request.Id }, transaction, cancellationToken: cancellationToken))).ToList();
-
-        foreach (var line in lines)
+        PurchaseDocuments.Header? original = null;
+        if (bill.ReturnAgainstId is { } againstId)
         {
-            // Weighted-average cost over everything on hand in every warehouse, taken BEFORE the new goods are added.
-            var sku = await connection.QuerySingleAsync<(decimal OnHand, decimal Cost)>(new CommandDefinition(
-                """
-                SELECT COALESCE((SELECT SUM(quantity_on_hand) FROM inventory_stock WHERE sku_id = @SkuId), 0) AS OnHand,
-                       (SELECT cost_price_usd FROM skus WHERE id = @SkuId FOR UPDATE) AS Cost;
-                """,
-                new { line.SkuId }, transaction, cancellationToken: cancellationToken));
-            var newCost = Math.Round((sku.OnHand * sku.Cost + line.Qty * line.NetCost) / (sku.OnHand + line.Qty), 4);
-            await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE skus SET cost_price_usd = @newCost, cost_price_syp = @newCostSyp, updated_at = now(), updated_by = @By WHERE id = @SkuId;",
-                new { line.SkuId, newCost, newCostSyp = Math.Round(newCost * fx, 4), By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
-
-            var stocked = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, bill.WarehouseId, line.Qty, cancellationToken);
-            if (stocked.IsFailure)
+            // Lock the returned bill first: two returns of one bill are posted one after the other, never side by side.
+            original = await PurchaseDocuments.LockAsync(connection, transaction, againstId, cancellationToken);
+            if (original is not { Status: "POSTED" })
             {
                 await transaction.RollbackAsync(cancellationToken);
-                return Result<Guid>.Failure(stocked.Error);
+                return Result<Guid>.Failure(new Error("PurchaseReturn.OriginalNotPosted", "The bill being returned is no longer posted."));
             }
 
+            var over = await PurchaseDocuments.OverReturnedAsync(connection, transaction, bill.Id, cancellationToken);
+            if (over is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(new Error("PurchaseReturn.ExceedsBought", $"Item {over} would be returned beyond what the bill still holds."));
+            }
+        }
+
+        var fx = await PurchaseDocuments.FxRateAsync(connection, transaction, bill.FxRateId, cancellationToken);
+        var lines = await PurchaseDocuments.NetLinesAsync(connection, transaction, bill.Id, cancellationToken);
+        foreach (var line in lines)
+        {
+            Result moved;
+            if (bill.IsReturn)
+            {
+                await InventoryCosting.BlendOutAsync(connection, transaction, line.SkuId, line.Qty, line.NetCost, fx, _currentUser.UserId, cancellationToken);
+                moved = await PurchaseDocuments.MoveAsync(connection, transaction, bill, line, isIn: false, "PURCHASE_RETURN", $"Purchase return {bill.BillNumber}", _currentUser.UserId, cancellationToken);
+            }
+            else
+            {
+                await InventoryCosting.BlendInAsync(connection, transaction, line.SkuId, line.Qty, line.NetCost, fx, _currentUser.UserId, cancellationToken);
+                moved = await PurchaseDocuments.MoveAsync(connection, transaction, bill, line, isIn: true, "PURCHASE", $"Purchase invoice {bill.BillNumber}", _currentUser.UserId, cancellationToken);
+            }
+
+            if (moved.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(bill.IsReturn
+                    ? new Error("PurchaseReturn.NotInStock", $"The warehouse no longer holds enough of item {line.ItemCode} to send back.")
+                    : moved.Error);
+            }
+        }
+
+        if (original is not null)
+        {
+            // The credit lands on the returned bill, up to what is still owed on it (ERPNext: return_against lowers its outstanding).
+            var applied = Math.Min(-bill.TotalUsd, Math.Max(original.BalanceUsd, 0m));
             await connection.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO inventory_balances (id, item_id, location_id, batch_id, status, qty, updated_at)
-                VALUES (uuid_generate_v4(), @ItemId, @WarehouseId, NULL, 'AVAILABLE', @Qty, now())
-                ON CONFLICT (item_id, location_id, batch_id, status) DO UPDATE SET qty = inventory_balances.qty + EXCLUDED.qty, updated_at = now();
+                UPDATE purchase_invoices SET credit_applied_usd = credit_applied_usd + @applied, updated_at = now() WHERE id = @OriginalId;
+                UPDATE purchase_invoices SET credit_applied_usd = -@applied WHERE id = @ReturnId;
                 """,
-                new { line.ItemId, bill.WarehouseId, line.Qty }, transaction, cancellationToken: cancellationToken));
-
-            await InventoryMovementWriter.RecordAsync(
-                connection, transaction, line.SkuId, bill.WarehouseId, null, line.Qty, true, "PURCHASE", "PURCHASE_INVOICE", bill.Id,
-                _currentUser.UserId, $"Purchase invoice {bill.BillNumber}", cancellationToken);
+                new { applied, OriginalId = original.Id, ReturnId = bill.Id }, transaction, cancellationToken: cancellationToken));
         }
 
         await connection.ExecuteAsync(new CommandDefinition(
-            """
-            UPDATE purchase_invoices
-            SET status = 'POSTED', balance_usd = total_usd, posted_at = now(), posted_by = @By, updated_at = now()
-            WHERE id = @Id;
-            """,
+            "UPDATE purchase_invoices SET status = 'POSTED', posted_at = now(), posted_by = @By, updated_at = now() WHERE id = @Id;",
             new { request.Id, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
 
         await OutboxWriter.AddAsync(connection, transaction, OutboxEventTypes.PurchaseInvoicePosted, "PurchaseInvoice", request.Id,
@@ -368,6 +380,11 @@ public sealed class VoidPurchaseInvoiceCommandValidator : AbstractValidator<Void
     }
 }
 
+/// <summary>
+/// Voiding undoes a posting exactly: a bill's goods leave again (refused once part of them was sold or moved) and the average cost
+/// goes back; a return's goods come back and its credit is taken off the bill it returned. A bill with returns is voided only after
+/// them (ERPNext likewise refuses to cancel an invoice that has live returns).
+/// </summary>
 public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurchaseInvoiceCommand, Result<Guid>>
 {
     private readonly IDbConnectionFactory _connectionFactory;
@@ -386,84 +403,78 @@ public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurc
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var bill = await connection.QuerySingleOrDefaultAsync<(Guid Id, string BillNumber, string Status, Guid WarehouseId, DateOnly BillDate, decimal Paid)>(new CommandDefinition(
-            "SELECT id AS Id, bill_number AS BillNumber, status AS Status, warehouse_id AS WarehouseId, bill_date AS BillDate, paid_usd AS Paid FROM purchase_invoices WHERE id = @Id FOR UPDATE;",
-            new { request.Id }, transaction, cancellationToken: cancellationToken));
-        if (bill.Id == Guid.Empty)
+        var bill = await PurchaseDocuments.LockAsync(connection, transaction, request.Id, cancellationToken);
+        if (bill is null)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Purchase.NotFound", "Purchase invoice was not found."));
+            return Result<Guid>.Failure(PurchaseDocuments.NotFound);
         }
 
         if (bill.Status == "VOID")
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Purchase.InvalidState", "The bill is already void."));
+            return Result<Guid>.Failure(new Error("Purchase.InvalidState", "The document is already void."));
         }
 
-        if (bill.Paid > 0)
+        if (bill.PaidUsd > 0)
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Purchase.HasPayments", "Reverse the supplier payments allocated to this bill before voiding it."));
         }
 
-        if (await _periodLock.IsLockedAsync(bill.BillDate.Year, bill.BillDate.Month, "PURCHASES", cancellationToken))
+        var returns = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT string_agg(bill_number, '، ') FROM purchase_invoices WHERE return_against_id = @Id AND status <> 'VOID';",
+            new { request.Id }, transaction, cancellationToken: cancellationToken));
+        if (returns is not null)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Period.Locked", "The accounting period of this bill is locked."));
+            return Result<Guid>.Failure(new Error("Purchase.HasReturns", $"Returns {returns} were made against this bill; void them first."));
+        }
+
+        if (await _periodLock.IsLockedAsync(bill.BillDate.Year, bill.BillDate.Month, PurchaseDocuments.Module, cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(PurchaseDocuments.PeriodLocked);
         }
 
         if (bill.Status == "POSTED")
         {
-            // The goods leave again; if some were already sold or moved, the bill cannot be voided.
-            var lines = (await connection.QueryAsync<(Guid ItemId, Guid SkuId, decimal Qty, decimal NetCost)>(new CommandDefinition(
-                """
-                SELECT l.item_id AS ItemId, i.sku_id AS SkuId, l.quantity AS Qty,
-                       round(l.unit_cost_usd * (1 - l.discount_pct / 100) * CASE WHEN p.subtotal_usd = 0 THEN 1 ELSE p.total_usd / p.subtotal_usd END, 6) AS NetCost
-                FROM purchase_invoice_lines l
-                INNER JOIN items i ON i.id = l.item_id
-                INNER JOIN purchase_invoices p ON p.id = l.purchase_invoice_id
-                WHERE l.purchase_invoice_id = @Id;
-                """,
-                new { request.Id }, transaction, cancellationToken: cancellationToken))).ToList();
-
-            foreach (var line in lines)
+            var fx = await PurchaseDocuments.FxRateAsync(connection, transaction, bill.FxRateId, cancellationToken);
+            foreach (var line in await PurchaseDocuments.NetLinesAsync(connection, transaction, bill.Id, cancellationToken))
             {
-                // Take this bill's goods out of the weighted-average cost as well, so the cost goes back to what it was without them.
-                var sku = await connection.QuerySingleAsync<(decimal OnHand, decimal Cost)>(new CommandDefinition(
-                    """
-                    SELECT COALESCE((SELECT SUM(quantity_on_hand) FROM inventory_stock WHERE sku_id = @SkuId), 0) AS OnHand,
-                           (SELECT cost_price_usd FROM skus WHERE id = @SkuId FOR UPDATE) AS Cost;
-                    """,
-                    new { line.SkuId }, transaction, cancellationToken: cancellationToken));
-                var remaining = sku.OnHand - line.Qty;
-                if (remaining > 0)
+                Result moved;
+                if (bill.IsReturn)
                 {
-                    var restored = Math.Max(Math.Round((sku.OnHand * sku.Cost - line.Qty * line.NetCost) / remaining, 4), 0m);
-                    await connection.ExecuteAsync(new CommandDefinition(
-                        "UPDATE skus SET cost_price_usd = @restored, updated_at = now(), updated_by = @By WHERE id = @SkuId;",
-                        new { line.SkuId, restored, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
+                    await InventoryCosting.BlendInAsync(connection, transaction, line.SkuId, line.Qty, line.NetCost, fx, _currentUser.UserId, cancellationToken);
+                    moved = await PurchaseDocuments.MoveAsync(connection, transaction, bill, line, isIn: true, "PURCHASE_RETURN_VOID", $"Voided purchase return {bill.BillNumber}", _currentUser.UserId, cancellationToken);
+                }
+                else
+                {
+                    await InventoryCosting.BlendOutAsync(connection, transaction, line.SkuId, line.Qty, line.NetCost, fx, _currentUser.UserId, cancellationToken);
+                    moved = await PurchaseDocuments.MoveAsync(connection, transaction, bill, line, isIn: false, "PURCHASE_VOID", $"Voided purchase invoice {bill.BillNumber}", _currentUser.UserId, cancellationToken);
                 }
 
-                var removed = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, bill.WarehouseId, -line.Qty, cancellationToken);
-                if (removed.IsFailure)
+                if (moved.IsFailure)
                 {
                     await transaction.RollbackAsync(cancellationToken);
                     return Result<Guid>.Failure(new Error("Purchase.StockAlreadyUsed", "Part of the received goods was already sold or moved, so the bill cannot be voided."));
                 }
+            }
 
+            if (bill.ReturnAgainstId is { } againstId)
+            {
+                // The returned bill owes again what this return had taken off it.
                 await connection.ExecuteAsync(new CommandDefinition(
-                    "UPDATE inventory_balances SET qty = GREATEST(qty - @Qty, 0), updated_at = now() WHERE item_id = @ItemId AND location_id = @WarehouseId AND batch_id IS NULL AND status = 'AVAILABLE';",
-                    new { line.ItemId, bill.WarehouseId, line.Qty }, transaction, cancellationToken: cancellationToken));
-
-                await InventoryMovementWriter.RecordAsync(
-                    connection, transaction, line.SkuId, bill.WarehouseId, null, line.Qty, false, "PURCHASE_VOID", "PURCHASE_INVOICE", bill.Id,
-                    _currentUser.UserId, $"Voided purchase invoice {bill.BillNumber}", cancellationToken);
+                    """
+                    UPDATE purchase_invoices SET credit_applied_usd = credit_applied_usd + @credit, updated_at = now() WHERE id = @againstId;
+                    UPDATE purchase_invoices SET credit_applied_usd = 0 WHERE id = @Id;
+                    """,
+                    new { credit = bill.CreditAppliedUsd, againstId, bill.Id }, transaction, cancellationToken: cancellationToken));
             }
         }
 
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE purchase_invoices SET status = 'VOID', balance_usd = 0, void_reason = @Reason, voided_at = now(), voided_by = @By, updated_at = now() WHERE id = @Id;",
+            "UPDATE purchase_invoices SET status = 'VOID', void_reason = @Reason, voided_at = now(), voided_by = @By, updated_at = now() WHERE id = @Id;",
             new { request.Id, request.Reason, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
 
         if (bill.Status == "POSTED")
@@ -474,5 +485,95 @@ public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurc
 
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(request.Id);
+    }
+}
+
+// ---------------------------------------------------------------- shared
+
+/// <summary>What posting, voiding and returning a purchase document read and write, in one place.</summary>
+internal static class PurchaseDocuments
+{
+    public const string Module = "PURCHASES";
+    public static readonly Error NotFound = new("Purchase.NotFound", "Purchase invoice was not found.");
+    public static readonly Error PeriodLocked = new("Period.Locked", "The accounting period of this document is locked.");
+
+    public sealed record Header(
+        Guid Id, string BillNumber, string Status, bool IsReturn, Guid? ReturnAgainstId, Guid WarehouseId, DateOnly BillDate, Guid? FxRateId,
+        decimal TotalUsd, decimal PaidUsd, decimal CreditAppliedUsd, decimal BalanceUsd, Guid SupplierPartyId);
+
+    /// <summary>A line with its cost after the line discount and its share of the document discount.</summary>
+    public sealed record NetLine(Guid LineId, Guid ItemId, Guid SkuId, string ItemCode, decimal Qty, decimal NetCost);
+
+    public static Task<Header?> LockAsync(DbConnection connection, DbTransaction transaction, Guid id, CancellationToken ct) =>
+        connection.QuerySingleOrDefaultAsync<Header>(new CommandDefinition(
+            """
+            SELECT id AS Id, bill_number AS BillNumber, status AS Status, is_return AS IsReturn, return_against_id AS ReturnAgainstId,
+                   warehouse_id AS WarehouseId, bill_date AS BillDate, fx_rate_id AS FxRateId, total_usd AS TotalUsd, paid_usd AS PaidUsd,
+                   credit_applied_usd AS CreditAppliedUsd, balance_usd AS BalanceUsd, supplier_party_id AS SupplierPartyId
+            FROM purchase_invoices WHERE id = @id FOR UPDATE;
+            """,
+            new { id }, transaction, cancellationToken: ct));
+
+    public static async Task<decimal> FxRateAsync(DbConnection connection, DbTransaction transaction, Guid? fxRateId, CancellationToken ct) =>
+        await connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
+            "SELECT COALESCE((SELECT mid_rate FROM fx_rates WHERE id = @fxRateId), (SELECT mid_rate FROM fx_rates WHERE is_active ORDER BY rate_date DESC, created_at DESC LIMIT 1));",
+            new { fxRateId }, transaction, cancellationToken: ct)) ?? 0m;
+
+    /// <summary>
+    /// The document discount is shared over the lines in proportion to their value (total / subtotal), for a return as for a bill
+    /// (both totals are negative on a return, so the share is the same).
+    /// </summary>
+    public static async Task<IReadOnlyList<NetLine>> NetLinesAsync(DbConnection connection, DbTransaction transaction, Guid id, CancellationToken ct) =>
+        (await connection.QueryAsync<NetLine>(new CommandDefinition(
+            """
+            SELECT l.id AS LineId, l.item_id AS ItemId, i.sku_id AS SkuId, i.part_number AS ItemCode, l.quantity AS Qty,
+                   round(l.unit_cost_usd * (1 - l.discount_pct / 100) * CASE WHEN p.subtotal_usd = 0 THEN 1 ELSE p.total_usd / p.subtotal_usd END, 6) AS NetCost
+            FROM purchase_invoice_lines l
+            INNER JOIN items i ON i.id = l.item_id
+            INNER JOIN purchase_invoices p ON p.id = l.purchase_invoice_id
+            WHERE l.purchase_invoice_id = @id
+            ORDER BY l.line_number;
+            """,
+            new { id }, transaction, cancellationToken: ct))).ToList();
+
+    /// <summary>The first item this return would take beyond what its bill still holds (every posted return counted), or null.</summary>
+    public static Task<string?> OverReturnedAsync(DbConnection connection, DbTransaction transaction, Guid returnId, CancellationToken ct) =>
+        connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            """
+            SELECT i.part_number
+            FROM purchase_invoice_lines r
+            INNER JOIN purchase_invoice_lines o ON o.id = r.return_of_line_id
+            INNER JOIN items i ON i.id = o.item_id
+            WHERE r.purchase_invoice_id = @returnId
+              AND r.quantity > o.quantity - (SELECT COALESCE(SUM(x.quantity), 0) FROM purchase_invoice_lines x
+                                              INNER JOIN purchase_invoices xp ON xp.id = x.purchase_invoice_id
+                                              WHERE x.return_of_line_id = o.id AND xp.status = 'POSTED')
+            LIMIT 1;
+            """,
+            new { returnId }, transaction, cancellationToken: ct));
+
+    /// <summary>Moves one line's goods in or out of the document's warehouse (sellable stock, warehouse view and item ledger together).</summary>
+    public static async Task<Result> MoveAsync(
+        DbConnection connection, DbTransaction transaction, Header bill, NetLine line, bool isIn, string movementType, string note, Guid by, CancellationToken ct)
+    {
+        var stocked = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, bill.WarehouseId, isIn ? line.Qty : -line.Qty, ct);
+        if (stocked.IsFailure)
+        {
+            return stocked;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            isIn
+                ? """
+                  INSERT INTO inventory_balances (id, item_id, location_id, batch_id, status, qty, updated_at)
+                  VALUES (uuid_generate_v4(), @ItemId, @WarehouseId, NULL, 'AVAILABLE', @Qty, now())
+                  ON CONFLICT (item_id, location_id, batch_id, status) DO UPDATE SET qty = inventory_balances.qty + EXCLUDED.qty, updated_at = now();
+                  """
+                : "UPDATE inventory_balances SET qty = GREATEST(qty - @Qty, 0), updated_at = now() WHERE item_id = @ItemId AND location_id = @WarehouseId AND batch_id IS NULL AND status = 'AVAILABLE';",
+            new { line.ItemId, bill.WarehouseId, line.Qty }, transaction, cancellationToken: ct));
+
+        await InventoryMovementWriter.RecordAsync(
+            connection, transaction, line.SkuId, bill.WarehouseId, null, line.Qty, isIn, movementType, "PURCHASE_INVOICE", bill.Id, by, note, ct);
+        return Result.Success();
     }
 }

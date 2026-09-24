@@ -20,7 +20,7 @@ export type StatementLine = {
 };
 
 export const TYPE_LABEL: Record<string, string> = {
-  INVOICE: 'فاتورة', VOIDED: 'فاتورة (ملغاة)', CREDIT_NOTE: 'إشعار دائن', RETURN: 'مرتجع', PAYMENT: 'سند قبض', REFUND: 'ردّ مبلغ', BILL: 'فاتورة شراء', SUPPLIER_PAYMENT: 'دفعة لمورّد',
+  INVOICE: 'فاتورة', VOIDED: 'فاتورة (ملغاة)', CREDIT_NOTE: 'إشعار دائن', RETURN: 'مرتجع', PURCHASE_RETURN: 'مرتجع مشتريات', PAYMENT: 'سند قبض', REFUND: 'ردّ مبلغ', BILL: 'فاتورة شراء', SUPPLIER_PAYMENT: 'دفعة لمورّد',
 };
 
 
@@ -67,7 +67,7 @@ export default function StatementTable({ lines, linkFor }: { lines: StatementLin
             return (
               <TableRow key={`${l.id ?? l.reference}-${i}`} hover>
                 <TableCell>{ymd(l.date)}</TableCell>
-                <TableCell><Chip size="small" label={TYPE_LABEL[l.type] ?? l.type} color={l.type === 'PAYMENT' || l.type === 'RETURN' || l.type === 'CREDIT_NOTE' ? 'success' : 'default'} variant="outlined" /></TableCell>
+                <TableCell><Chip size="small" label={TYPE_LABEL[l.type] ?? l.type} color={['PAYMENT', 'RETURN', 'CREDIT_NOTE', 'PURCHASE_RETURN', 'SUPPLIER_PAYMENT'].includes(l.type) ? 'success' : 'default'} variant="outlined" /></TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>
                   {to ? <Box component={RouterLink} to={to} sx={{ color: 'primary.main', textDecoration: 'none' }}>{l.reference || l.description || '—'}</Box> : (l.reference || l.description || '—')}
                 </TableCell>

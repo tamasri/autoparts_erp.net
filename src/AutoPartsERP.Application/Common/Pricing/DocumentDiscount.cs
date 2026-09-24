@@ -37,6 +37,18 @@ public static class DocumentDiscount
         return Result<Resolved>.Success(new Resolved(null, 0));
     }
 
-    /// <summary>What remains of each currency unit of the lines after the invoice discount; the net cost of a purchased item is scaled by it.</summary>
-    public static decimal NetFactor(decimal subtotal, decimal discountAmount) => subtotal <= 0 ? 1 : (subtotal - discountAmount) / subtotal;
+    /// <summary>
+    /// The part of an invoice's discount that a return gives back: in proportion to the returned lines, and exactly the rest when the
+    /// return takes back everything still held (so all returns of an invoice together give back its whole discount, never a cent more).
+    /// </summary>
+    public static decimal ReturnShare(decimal invoiceDiscount, decimal invoiceSubtotal, decimal returnedLines, decimal alreadyGivenBack, bool returnsEverythingLeft)
+    {
+        var left = Math.Max(invoiceDiscount - alreadyGivenBack, 0m);
+        if (returnsEverythingLeft)
+        {
+            return left;
+        }
+
+        return invoiceSubtotal <= 0 ? 0m : Math.Min(Math.Round(invoiceDiscount * returnedLines / invoiceSubtotal, 4), left);
+    }
 }

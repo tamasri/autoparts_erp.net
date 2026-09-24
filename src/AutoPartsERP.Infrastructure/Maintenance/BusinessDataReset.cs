@@ -86,6 +86,22 @@ public static class BusinessDataReset
         // Entry types: keep the built-in ones, drop the ones added while trying the system; then every document series starts again at 1.
         await connection.ExecuteAsync("DELETE FROM entry_types WHERE NOT is_system; SELECT seed_document_series();", transaction: tx);
 
+        // Rules a migration could only add NOT VALID (older trial rows broke them) now hold for every row: make them fully valid.
+        var pending = (await connection.QueryAsync<(string Table, string Constraint)>(
+            """
+            SELECT conrelid::regclass::text AS "Table", conname AS "Constraint" FROM pg_constraint
+            WHERE NOT convalidated AND connamespace = 'public'::regnamespace;
+            """, transaction: tx)).ToList();
+        foreach (var (table, constraint) in pending)
+        {
+            await connection.ExecuteAsync($"ALTER TABLE {table} VALIDATE CONSTRAINT \"{constraint}\";", transaction: tx);
+        }
+
+        if (pending.Count > 0)
+        {
+            log($"Constraints now enforced on every row: {string.Join(", ", pending.Select(p => p.Constraint))}.");
+        }
+
         if (!keepAllUsers)
         {
             await connection.ExecuteAsync(

@@ -1,3 +1,4 @@
+using AutoPartsERP.Contracts.Common;
 using AutoPartsERP.Contracts.Customers;
 
 namespace AutoPartsERP.Contracts.Purchasing;
@@ -44,7 +45,8 @@ public sealed record PurchaseInvoiceListDto(
     string Status,
     decimal TotalUsd,
     decimal PaidUsd,
-    decimal BalanceUsd);
+    decimal BalanceUsd,
+    bool IsReturn);
 
 public sealed record PurchaseLineDto(
     Guid Id,
@@ -55,7 +57,8 @@ public sealed record PurchaseLineDto(
     decimal Quantity,
     decimal UnitCostUsd,
     decimal DiscountPct,
-    decimal LineTotalUsd);
+    decimal LineTotalUsd,
+    Guid? ReturnOfLineId);
 
 public sealed record PurchaseInvoiceDetailDto(
     PurchaseInvoiceListDto Invoice,
@@ -66,7 +69,10 @@ public sealed record PurchaseInvoiceDetailDto(
     IReadOnlyCollection<PurchaseLineDto> Lines,
     decimal SubtotalUsd,
     decimal? DiscountPct,
-    decimal DiscountAmountUsd);
+    decimal DiscountAmountUsd,
+    decimal CreditAppliedUsd,
+    DocumentLinkDto? ReturnAgainst,
+    IReadOnlyCollection<DocumentLinkDto> Returns);
 
 public sealed record SupplierPaymentDto(
     Guid Id,

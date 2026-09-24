@@ -1,4 +1,7 @@
-/** One sales invoice or return: lines, how the total is made up, what is paid, and the draft → confirmed → posted steps. */
+/**
+ * One sales invoice or return: lines, how the total is made up, what is paid or credited by returns, the draft → confirmed → posted
+ * steps, and the returns made against a sale (a return is always made from its sale, at the sale's prices).
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -6,7 +9,10 @@ import {
   TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import { invoicesApi, type InvoiceAmounts } from '../../api/endpoints/invoices';
-import { unwrapNode } from '../../api/apiData';
+import type { CreateReturn, DocumentLink, ReturnableLine } from '../../api/endpoints/returns';
+import { unwrapList, unwrapNode } from '../../api/apiData';
+import { useCan } from '../../hooks/useCan';
+import ReturnDialog from '../../features/returns/ReturnDialog';
 import { toast, extractApiError } from '../../lib/toast';
 import { formatPct, formatQty } from '../../lib/format';
 import PageHeader from '../../components/ui/PageHeader';
@@ -25,6 +31,9 @@ type Invoice = {
   id: string; invoiceNumber: string; status: string; type: string; customerId: string; customerCode: string; customerName: string;
   invoiceDate: string; dueDate: string; totalSyp: number; totalUsd: number; paidSyp: number; paidUsd: number; balanceSyp: number; balanceUsd: number;
   dueDateDisplay: string; totalSypInWords: string; totalUsdInWords: string; lines: InvoiceLine[]; amounts: InvoiceAmounts;
+  /** Credit of returns applied to this sale (+), or given by this return to its sale (−). */
+  creditAppliedSyp: number; creditAppliedUsd: number;
+  returnOf: DocumentLink | null; returns: DocumentLink[];
 };
 
 function Row({ label, children, strong }: { label: string; children: React.ReactNode; strong?: boolean }): JSX.Element {
@@ -44,6 +53,10 @@ export default function InvoiceDetail(): JSX.Element {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [returning, setReturning] = useState(false);
+  const canReturn = useCan('invoices:create');
+  const loadReturnable = useCallback(async (): Promise<ReturnableLine[]> => unwrapList<ReturnableLine>((await invoicesApi.returnable(id)).data), [id]);
+  const createReturn = useCallback(async (body: CreateReturn): Promise<string> => unwrapNode<{ id: string }>((await invoicesApi.createReturn(id, body)).data)?.id ?? '', [id]);
   const [discountMode, setDiscountMode] = useState<'pct' | 'usd'>('pct');
   const [discountValue, setDiscountValue] = useState('');
 
@@ -97,7 +110,7 @@ export default function InvoiceDetail(): JSX.Element {
     <Box>
       <PageHeader
         title={`${isReturn ? 'مرتجع' : 'فاتورة'} ${invoice.invoiceNumber || ''}`}
-        subtitle={`${invoice.customerName} · ${invoice.invoiceDate}`}
+        subtitle={`${invoice.customerName} · ${invoice.invoiceDate}${invoice.returnOf ? ` · مرتجع الفاتورة ${invoice.returnOf.number}` : ''}`}
         crumbs={[{ label: 'الفواتير', to: '/invoices' }, { label: invoice.invoiceNumber || invoice.id.slice(0, 8) }]}
         actions={(
           <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
@@ -105,12 +118,27 @@ export default function InvoiceDetail(): JSX.Element {
             <Button variant="outlined" disabled={busy} onClick={() => void downloadPdf()}>⬇ PDF</Button>
             {status === 'DRAFT' ? <Button variant="contained" disabled={busy} onClick={() => void run(() => invoicesApi.confirm(id), 'تم تأكيد الفاتورة', 'تعذر تأكيد الفاتورة')}>✓ تأكيد</Button> : null}
             {status === 'CONFIRMED' ? <Button variant="contained" color="success" disabled={busy} onClick={() => void run(() => invoicesApi.post(id), 'تم ترحيل الفاتورة', 'تعذر ترحيل الفاتورة')}>✓ ترحيل</Button> : null}
+            {status === 'POSTED' && !isReturn && canReturn ? <Button variant="outlined" color="warning" disabled={busy} onClick={() => setReturning(true)}>↩ مرتجع</Button> : null}
             {status === 'POSTED' ? <Button color="error" disabled={busy} onClick={() => setVoiding(true)}>✕ إلغاء</Button> : null}
             <DeleteDocumentButton kind="invoices" id={id} number={invoice.invoiceNumber} status={status} size="medium" onDeleted={() => navigate('/invoices')} />
           </Stack>
         )}
       />
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {invoice.returnOf ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          مرتجع من الفاتورة <Link component={RouterLink} to={`/invoices/${invoice.returnOf.id}`} fontWeight={700}>{invoice.returnOf.number}</Link> — بأسعارها وتكلفتها، ويُطبَّق رصيده على ما تبقّى منها.
+        </Alert>
+      ) : null}
+      {invoice.returns.length > 0 ? (
+        <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">المرتجعات:</Typography>
+          {invoice.returns.map((r) => (
+            <Chip key={r.id} size="small" component={RouterLink} to={`/invoices/${r.id}`} clickable variant="outlined"
+              color={r.status === 'POSTED' ? 'warning' : 'default'} label={`${r.number} · ${r.status === 'POSTED' ? 'مرحّل' : r.status === 'VOID' ? 'ملغى' : 'مسودة'}`} />
+          ))}
+        </Stack>
+      ) : null}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
         <Stack spacing={2}>
@@ -171,7 +199,14 @@ export default function InvoiceDetail(): JSX.Element {
               <Typography variant="caption" color="text.secondary">{invoice.totalSypInWords}</Typography>
               <Divider />
               <Row label="المدفوع"><Money usd={invoice.paidUsd} syp={invoice.paidSyp} color="success.main" /></Row>
-              <Row label="المتبقي" strong><Money usd={invoice.balanceUsd} syp={invoice.balanceSyp} fontWeight={700} color={invoice.balanceUsd > 0 ? 'error.main' : undefined} /></Row>
+              {invoice.creditAppliedUsd !== 0 ? (
+                <Row label={isReturn ? 'طُبِّق على الفاتورة الأصلية' : 'مرتجعات مطبّقة'}>
+                  <Money usd={Math.abs(invoice.creditAppliedUsd)} syp={Math.abs(invoice.creditAppliedSyp)} color="warning.main" />
+                </Row>
+              ) : null}
+              <Row label={invoice.balanceUsd < 0 ? 'رصيد دائن للزبون' : 'المتبقي'} strong>
+                <Money usd={Math.abs(invoice.balanceUsd)} syp={Math.abs(invoice.balanceSyp)} fontWeight={700} color={invoice.balanceUsd > 0 ? 'error.main' : invoice.balanceUsd < 0 ? 'success.main' : undefined} />
+              </Row>
               {status === 'DRAFT' ? (
                 <>
                   <Divider />
@@ -189,6 +224,9 @@ export default function InvoiceDetail(): JSX.Element {
           </CardContent>
         </Card>
       </Box>
+
+      <ReturnDialog open={returning} title={`مرتجع مبيعات من الفاتورة ${invoice.invoiceNumber}`} chooseLocation load={loadReturnable} submit={createReturn}
+        onClose={() => setReturning(false)} onCreated={(newId) => { setReturning(false); navigate(`/invoices/${newId}`); }} />
 
       <ReasonDialog open={voiding} title="سبب إلغاء الفاتورة" confirmLabel="إلغاء الفاتورة" minLength={3}
         onClose={() => setVoiding(false)}

@@ -52,6 +52,7 @@
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
 | Cache | Redis (StackExchange.Redis, distributed cache) | |
 | Jobs | **Hangfire** (Postgres storage), queues `default` + `governance`; **Outbox** dispatcher hosted service | |
+| Returns | migration 27, `…/returns` endpoints, `ReturnDialog` | sales and purchase returns against their invoice (ERPNext `is_return` / `return_against`), capped by DB triggers, costed at the original cost, credited to the original |
 | Numbering | `document_series` + triggers (migration 26) | one gapless series per document kind / entry type; recorded Super Admin deletion; previous/next in every document view |
 | Realtime | SignalR hub `/hubs/erp` | server-decided groups; approvals (new/decided) and stock alerts pushed as toasts + menu badges (2026-09-24) |
 | Audit | Audit.NET (EF + PostgreSql sinks) + immutable audit tables | |

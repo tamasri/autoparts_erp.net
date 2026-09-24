@@ -1,3 +1,5 @@
+using AutoPartsERP.Application.Features.Inventory;
+using AutoPartsERP.Application.Features.Invoices.Returns;
 using Dapper;
 using Humanizer;
 
@@ -62,7 +64,8 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                     i.paid_syp AS PaidSyp,
                     i.paid_usd AS PaidUsd,
                     i.sales_rep_id AS SalesRepId,
-                    i.invoice_type AS Type
+                    i.invoice_type AS Type,
+                    i.original_invoice_id AS OriginalInvoiceId
                 FROM invoices i
                 INNER JOIN customers c ON c.id = i.customer_id
                 WHERE i.id = @InvoiceId
@@ -113,6 +116,7 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                     CASE WHEN il.line_total_syp = 0 THEN 0 ELSE ((il.line_total_syp - (il.quantity * il.cost_price_syp)) / il.line_total_syp) * 100 END AS GrossMarginPct,
                     il.is_price_override AS IsPriceOverride,
                     il.price_override_reason AS OverrideReason,
+                    il.cost_price_usd AS CostPriceUsd,
                     s.has_warranty AS HasWarranty,
                     s.warranty_months AS WarrantyMonths
                 FROM invoice_lines il
@@ -132,8 +136,35 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
         }
 
         var isReturn = string.Equals(header.Type, "RETURN", StringComparison.OrdinalIgnoreCase);
+        (Guid Id, decimal BalanceSyp, decimal BalanceUsd)? sale = null;
+        if (isReturn)
+        {
+            // Lock the returned sale first: two returns of one sale are posted one after the other, never side by side.
+            sale = await connection.QuerySingleOrDefaultAsync<(Guid Id, decimal BalanceSyp, decimal BalanceUsd)?>(new CommandDefinition(
+                "SELECT id AS Id, balance_syp AS BalanceSyp, balance_usd AS BalanceUsd FROM invoices WHERE id = @OriginalInvoiceId AND status = 'POSTED' FOR UPDATE;",
+                new { header.OriginalInvoiceId }, transaction, cancellationToken: cancellationToken));
+            if (sale is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(new Error("SalesReturn.OriginalNotPosted", "The invoice being returned is no longer posted."));
+            }
+
+            var over = await SalesReturnLines.OverReturnedAsync(connection, transaction, request.InvoiceId, cancellationToken);
+            if (over is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(new Error("SalesReturn.ExceedsSold", $"Item {over} would be returned beyond what the invoice still holds."));
+            }
+        }
+
         foreach (var line in lines)
         {
+            if (isReturn)
+            {
+                // The goods come back at the cost they were sold at (ERPNext: the return's incoming rate is the sale's valuation rate).
+                await InventoryCosting.BlendInAsync(connection, transaction, line.SkuId, line.Quantity, line.CostPriceUsd, header.FxRateSnapshot, _currentUser.UserId, cancellationToken);
+            }
+
             var moved = await InvoiceStockMover.MoveAsync(
                 connection, transaction, request.InvoiceId, line.SkuId, line.LocationId, line.BatchId, line.Quantity,
                 isReturn ? StockDirection.In : StockDirection.Out, _currentUser.UserId,
@@ -171,6 +202,20 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
                     transaction,
                     cancellationToken: cancellationToken));
             }
+        }
+
+        if (sale is { } returned)
+        {
+            // The credit lands on the returned sale, up to what is still owed on it; the rest stays on the return as the customer's credit.
+            var applied = (
+                Syp: Math.Min(-header.TotalSyp, Math.Max(returned.BalanceSyp, 0m)),
+                Usd: Math.Min(-header.TotalUsd, Math.Max(returned.BalanceUsd, 0m)));
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE invoices SET credit_applied_syp = credit_applied_syp + @Syp, credit_applied_usd = credit_applied_usd + @Usd, updated_at = now() WHERE id = @SaleId;
+                UPDATE invoices SET credit_applied_syp = -@Syp, credit_applied_usd = -@Usd WHERE id = @ReturnId;
+                """,
+                new { applied.Syp, applied.Usd, SaleId = returned.Id, ReturnId = request.InvoiceId }, transaction, cancellationToken: cancellationToken));
         }
 
         await connection.ExecuteAsync(new CommandDefinition(
@@ -232,11 +277,12 @@ public sealed class PostInvoiceCommandHandler : IRequestHandler<PostInvoiceComma
 
     private sealed record PostHeaderRow(
         Guid Id, string Status, Guid CustomerId, string CustomerCode, string CustomerName, DateOnly InvoiceDate, DateOnly DueDate,
-        Guid FxRateId, decimal FxRateSnapshot, decimal TotalSyp, decimal TotalUsd, decimal PaidSyp, decimal PaidUsd, Guid? SalesRepId, string Type);
+        Guid FxRateId, decimal FxRateSnapshot, decimal TotalSyp, decimal TotalUsd, decimal PaidSyp, decimal PaidUsd, Guid? SalesRepId, string Type,
+        Guid? OriginalInvoiceId);
 
     private sealed record PostLineRow(
         Guid Id, int LineNumber, Guid SkuId, string SkuCode, string SkuName, Guid? BatchId, Guid LocationId, decimal Quantity,
         decimal UnitPriceSyp, decimal UnitPriceUsd, decimal DiscountPct, decimal LineTotalSyp, decimal LineTotalUsd,
         decimal GrossMarginSyp, decimal GrossMarginUsd, decimal GrossMarginPct, bool IsPriceOverride, string? OverrideReason,
-        bool HasWarranty, int WarrantyMonths);
+        decimal CostPriceUsd, bool HasWarranty, int WarrantyMonths);
 }

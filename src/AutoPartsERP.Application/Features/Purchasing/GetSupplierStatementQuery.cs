@@ -3,7 +3,7 @@ using Dapper;
 namespace AutoPartsERP.Application.Features.Purchasing;
 
 /// <summary>
-/// What we owe a supplier, movement by movement in dollars: posted bills raise it (credit), payments lower it (debit).
+/// What we owe a supplier, movement by movement in dollars: posted bills raise it (credit), payments and returns lower it (debit).
 /// The balance is what is still owed to the supplier (positive = we owe them).
 /// </summary>
 public sealed record GetSupplierStatementQuery(Guid PartyId)
@@ -39,8 +39,10 @@ public sealed class GetSupplierStatementQueryHandler : IRequestHandler<GetSuppli
             SELECT id AS Id, type AS Type, occurred_at AS Date, due_date AS DueDate, debit_usd AS DebitUsd, credit_usd AS CreditUsd,
                    SUM(credit_usd - debit_usd) OVER (ORDER BY occurred_at, created_at, id) AS BalanceUsd, reference AS Reference
             FROM (
-                SELECT b.id, 'BILL' AS type, b.bill_date::timestamp AS occurred_at, b.created_at, b.due_date::timestamp AS due_date,
-                       0::numeric AS debit_usd, b.total_usd AS credit_usd, b.bill_number AS reference
+                -- A bill raises what we owe; a return (a negative bill) lowers it.
+                SELECT b.id, CASE WHEN b.is_return THEN 'PURCHASE_RETURN' ELSE 'BILL' END AS type, b.bill_date::timestamp AS occurred_at, b.created_at,
+                       CASE WHEN b.is_return THEN NULL ELSE b.due_date::timestamp END AS due_date,
+                       GREATEST(-b.total_usd, 0) AS debit_usd, GREATEST(b.total_usd, 0) AS credit_usd, b.bill_number AS reference
                 FROM purchase_invoices b WHERE b.supplier_party_id = @PartyId AND b.status = 'POSTED'
                 UNION ALL
                 SELECT p.id, 'SUPPLIER_PAYMENT', p.payment_date::timestamp, p.created_at, NULL::timestamp,

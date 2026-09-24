@@ -34,7 +34,9 @@ public sealed class CreateInvoiceCommandValidator : AbstractValidator<CreateInvo
         RuleFor(x => x.IdempotencyKey).NotEmpty();
         RuleFor(x => x.CustomerId).NotEmpty();
         RuleFor(x => x.FxRateId).NotEmpty();
-        RuleFor(x => x.InvoiceType).NotEmpty();
+        // A return is made from the invoice it returns (CreateSalesReturnCommand), never typed in free-standing.
+        RuleFor(x => x.InvoiceType).Must(t => string.Equals(t?.Trim(), "SALE", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("New invoices are sales; a return is created from the invoice it returns.");
         RuleFor(x => x.DueDate).GreaterThanOrEqualTo(x => x.InvoiceDate);
         RuleFor(x => x.DeliveryFeeSyp).GreaterThanOrEqualTo(0);
         RuleFor(x => x.DeliveryFeeUsd).GreaterThanOrEqualTo(0);

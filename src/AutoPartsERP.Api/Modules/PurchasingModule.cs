@@ -25,6 +25,14 @@ public sealed class PurchasingModule : ICarterModule
         bills.MapPost("/{id:guid}/void", async Task<IResult> (Guid id, VoidPurchaseInvoiceRequest request, ISender sender, CancellationToken ct) =>
             (await sender.Send(new VoidPurchaseInvoiceCommand(id, request.Reason), ct)).ToApiResult());
 
+        // Purchase returns: the bill's lines with what can still be returned, and a draft return of some of them.
+        bills.MapGet("/{id:guid}/returnable", async Task<IResult> (Guid id, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new GetPurchaseReturnableQuery(id), ct)).ToApiResult());
+
+        bills.MapPost("/{id:guid}/returns", async Task<IResult> (Guid id, CreateReturnRequest request, HttpContext http, ISender sender, CancellationToken ct) =>
+                (await sender.Send(new CreatePurchaseReturnCommand(id, request, EndpointRequestHelpers.GetIdempotencyKey(http)), ct)).ToApiResult())
+            .WithIdempotency();
+
         var payments = app.MapGroup("/api/v1/supplier-payments").RequireAuthorization();
 
         payments.MapGet("/", async Task<IResult> (int? page, int? pageSize, Guid? supplierPartyId, ISender sender, CancellationToken ct) =>

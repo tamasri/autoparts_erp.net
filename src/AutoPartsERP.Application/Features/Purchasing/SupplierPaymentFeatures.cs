@@ -91,7 +91,7 @@ public sealed class CreateSupplierPaymentCommandHandler : IRequestHandler<Create
                 "INSERT INTO supplier_payment_allocations (supplier_payment_id, purchase_invoice_id, allocated_usd) VALUES (@id, @Bill, @Amount);",
                 new { id, Bill = allocation.PurchaseInvoiceId, Amount = allocation.AmountUsd }, transaction, cancellationToken: cancellationToken));
             await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE purchase_invoices SET paid_usd = paid_usd + @Amount, balance_usd = balance_usd - @Amount, updated_at = now() WHERE id = @Bill;",
+                "UPDATE purchase_invoices SET paid_usd = paid_usd + @Amount, updated_at = now() WHERE id = @Bill;",
                 new { Bill = allocation.PurchaseInvoiceId, Amount = allocation.AmountUsd }, transaction, cancellationToken: cancellationToken));
         }
 
@@ -161,7 +161,7 @@ public sealed class ReverseSupplierPaymentCommandHandler : IRequestHandler<Rever
         await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE purchase_invoices p
-            SET paid_usd = p.paid_usd - a.total, balance_usd = p.balance_usd + a.total, updated_at = now()
+            SET paid_usd = p.paid_usd - a.total, updated_at = now()
             FROM (SELECT purchase_invoice_id, SUM(allocated_usd) AS total FROM supplier_payment_allocations WHERE supplier_payment_id = @Id GROUP BY purchase_invoice_id) a
             WHERE p.id = a.purchase_invoice_id AND p.status <> 'VOID';
             """,

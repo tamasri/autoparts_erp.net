@@ -1,4 +1,7 @@
 import { apiClient } from '../client';
+import type { CreateReturn } from './returns';
+
+const idem = () => ({ headers: { 'Idempotency-Key': crypto.randomUUID() } });
 
 export type CreateInvoiceLine = {
   skuId: string;
@@ -54,4 +57,6 @@ export const invoicesApi = {
   setDiscount: (id: string, body: { discountPct?: number | null; discountAmountUsd?: number | null }) => apiClient.put(`/invoices/${id}/discount`, body),
   void: (id: string, reason: string) => apiClient.post(`/invoices/${id}/void`, { reason }),
   getPdf: (id: string) => apiClient.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),
+  returnable: (id: string) => apiClient.get(`/invoices/${id}/returnable`),
+  createReturn: (id: string, body: CreateReturn) => apiClient.post(`/invoices/${id}/returns`, body, idem()),
 };

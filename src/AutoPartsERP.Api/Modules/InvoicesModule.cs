@@ -104,5 +104,13 @@ public sealed class InvoicesModule : ICarterModule
                 return result.ToApiResult();
             })
             .WithIdempotency();
+
+        // Sales returns: the sale's lines with what can still be returned, and a draft return of some of them.
+        group.MapGet("/{id:guid}/returnable", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new GetSalesReturnableQuery(id), cancellationToken)).ToApiResult());
+
+        group.MapPost("/{id:guid}/returns", async Task<IResult> (Guid id, CreateReturnRequest request, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
+                (await sender.Send(new CreateSalesReturnCommand(id, request, EndpointRequestHelpers.GetIdempotencyKey(httpContext)), cancellationToken)).ToApiResult())
+            .WithIdempotency();
     }
 }

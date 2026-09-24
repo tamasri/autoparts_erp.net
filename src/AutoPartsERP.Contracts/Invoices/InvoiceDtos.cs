@@ -1,3 +1,5 @@
+using AutoPartsERP.Contracts.Common;
+
 namespace AutoPartsERP.Contracts.Invoices;
 
 public sealed record InvoiceLineDto(
@@ -18,7 +20,8 @@ public sealed record InvoiceLineDto(
     decimal GrossMarginUsd,
     decimal GrossMarginPct,
     bool IsPriceOverride,
-    string? OverrideReason);
+    string? OverrideReason,
+    Guid? ReturnOfLineId);
 
 public sealed record InvoiceListItemDto(
     Guid Id,
@@ -59,7 +62,13 @@ public sealed record InvoiceDto(
     string TotalSypInWords,
     string TotalUsdInWords,
     IReadOnlyCollection<InvoiceLineDto> Lines,
-    InvoiceAmountsDto Amounts);
+    InvoiceAmountsDto Amounts,
+    decimal CreditAppliedSyp,
+    decimal CreditAppliedUsd,
+    /// <summary>For a return: the sale it returns.</summary>
+    DocumentLinkDto? ReturnOf,
+    /// <summary>For a sale: the returns made against it.</summary>
+    IReadOnlyCollection<DocumentLinkDto> Returns);
 
 /// <summary>
 /// How an invoice's total is made up: lines (after their own discounts), minus the invoice discount, plus the delivery fee.

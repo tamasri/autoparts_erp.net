@@ -1,4 +1,7 @@
-/** Purchasing: supplier bills (post = goods received, cost updated, sent to ERPNext) and supplier payments. */
+/**
+ * Purchasing: supplier bills (post = goods received, cost updated, sent to ERPNext), purchase returns made from a posted bill
+ * (post = goods sent back at their cost, the bill credited), and supplier payments.
+ */
 import { ARABIC_PAGINATION } from '../../lib/tablePagination';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -7,7 +10,8 @@ import {
   TableHead, TablePagination, TableRow, Tabs, TextField,
 } from '@mui/material';
 import { purchasingApi, type PurchaseInvoiceDetail, type PurchaseInvoiceRow, type SupplierPaymentRow } from '../../api/endpoints/purchasing';
-import { unwrapNode, unwrapPaged } from '../../api/apiData';
+import type { CreateReturn, ReturnableLine } from '../../api/endpoints/returns';
+import { unwrapList, unwrapNode, unwrapPaged } from '../../api/apiData';
 import { extractApiError, toast } from '../../lib/toast';
 import { notifyResult } from '../../lib/notify';
 import { num, ymd, type ExportDocument } from '../../lib/exportClient';
@@ -17,6 +21,8 @@ import DocumentViewButton from '../../components/ui/DocumentViewButton';
 import PurchaseInvoiceDialog from '../../features/purchasing/PurchaseInvoiceDialog';
 import SupplierPaymentDialog from '../../features/purchasing/SupplierPaymentDialog';
 import Money from '../../components/ui/Money';
+import ReturnDialog from '../../features/returns/ReturnDialog';
+import DeleteDocumentButton from '../../components/documents/DeleteDocumentButton';
 
 const STATUS: Record<string, { label: string; color: 'default' | 'success' | 'error' }> = {
   DRAFT: { label: 'مسودة', color: 'default' }, POSTED: { label: 'مرحّلة', color: 'success' }, VOID: { label: 'ملغاة', color: 'error' },
@@ -29,10 +35,14 @@ async function billDocument(id: string): Promise<ExportDocument> {
   const d = unwrapNode<PurchaseInvoiceDetail>((await purchasingApi.getInvoice(id)).data) as PurchaseInvoiceDetail;
   const i = d.invoice;
   return {
-    title: `فاتورة شراء ${i.billNumber}`, subtitle: STATUS[i.status]?.label, fileName: `purchase-${i.billNumber}`,
+    title: `${i.isReturn ? 'مرتجع مشتريات' : 'فاتورة شراء'} ${i.billNumber}`, subtitle: STATUS[i.status]?.label, fileName: `purchase-${i.billNumber}`,
     fields: [
+      ...(d.returnAgainst ? [{ label: 'مرتجع من الفاتورة', value: d.returnAgainst.number }] : []),
+      ...(d.returns.length > 0 ? [{ label: 'المرتجعات', value: d.returns.map((r) => `${r.number} (${STATUS[r.status]?.label ?? r.status})`).join('، ') }] : []),
       { label: 'المورّد', value: i.supplierName }, { label: 'رقم فاتورة المورّد', value: i.supplierRef }, { label: 'التاريخ', value: ymd(i.billDate) },
-      { label: 'الاستحقاق', value: ymd(i.dueDate) }, { label: 'المدفوع ($)', value: money(i.paidUsd) }, { label: 'المتبقي ($)', value: money(i.balanceUsd) },
+      { label: 'الاستحقاق', value: ymd(i.dueDate) }, { label: 'المدفوع ($)', value: money(i.paidUsd) },
+      ...(d.creditAppliedUsd !== 0 ? [{ label: i.isReturn ? 'طُبِّق على الفاتورة ($)' : 'مرتجعات مطبّقة ($)', value: money(Math.abs(d.creditAppliedUsd)) }] : []),
+      { label: 'المتبقي ($)', value: money(i.balanceUsd) },
       ...(d.discountAmountUsd > 0
         ? [{ label: 'مجموع البنود ($)', value: money(d.subtotalUsd) }, { label: d.discountPct ? `خصم الفاتورة ${d.discountPct}% ($)` : 'خصم الفاتورة ($)', value: money(d.discountAmountUsd) }]
         : []),
@@ -58,6 +68,11 @@ function BillsTab(): JSX.Element {
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<{ id: string; name: string } | null>(null);
   const [voiding, setVoiding] = useState<PurchaseInvoiceRow | null>(null);
+  const [returning, setReturning] = useState<PurchaseInvoiceRow | null>(null);
+  const loadReturnable = useCallback(async (): Promise<ReturnableLine[]> =>
+    (returning ? unwrapList<ReturnableLine>((await purchasingApi.returnable(returning.id)).data) : []), [returning]);
+  const createReturn = useCallback(async (body: CreateReturn): Promise<string> =>
+    (returning ? String(unwrapNode<string>((await purchasingApi.createReturn(returning.id, body)).data) ?? '') : ''), [returning]);
   const [reason, setReason] = useState('');
 
   useEffect(() => { const h = window.setTimeout(() => { setQuery(search.trim()); setPage(0); }, 350); return () => window.clearTimeout(h); }, [search]);
@@ -71,8 +86,8 @@ function BillsTab(): JSX.Element {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function post(id: string): Promise<void> {
-    try { notifyResult(await purchasingApi.postInvoice(id), 'تم ترحيل الفاتورة واستلام البضاعة'); await load(); }
+  async function post(b: PurchaseInvoiceRow): Promise<void> {
+    try { notifyResult(await purchasingApi.postInvoice(b.id), b.isReturn ? 'تم ترحيل المرتجع وإعادة البضاعة للمورّد' : 'تم ترحيل الفاتورة واستلام البضاعة'); await load(); }
     catch (e: unknown) { toast.error(extractApiError(e, 'تعذر ترحيل الفاتورة')); }
   }
 
@@ -114,16 +129,18 @@ function BillsTab(): JSX.Element {
             {rows.length === 0 ? <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد فواتير شراء</TableCell></TableRow> : null}
             {rows.map((b) => (
               <TableRow key={b.id} hover>
-                <TableCell sx={{ fontWeight: 700 }}>{b.billNumber}{b.supplierRef ? <Box component="span" sx={{ mx: 1, color: 'text.secondary', fontSize: 12 }}>({b.supplierRef})</Box> : null}</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>{b.billNumber}{b.isReturn ? <Chip size="small" color="warning" label="مرتجع" sx={{ mx: 1 }} /> : null}{b.supplierRef ? <Box component="span" sx={{ mx: 1, color: 'text.secondary', fontSize: 12 }}>({b.supplierRef})</Box> : null}</TableCell>
                 <TableCell>{b.supplierName}</TableCell><TableCell>{ymd(b.billDate)}</TableCell><TableCell>{ymd(b.dueDate)}</TableCell>
                 <TableCell align="left"><Money usd={b.totalUsd} /></TableCell>
                 <TableCell align="left"><Money usd={b.balanceUsd} fontWeight={700} color={b.balanceUsd > 0 ? 'error.main' : 'text.secondary'} /></TableCell>
                 <TableCell><Chip size="small" color={STATUS[b.status]?.color} label={STATUS[b.status]?.label ?? b.status} variant="outlined" /></TableCell>
                 <TableCell align="left" sx={{ whiteSpace: 'nowrap' }}>
                   <DocumentViewButton browse={{ kind: 'purchase-invoices', id: b.id, load: billDocument }} />
-                  {b.status === 'DRAFT' ? <Button size="small" onClick={() => void post(b.id)}>ترحيل واستلام</Button> : null}
+                  {b.status === 'DRAFT' ? <Button size="small" onClick={() => void post(b)}>{b.isReturn ? 'ترحيل وإرجاع' : 'ترحيل واستلام'}</Button> : null}
                   {b.status === 'POSTED' && b.balanceUsd > 0 ? <Button size="small" onClick={() => setPaying({ id: b.supplierPartyId, name: b.supplierName })}>دفع</Button> : null}
+                  {b.status === 'POSTED' && !b.isReturn ? <Button size="small" color="warning" onClick={() => setReturning(b)}>↩ مرتجع</Button> : null}
                   {b.status !== 'VOID' ? <Button size="small" color="error" onClick={() => { setVoiding(b); setReason(''); }}>إلغاء</Button> : null}
+                  <DeleteDocumentButton kind="purchase-invoices" id={b.id} number={b.billNumber} status={b.status} onDeleted={() => void load()} />
                 </TableCell>
               </TableRow>
             ))}
@@ -134,11 +151,15 @@ function BillsTab(): JSX.Element {
       </TableContainer>
 
       <PurchaseInvoiceDialog open={creating} onClose={() => setCreating(false)} onSaved={() => void load()} />
+      <ReturnDialog open={returning !== null} title={`مرتجع مشتريات من الفاتورة ${returning?.billNumber ?? ''}`} load={loadReturnable} submit={createReturn}
+        onClose={() => setReturning(null)} onCreated={() => { setReturning(null); void load(); }} />
       <SupplierPaymentDialog open={paying !== null} supplier={paying} onClose={() => setPaying(null)} onSaved={() => void load()} />
       <Dialog open={voiding !== null} onClose={() => setVoiding(null)} fullWidth maxWidth="xs">
         <DialogTitle>إلغاء {voiding?.billNumber}</DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>{voiding?.status === 'POSTED' ? 'ستخرج البضاعة المستلَمة من المخزون ويُلغى المستند في ERPNext. لا يُسمح بذلك إن بيع جزء منها أو وُجدت دفعات.' : 'ستُلغى المسودة.'}</Alert>
+          <Alert severity="warning" sx={{ mb: 2 }}>{voiding?.status !== 'POSTED' ? 'ستُلغى المسودة.' : voiding.isReturn
+            ? 'ستعود البضاعة إلى المستودع، ويعود ما خصمه المرتجع من الفاتورة، ويُلغى المستند في ERPNext.'
+            : 'ستخرج البضاعة المستلَمة من المخزون ويُلغى المستند في ERPNext. لا يُسمح بذلك إن بيع جزء منها أو وُجدت دفعات أو مرتجعات.'}</Alert>
           <TextField fullWidth size="small" label="السبب *" value={reason} onChange={(e) => setReason(e.target.value)} />
         </DialogContent>
         <DialogActions><Button onClick={() => setVoiding(null)}>رجوع</Button><Button color="error" variant="contained" onClick={() => void doVoid()}>تأكيد الإلغاء</Button></DialogActions>

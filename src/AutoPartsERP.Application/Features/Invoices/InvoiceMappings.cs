@@ -18,7 +18,7 @@ internal static class InvoiceMappings
         return $"{sign}{wholeWords} {currencyName}{fractionPart} فقط لا غير";
     }
 
-    public static InvoiceDto ToInvoiceDto(InvoiceHeaderRow h, IReadOnlyCollection<InvoiceLineDto> lines) =>
+    public static InvoiceDto ToInvoiceDto(InvoiceHeaderRow h, IReadOnlyCollection<InvoiceLineDto> lines, DocumentLinkDto? returnOf, IReadOnlyCollection<DocumentLinkDto> returns) =>
         new(
             h.Id,
             h.InvoiceNumber ?? string.Empty,
@@ -33,15 +33,19 @@ internal static class InvoiceMappings
             h.TotalUsd,
             h.PaidSyp,
             h.PaidUsd,
-            h.TotalSyp - h.PaidSyp,
-            h.TotalUsd - h.PaidUsd,
+            h.BalanceSyp,
+            h.BalanceUsd,
             h.Status.Humanize(LetterCasing.Title),
             h.Type.Humanize(LetterCasing.Title),
             GetDueDateDisplay(h.DueDate),
             ToArabicWords(h.TotalSyp, "ليرة سورية"),
             ToArabicWords(h.TotalUsd, "دولار أمريكي"),
             lines,
-            new InvoiceAmountsDto(h.SubtotalSyp, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountSyp, h.DiscountAmountUsd, h.DeliveryFeeSyp, h.DeliveryFeeUsd));
+            new InvoiceAmountsDto(h.SubtotalSyp, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountSyp, h.DiscountAmountUsd, h.DeliveryFeeSyp, h.DeliveryFeeUsd),
+            h.CreditAppliedSyp,
+            h.CreditAppliedUsd,
+            returnOf,
+            returns);
 
     public static string GetDueDateDisplay(DateOnly dueDate)
     {

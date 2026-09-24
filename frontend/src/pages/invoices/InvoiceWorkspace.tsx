@@ -91,7 +91,6 @@ export default function InvoiceWorkspace(): JSX.Element {
   const [dueTouched, setDueTouched] = useState(false);
   const [fxRateId, setFxRateId] = useState('');
   const [fxRate, setFxRate] = useState<FxRate | null>(null);
-  const [invoiceType, setInvoiceType] = useState('SALE');
   const [deliveryFeeSyp, setDeliveryFeeSyp] = useState(0);
   const [deliveryFeeUsd, setDeliveryFeeUsd] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
@@ -110,7 +109,6 @@ export default function InvoiceWorkspace(): JSX.Element {
   const [scan, setScan] = useState('');
   const [scanNote, setScanNote] = useState('');
 
-  const isReturn = invoiceType === 'RETURN';
   const customerRecord = customer?.data as CustomerRecord | undefined;
 
   const searchCustomers = useCallback(async (text: string): Promise<PickerOption[]> => {
@@ -186,13 +184,13 @@ export default function InvoiceWorkspace(): JSX.Element {
     if (!code) return;
     setScanNote('');
     try {
-      const res = await lookupsApi.pickItems({ search: code, mode: 'sales', inStockOnly: !isReturn, page: 1, pageSize: 2 });
+      const res = await lookupsApi.pickItems({ search: code, mode: 'sales', inStockOnly: true, page: 1, pageSize: 2 });
       const found = unwrapPaged<PickItem>(res.data);
       if (found.items.length === 1) {
         const it = found.items[0];
-        const best = [...it.stock].filter((s) => isReturn || s.available > 0).sort((a, b) => b.available - a.available)[0];
+        const best = [...it.stock].filter((s) => s.available > 0).sort((a, b) => b.available - a.available)[0];
         const batch = it.isBatchTracked ? it.batches.find((b) => b.locationId === best?.locationId) : undefined;
-        if (!it.skuId || it.isStopShip || !best || (it.isBatchTracked && !batch && !isReturn)) {
+        if (!it.skuId || it.isStopShip || !best || (it.isBatchTracked && !batch)) {
           setScanNote(it.isStopShip ? `الصنف ${it.code} موقوف الشحن` : `تعذّر إضافة ${it.code} تلقائياً — اختره من النافذة`);
           setPickerSearch(code); setPickerOpen(true);
         } else {
@@ -245,18 +243,18 @@ export default function InvoiceWorkspace(): JSX.Element {
 
   const creditWarning = useMemo(() => {
     const limit = Number(customerRecord?.creditLimitUsd ?? 0);
-    if (!customerRecord || limit <= 0 || isReturn) return '';
+    if (!customerRecord || limit <= 0) return '';
     const projected = owedUsd + totals.usd;
     return projected > limit ? `تجاوز الحد الائتماني: الرصيد بعد الفاتورة ${formatUsd(projected)} من أصل ${formatUsd(limit)}` : '';
-  }, [customerRecord, owedUsd, totals.usd, isReturn]);
+  }, [customerRecord, owedUsd, totals.usd]);
 
   function lineProblems(): string {
     if (lines.length === 0) return 'أضف صنفاً واحداً على الأقل';
     for (const l of lines) {
       if (!(Number(l.quantity) > 0)) return `الكمية غير صحيحة للصنف ${l.code}`;
       if (!l.locationId) return `اختر الموقع للصنف ${l.code}`;
-      if (!isReturn && Number(l.quantity) > availableFor(l)) return `الكمية تتجاوز المتاح للصنف ${l.code} (${formatQty(availableFor(l))})`;
-      if (!isReturn && l.item.isBatchTracked && !l.batchId) return `اختر الدفعة للصنف ${l.code}`;
+      if (Number(l.quantity) > availableFor(l)) return `الكمية تتجاوز المتاح للصنف ${l.code} (${formatQty(availableFor(l))})`;
+      if (l.item.isBatchTracked && !l.batchId) return `اختر الدفعة للصنف ${l.code}`;
       if (belowMinimum(l) && !l.overrideReason.trim()) return `السعر أقل من الحد الأدنى للصنف ${l.code} — اكتب سبب التجاوز`;
     }
     if (discountMode === 'pct' && Number(discountValue) > 100) return 'نسبة خصم الفاتورة لا تتجاوز 100%';
@@ -288,7 +286,7 @@ export default function InvoiceWorkspace(): JSX.Element {
         invoiceDate,
         dueDate,
         fxRateId,
-        invoiceType,
+        invoiceType: 'SALE',
         salesRepId: salesRepId || undefined,
         deliveryFeeSyp: Number(deliveryFeeSyp),
         deliveryFeeUsd: Number(deliveryFeeUsd),
@@ -319,7 +317,7 @@ export default function InvoiceWorkspace(): JSX.Element {
   return (
     <Box>
       <PageHeader
-        title={isReturn ? 'مرتجع جديد' : 'فاتورة جديدة'}
+        title="فاتورة جديدة"
         crumbs={[{ label: 'الفواتير', to: '/invoices' }, { label: 'إنشاء' }]}
         actions={<Button onClick={() => navigate('/invoices')}>← رجوع</Button>}
       />
@@ -336,9 +334,6 @@ export default function InvoiceWorkspace(): JSX.Element {
               <Box sx={{ gridColumn: 'span 2' }}>
                 <EntityPicker id="invoice-customer" label="الزبون *" value={customer} onChange={setCustomer} search={searchCustomers} placeholder="ابحث بالاسم أو الكود أو الهاتف..." />
               </Box>
-              <TextField id="invoice-type" select size="small" label="نوع الفاتورة" value={invoiceType} onChange={(e) => { setInvoiceType(e.target.value); setLines([]); }}>
-                <MenuItem value="SALE">بيع</MenuItem><MenuItem value="RETURN">مرتجع</MenuItem>
-              </TextField>
               <TextField id="invoice-date" size="small" type="date" label="تاريخ الفاتورة" InputLabelProps={{ shrink: true }} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
               <TextField id="invoice-due-date" size="small" type="date" label="تاريخ الاستحقاق" InputLabelProps={{ shrink: true }} value={dueDate}
                 onChange={(e) => { setDueDate(e.target.value); setDueTouched(true); }}
@@ -374,7 +369,7 @@ export default function InvoiceWorkspace(): JSX.Element {
                   <Table size="small" sx={{ minWidth: 1040 }}>
                     <TableHead>
                       <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
-                        <TableCell>#</TableCell><TableCell>الصنف</TableCell><TableCell sx={{ minWidth: 150 }}>الموقع</TableCell>{!isReturn ? <TableCell sx={{ minWidth: 140 }}>الدفعة</TableCell> : null}
+                        <TableCell>#</TableCell><TableCell>الصنف</TableCell><TableCell sx={{ minWidth: 150 }}>الموقع</TableCell><TableCell sx={{ minWidth: 140 }}>الدفعة</TableCell>
                         <TableCell sx={{ width: 110 }}>الكمية</TableCell><TableCell sx={{ width: 130 }}>السعر ل.س</TableCell><TableCell sx={{ width: 110 }}>السعر $</TableCell>
                         <TableCell sx={{ width: 90 }}>خصم %</TableCell><TableCell align="left">الإجمالي</TableCell><TableCell />
                       </TableRow>
@@ -382,10 +377,10 @@ export default function InvoiceWorkspace(): JSX.Element {
                     <TableBody>
                       {lines.map((l, idx) => {
                         const avail = availableFor(l);
-                        const over = !isReturn && Number(l.quantity) > avail;
+                        const over = Number(l.quantity) > avail;
                         const below = belowMinimum(l);
                         const t = lineTotals(l);
-                        const stockOpts = l.item.stock.filter((s) => isReturn || s.available > 0 || s.locationId === l.locationId);
+                        const stockOpts = l.item.stock.filter((s) => s.available > 0 || s.locationId === l.locationId);
                         const batches = l.item.batches.filter((b) => b.locationId === l.locationId);
                         return (
                           <TableRow key={l.key}>
@@ -400,19 +395,17 @@ export default function InvoiceWorkspace(): JSX.Element {
                                 {stockOpts.map((s) => <MenuItem key={s.locationId} value={s.locationId}>{s.locationCode} ({formatQty(s.available)})</MenuItem>)}
                               </TextField>
                             </TableCell>
-                            {!isReturn ? (
-                              <TableCell>
-                                {l.item.isBatchTracked ? (
-                                  <TextField select size="small" fullWidth value={l.batchId} onChange={(e) => patchLine(l.key, { batchId: e.target.value })} SelectProps={{ displayEmpty: true }}>
-                                    <MenuItem value=""><em>— اختر —</em></MenuItem>
-                                    {batches.map((b) => <MenuItem key={b.id} value={b.id}>{b.batchNumber} ({formatQty(b.quantity)})</MenuItem>)}
-                                  </TextField>
-                                ) : '—'}
-                              </TableCell>
-                            ) : null}
+                            <TableCell>
+                              {l.item.isBatchTracked ? (
+                                <TextField select size="small" fullWidth value={l.batchId} onChange={(e) => patchLine(l.key, { batchId: e.target.value })} SelectProps={{ displayEmpty: true }}>
+                                  <MenuItem value=""><em>— اختر —</em></MenuItem>
+                                  {batches.map((b) => <MenuItem key={b.id} value={b.id}>{b.batchNumber} ({formatQty(b.quantity)})</MenuItem>)}
+                                </TextField>
+                              ) : '—'}
+                            </TableCell>
                             <TableCell>
                               <TextField size="small" type="number" inputProps={{ min: 0 }} error={over} value={l.quantity} onChange={(e) => patchLine(l.key, { quantity: Number(e.target.value) })}
-                                helperText={!isReturn ? `متاح ${formatQty(avail)}` : undefined} FormHelperTextProps={{ sx: { mx: 0 } }} />
+                                helperText={`متاح ${formatQty(avail)}`} FormHelperTextProps={{ sx: { mx: 0 } }} />
                             </TableCell>
                             <TableCell><TextField size="small" type="number" inputProps={{ min: 0 }} value={l.unitPriceSyp} onChange={(e) => patchLine(l.key, { unitPriceSyp: Number(e.target.value) })} /></TableCell>
                             <TableCell><TextField size="small" type="number" inputProps={{ min: 0 }} value={l.unitPriceUsd} onChange={(e) => patchLine(l.key, { unitPriceUsd: Number(e.target.value) })} /></TableCell>
@@ -454,7 +447,6 @@ export default function InvoiceWorkspace(): JSX.Element {
                   <Typography variant="caption" color="text.secondary" fontWeight={700}>بيانات الفاتورة</Typography>
                   <Stack spacing={1} sx={{ mt: 1 }}>
                     <ReviewRow label="الزبون" value={customer?.label ?? '—'} />
-                    <ReviewRow label="النوع" value={isReturn ? 'مرتجع' : 'بيع'} />
                     <ReviewRow label="المندوب" value={reps.find((r) => r.userId === salesRepId)?.fullName ?? '—'} />
                     <ReviewRow label="التاريخ" value={invoiceDate} />
                     <ReviewRow label="الاستحقاق" value={dueDate} />
@@ -509,9 +501,9 @@ export default function InvoiceWorkspace(): JSX.Element {
       <ItemPickerModal
         open={pickerOpen}
         mode="sales"
-        enforceStock={!isReturn}
+        enforceStock
         initialSearch={pickerSearch}
-        title={isReturn ? 'اختيار أصناف المرتجع' : 'اختيار الأصناف للفاتورة'}
+        title="اختيار الأصناف للفاتورة"
         onPick={addFromPick}
         onClose={() => setPickerOpen(false)}
       />

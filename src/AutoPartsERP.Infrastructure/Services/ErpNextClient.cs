@@ -342,7 +342,7 @@ public sealed partial class ErpNextClient : IErpNextClient
                 ["remarks"] = $"AutoPartsERP purchase invoice {bill.BillNumber}",
                 ["items"] = items,
                 ["docstatus"] = 1
-            }.WithInvoiceDiscount(bill.DiscountAmount, bill.IsReturn),
+            }.WithReturnAgainst(bill.ReturnAgainst).WithInvoiceDiscount(bill.DiscountAmount, bill.IsReturn),
             cancellationToken);
     }
 
@@ -717,10 +717,6 @@ internal static class ErpNextJsonExtensions
         return doc;
     }
 
-    /// <summary>
-    /// The discount on the whole invoice, taken off the net total the way ERPNext's own "Additional Discount" does
-    /// (a return carries it negative, like its quantities). Nothing is added when there is no discount.
-    /// </summary>
     /// <summary>Credits the whole invoice to one Sales Person (ERPNext requires the allocations to add up to 100 %).</summary>
     public static JsonObject WithSalesPerson(this JsonObject doc, string? salesPerson)
     {
@@ -732,6 +728,10 @@ internal static class ErpNextJsonExtensions
         return doc;
     }
 
+    /// <summary>
+    /// The discount on the whole invoice, taken off the net total the way ERPNext's own "Additional Discount" does
+    /// (a return carries it negative, like its quantities). Nothing is added when there is no discount.
+    /// </summary>
     public static JsonObject WithInvoiceDiscount(this JsonObject doc, decimal discountAmount, bool isReturn)
     {
         if (discountAmount != 0)

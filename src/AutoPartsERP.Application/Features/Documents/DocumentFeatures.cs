@@ -209,6 +209,13 @@ public sealed class DeleteDocumentCommandHandler : IRequestHandler<DeleteDocumen
 
     private static async Task<Error?> CheckPurchaseInvoiceAsync(DbConnection connection, DbTransaction transaction, Target target, CancellationToken ct)
     {
+        var returns = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT string_agg(bill_number, '، ') FROM purchase_invoices WHERE return_against_id = @Id;", new { target.Id }, transaction, cancellationToken: ct));
+        if (returns is not null)
+        {
+            return new Error("Document.HasDependants", $"Returns {returns} refer to this bill; delete them first.");
+        }
+
         return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
                 "SELECT EXISTS (SELECT 1 FROM supplier_payment_allocations WHERE purchase_invoice_id = @Id);", new { target.Id }, transaction, cancellationToken: ct))
             ? new Error("Document.HasPayments", "Supplier payments were allocated to this bill at some point; it stays as part of their history.")
