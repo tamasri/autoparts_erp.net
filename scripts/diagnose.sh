@@ -736,7 +736,7 @@ erp_get() {
   path=$(printf '%s' "$1" | sed -e 's/ /%20/g' -e 's/"/%22/g' -e 's/\[/%5B/g' -e 's/\]/%5D/g' -e 's/,/%2C/g' -e 's/>/%3E/g' -e 's/</%3C/g')
   ERP_AUTH="${ERPNEXT_API_KEY:-}:${ERPNEXT_API_SECRET:-}" docker run --rm --add-host=host.docker.internal:host-gateway -e ERP_AUTH \
     --entrypoint sh curlimages/curl:8.11.1 -c 'curl -sS -m 40 -g -H "Authorization: token $ERP_AUTH" -H "Accept: application/json" \
-      -w "\n[HTTP %{http_code}, %{time_total}s]" "$1"' _ "${ERPNEXT_BASE_URL%/}$path" 2>&1 | head -c 3000
+      -w "\n[HTTP %{http_code}, %{time_total}s]" "$1"' _ "${ERPNEXT_BASE_URL%/}$path" 2>&1 | head -c "${ERP_MAX:-3000}"
   echo
 }
 erp_code() { erp_get "$1" | grep -oE '\[HTTP [0-9]+' | grep -oE '[0-9]+$'; }
@@ -756,23 +756,16 @@ erpnext_section() {
   echo "versions:"; erp_get "/api/method/frappe.utils.change_log.get_versions"
   if [[ -n "$user" ]]; then
     echo "roles of $user:"
-    local roles; roles=$(erp_get "/api/resource/Has Role?parent_doctype=User&fields=[\"role\"]&filters=[[\"parent\",\"=\",\"$user\"],[\"parenttype\",\"=\",\"User\"]]&limit_page_length=0")
-    echo "$roles"
-    if [[ "$roles" == *"HTTP 200"* ]]; then
-      for role in "System Manager" "Accounts Manager" "Accounts User" "Stock Manager" "Sales Manager" "Purchase Manager"; do
-        grep -q "\"$role\"" <<<"$roles" && echo "  has: $role" || echo "  MISSING: $role"
+    # The user's own record carries its roles (every user may read it; the Has Role rows cannot be listed, not even by System Manager).
+    local userdoc roles; userdoc=$(ERP_MAX=500000 erp_get "/api/resource/User/$user")
+    roles=$(grep -oE '"role":"[^"]+"' <<<"$userdoc" | cut -d'"' -f4 | sort -u)
+    if [[ -n "$roles" ]]; then
+      echo "$roles" | sed 's/^/  role: /'
+      for role in "System Manager" "Accounts Manager" "Accounts User"; do
+        grep -qx "$role" <<<"$roles" || flag WARN "ERPNext user $user lacks the $role role"
       done
-      grep -q '"System Manager"' <<<"$roles" || flag WARN "ERPNext user $user lacks System Manager (needed by the demo-data reset)"
-      grep -q '"Accounts Manager"' <<<"$roles" || flag WARN "ERPNext user $user lacks Accounts Manager"
     else
-      # Has Role is readable only by System Manager; fall back to what the user may do.
-      echo "  (Has Role not readable — probing permissions instead)"
-      local dt code
-      for dt in "Transaction Deletion Record" "Account" "Journal Entry" "Sales Invoice" "Purchase Invoice" "Payment Entry" "GL Entry" "Customer" "Supplier" "Item" "Error Log"; do
-        code=$(erp_code "/api/resource/$dt?limit_page_length=1")
-        echo "  read $dt -> $code"
-      done
-      [[ "$(erp_code '/api/resource/Transaction Deletion Record?limit_page_length=1')" == "200" ]] || flag WARN "ERPNext user $user lacks System Manager (needed by the demo-data reset)"
+      echo "  (roles not readable: $(grep -oE '\[HTTP [0-9]+' <<<"$userdoc"))"
     fi
   fi
 
