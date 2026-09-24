@@ -59,6 +59,11 @@ public sealed class ErpNextCompanyWipe
             _log($"  {doctype}: {(await ListAsync(doctype, filters, ct)).Count}");
         }
 
+        if (!await CanDeleteTransactionsAsync(ct))
+        {
+            return false;
+        }
+
         if (dryRun)
         {
             return true;
@@ -76,6 +81,27 @@ public sealed class ErpNextCompanyWipe
         }
 
         return ok;
+    }
+
+    /// <summary>
+    /// Checked before anything is deleted (and in the dry run, so nobody types the confirmation for a run that cannot finish): only
+    /// System Manager may read or create a Transaction Deletion Record.
+    /// </summary>
+    private async Task<bool> CanDeleteTransactionsAsync(CancellationToken ct)
+    {
+        var r = await _http.GetAsync("api/resource/Transaction Deletion Record?fields=%5B%22name%22%5D&limit_page_length=1", ct);
+        if (r.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        var who = await _http.GetAsync("api/method/frappe.auth.get_logged_user", ct);
+        var user = who.IsSuccessStatusCode
+            ? JsonNode.Parse(await who.Content.ReadAsStringAsync(ct))?["message"]?.GetValue<string>() ?? "the API key's user"
+            : "the API key's user";
+        _log($"ERPNext: {user} may not use Transaction Deletion Record ({ErpNextErrors.Describe(r.StatusCode, await r.Content.ReadAsStringAsync(ct))}).");
+        _log($"ERPNext: give {user} the System Manager role (ERPNext → User → {user} → Roles → System Manager → Save), then run again.");
+        return false;
     }
 
     private async Task<bool> DeleteTransactionsAsync(string company, TimeSpan timeout, CancellationToken ct)
