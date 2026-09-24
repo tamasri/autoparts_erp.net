@@ -29,6 +29,16 @@ public sealed class PaymentsModule : ICarterModule
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
             (await sender.Send(new GetPaymentByIdQuery(id), cancellationToken)).ToApiResult());
 
+        // The printed receipt voucher.
+        group.MapGet("/{id:guid}/pdf", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new GetPaymentPdfQuery(id), cancellationToken);
+                return result.IsSuccess && result.Value is not null
+                    ? Results.File(result.Value, "application/pdf", $"receipt-{id}.pdf")
+                    : result.ToApiResult();
+            })
+            .RequireRateLimiting(RateLimiting.Heavy);
+
         group.MapPost("/", async Task<IResult> (CreatePaymentRequest request, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(new CreatePaymentCommand(

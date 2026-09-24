@@ -23,6 +23,8 @@ export const paymentsApi = {
   list: (params: { page: number; pageSize: number; customerId?: string; paymentMethod?: string }) =>
     apiClient.get('/payments', { params }),
   get: (id: string) => apiClient.get(`/payments/${id}`),
+  /** The printed receipt voucher (PDF). */
+  getPdf: (id: string) => apiClient.get(`/payments/${id}/pdf`, { responseType: 'blob' }),
   create: (body: CreatePayment) => apiClient.post('/payments', body, idem()),
   allocate: (id: string, allocations: AllocationLine[]) => apiClient.post(`/payments/${id}/allocate`, { allocations }, idem()),
   reverse: (id: string, reason: string) => apiClient.post(`/payments/${id}/reverse`, { reason }, idem()),

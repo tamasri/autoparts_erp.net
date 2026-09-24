@@ -57,5 +57,15 @@ public sealed class CustomersModule : ICarterModule
                 var result = await sender.Send(new GetCustomerAccountStatementQuery(id), cancellationToken);
                 return result.ToApiResult();
             });
+
+        // The printed account statement.
+        group.MapGet("/{id:guid}/statement/pdf", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var result = await sender.Send(new GetCustomerStatementPdfQuery(id), cancellationToken);
+                return result.IsSuccess && result.Value is not null
+                    ? Results.File(result.Value, "application/pdf", $"statement-{id}.pdf")
+                    : result.ToApiResult();
+            })
+            .RequireRateLimiting(RateLimiting.Heavy);
     }
 }

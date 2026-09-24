@@ -5,8 +5,8 @@ import { customersApi } from '../../api/endpoints/customers';
 import { unwrapNode } from '../../api/apiData';
 import { extractApiError } from '../../lib/toast';
 import PageHeader from '../../components/ui/PageHeader';
-import ExportMenu from '../../components/ui/ExportMenu';
 import DocumentDialog from '../../components/ui/DocumentDialog';
+import { endpointPdf } from '../../lib/exportClient';
 import StatementTable, { statementDocument, withRunning, type StatementLine } from '../../components/accounts/StatementTable';
 import Money from '../../components/ui/Money';
 
@@ -62,6 +62,9 @@ export default function CustomerDetail(): JSX.Element {
     [customer, statement, lines],
   );
 
+  // The printed statement is the server's form (company letterhead, totals, signatures); Excel / CSV use the table above.
+  const statementPdf = useMemo(() => (id ? endpointPdf(() => customersApi.getStatementPdf(id)) : null), [id]);
+
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '50vh' }}><CircularProgress /></Box>;
 
   const outSyp = statement?.outstandingSyp ?? 0;
@@ -73,7 +76,7 @@ export default function CustomerDetail(): JSX.Element {
         title={customer?.name ?? 'الزبون'}
         subtitle={[customer?.code, customer?.phone, customer?.city].filter(Boolean).join(' · ')}
         crumbs={[{ label: 'الحسابات', to: '/accounts' }, { label: customer?.code ?? '' }]}
-        actions={<><Button variant="outlined" size="small" onClick={() => setViewOpen(true)}>👁 عرض وطباعة</Button><ExportMenu build={async () => doc} /></>}
+        actions={<Button variant="outlined" size="small" onClick={() => setViewOpen(true)}>👁 عرض وطباعة</Button>}
       />
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -90,7 +93,7 @@ export default function CustomerDetail(): JSX.Element {
         lines={lines}
         linkFor={(l) => (['INVOICE', 'VOIDED', 'RETURN', 'CREDIT_NOTE'].includes(l.type) ? `/invoices/${l.id}` : null)}
       />
-      <DocumentDialog open={viewOpen} onClose={() => setViewOpen(false)} document={doc} />
+      <DocumentDialog open={viewOpen} onClose={() => setViewOpen(false)} document={doc} pdf={statementPdf} />
     </Box>
   );
 }

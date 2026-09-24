@@ -44,6 +44,7 @@ const CombinedStatement= lazy(() => import('./pages/parties/CombinedStatement'))
 const Users            = lazy(() => import('./pages/settings/Users'));
 const Roles            = lazy(() => import('./pages/settings/Roles'));
 const WhatsAppAssistant = lazy(() => import('./pages/settings/WhatsAppAssistant'));
+const CompanyProfile   = lazy(() => import('./pages/settings/CompanyProfile'));
 const Approvals        = lazy(() => import('./pages/approvals/Approvals'));
 const AuditLog         = lazy(() => import('./pages/audit/AuditLog'));
 const Numbering        = lazy(() => import('./pages/audit/Numbering'));
@@ -166,6 +167,7 @@ export default function App(): JSX.Element {
         <Route path="users"                   element={<RouteWrapper><Users /></RouteWrapper>} />
         <Route path="roles"                   element={<RouteWrapper><Roles /></RouteWrapper>} />
         <Route path="assistant"               element={<RouteWrapper><WhatsAppAssistant /></RouteWrapper>} />
+        <Route path="company"                 element={<RouteWrapper><CompanyProfile /></RouteWrapper>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

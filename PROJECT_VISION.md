@@ -85,6 +85,8 @@
 **Governance constraints:**
 1. ~~Vex CSS design tokens (`#5c54ff`)~~ — replaced 2026-09-24 by the owner's visual identity (below); 12 px radii and card shadows kept.
 
+**Printed forms (owner-approved 2026-09-24).** Every PDF follows the owner's reference designs (sales invoice, receipt voucher, customer statement): monochrome A4 with faint waves, bracketed title frame, meta line, party blocks, tables, totals / cards, terms, signatures and stamp, footer with contacts, bank details and QR codes; Tajawal + IBM Plex Mono. The company's own details come from the company profile (screen "بيانات المنشأة"). Official documents are built on the server from the database.
+
 **Visual identity (owner-approved 2026-09-24).** A light interface: white surfaces on a pale ivory page (`#F7F6F1`). Primary Emerald Shadow `#054239` → Forest `#002623` (buttons, headings), Mountain Teal `#428177` (outlines, links); secondary Golden Wheat `#988561` / Antique Sand `#B9A779`; errors Damask Red `#6B1F2A`; text Charcoal `#161616` / Stone `#3D3A3B`; table heads Ivory Mist `#EDEBE0`. White menu (option B). The geometric eight-point-star pattern (`theme/pattern.ts`) at low opacity behind every page, across the menu, in dialog titles, KPI tiles and on the sign-in screen. Colours live only in `theme.ts` (`brand`, `chartColors`); screens use the palette, never literals.
 2. `theme.css` was deleted once its last consumer was migrated (2026-09-23).
 3. Arabic remains the primary language; the language switcher is additive.

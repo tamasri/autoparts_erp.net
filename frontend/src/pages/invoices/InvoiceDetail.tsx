@@ -2,7 +2,7 @@
  * One sales invoice or return: lines, how the total is made up, what is paid or credited by returns, the draft → confirmed → posted
  * steps, and the returns made against a sale (a return is always made from its sale, at the sale's prices).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Card, CardContent, Chip, Divider, LinearProgress, Link, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
@@ -21,6 +21,8 @@ import ReasonDialog from '../../components/ui/ReasonDialog';
 import Money from '../../components/ui/Money';
 import DocumentNavigator from '../../components/documents/DocumentNavigator';
 import DeleteDocumentButton from '../../components/documents/DeleteDocumentButton';
+import DocumentDialog from '../../components/ui/DocumentDialog';
+import { endpointPdf, type ExportDocument } from '../../lib/exportClient';
 
 type InvoiceLine = {
   id: string; lineNumber: number; skuCode: string; skuName: string; quantity: number;
@@ -54,6 +56,7 @@ export default function InvoiceDetail(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [returning, setReturning] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const canReturn = useCan('invoices:create');
   const loadReturnable = useCallback(async (): Promise<ReturnableLine[]> => unwrapList<ReturnableLine>((await invoicesApi.returnable(id)).data), [id]);
   const createReturn = useCallback(async (body: CreateReturn): Promise<string> => unwrapNode<{ id: string }>((await invoicesApi.createReturn(id, body)).data)?.id ?? '', [id]);
@@ -84,19 +87,14 @@ export default function InvoiceDetail(): JSX.Element {
     setDiscountValue('');
   }
 
-  async function downloadPdf(): Promise<void> {
-    setBusy(true);
-    try {
-      const res = await invoicesApi.getPdf(id);
-      const url = URL.createObjectURL(new Blob([res.data as BlobPart], { type: 'application/pdf' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `invoice-${invoice?.invoiceNumber ?? id}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e: unknown) { toast.error(extractApiError(e, 'تعذر تنزيل ملف PDF')); }
-    finally { setBusy(false); }
-  }
+  // The printed invoice is the server's form (letterhead, totals, terms, recipient box, payment details, QR codes).
+  const invoicePdf = useMemo(() => endpointPdf(() => invoicesApi.getPdf(id)), [id]);
+  const printDoc = useMemo<ExportDocument | null>(
+    () => (invoice
+      ? { title: `${invoice.type.toUpperCase() === 'RETURN' ? 'مرتجع' : 'فاتورة'} ${invoice.invoiceNumber || ''}`, subtitle: invoice.customerName, fields: [], tables: [], fileName: `invoice-${invoice.invoiceNumber || id}` }
+      : null),
+    [invoice, id],
+  );
 
   if (loading && !invoice) return <LinearProgress />;
   if (!invoice) return <Stack spacing={2}><Alert severity="error">{error || 'الفاتورة غير موجودة'}</Alert><Link component={RouterLink} to="/invoices">← الفواتير</Link></Stack>;
@@ -115,7 +113,7 @@ export default function InvoiceDetail(): JSX.Element {
         actions={(
           <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
             <DocumentNavigator kind="invoices" id={id} onNavigate={(next) => navigate(`/invoices/${next}`)} />
-            <Button variant="outlined" disabled={busy} onClick={() => void downloadPdf()}>⬇ PDF</Button>
+            <Button variant="outlined" disabled={busy} onClick={() => setPrinting(true)}>👁 عرض / طباعة</Button>
             {status === 'DRAFT' ? <Button variant="contained" disabled={busy} onClick={() => void run(() => invoicesApi.confirm(id), 'تم تأكيد الفاتورة', 'تعذر تأكيد الفاتورة')}>✓ تأكيد</Button> : null}
             {status === 'CONFIRMED' ? <Button variant="contained" color="success" disabled={busy} onClick={() => void run(() => invoicesApi.post(id), 'تم ترحيل الفاتورة', 'تعذر ترحيل الفاتورة')}>✓ ترحيل</Button> : null}
             {status === 'POSTED' && !isReturn && canReturn ? <Button variant="outlined" color="warning" disabled={busy} onClick={() => setReturning(true)}>↩ مرتجع</Button> : null}
@@ -225,6 +223,7 @@ export default function InvoiceDetail(): JSX.Element {
         </Card>
       </Box>
 
+      <DocumentDialog open={printing} onClose={() => setPrinting(false)} document={printDoc} pdf={invoicePdf} />
       <ReturnDialog open={returning} title={`مرتجع مبيعات من الفاتورة ${invoice.invoiceNumber}`} chooseLocation load={loadReturnable} submit={createReturn}
         onClose={() => setReturning(false)} onCreated={(newId) => { setReturning(false); navigate(`/invoices/${newId}`); }} />
 

@@ -39,6 +39,8 @@ export const customersApi = {
   }) => apiClient.get('/customers', { params }),
   getCustomerById: (id: string) => apiClient.get(`/customers/${id}`),
   getCustomerStatement: (id: string) => apiClient.get(`/customers/${id}/statement`),
+  /** The printed account statement (PDF). */
+  getStatementPdf: (id: string) => apiClient.get(`/customers/${id}/statement/pdf`, { responseType: 'blob' }),
   createCustomer: (body: CreateCustomer) => apiClient.post('/customers', body),
   updateCustomer: (id: string, body: UpdateCustomer) => apiClient.put(`/customers/${id}`, body),
   deactivateCustomer: (id: string, reason?: string) =>

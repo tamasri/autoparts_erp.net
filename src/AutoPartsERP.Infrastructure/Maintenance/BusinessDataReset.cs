@@ -30,7 +30,7 @@ public static class BusinessDataReset
     public static readonly IReadOnlyList<string> Kept =
     [
         "__EFMigrationsHistory", "asp_net_role_claims", "asp_net_roles", "asp_net_user_claims", "asp_net_user_logins", "asp_net_user_roles",
-        "asp_net_user_tokens", "asp_net_users", "ai_feature_flags", "ai_scheduled_tasks", "attribute_schemas", "categories", "entry_types",
+        "asp_net_user_tokens", "asp_net_users", "ai_feature_flags", "ai_scheduled_tasks", "attribute_schemas", "categories", "company_profile", "entry_types",
         "inventory_statuses", "kpi_definitions", "party_type_catalog", "reason_codes",
     ];
 

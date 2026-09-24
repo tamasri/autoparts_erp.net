@@ -1,3 +1,5 @@
+using AutoPartsERP.Application.Features.CompanyProfile;
+
 namespace AutoPartsERP.Api.Modules;
 
 /// <summary>
@@ -13,7 +15,7 @@ public sealed class ExportsModule : ICarterModule
 
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/v1/exports/{format}", (string format, ExportDocument document, IDocumentRenderer renderer) =>
+        app.MapPost("/api/v1/exports/{format}", async Task<IResult> (string format, ExportDocument document, IDocumentRenderer renderer, ISender sender, CancellationToken ct) =>
             {
                 if (document is null || string.IsNullOrWhiteSpace(document.Title))
                 {
@@ -29,7 +31,8 @@ public sealed class ExportsModule : ICarterModule
                 switch (format.ToLowerInvariant())
                 {
                     case "pdf":
-                        return Results.File(renderer.ToPdf(document), "application/pdf", $"{fileBase}.pdf");
+                        var company = (await sender.Send(new GetCompanyProfileQuery(), ct)).Value ?? CompanyProfileDto.Empty;
+                        return Results.File(renderer.ToPdf(document, company), "application/pdf", $"{fileBase}.pdf");
                     case "xlsx":
                         return Results.File(renderer.ToXlsx(document), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"{fileBase}.xlsx");
                     case "csv":

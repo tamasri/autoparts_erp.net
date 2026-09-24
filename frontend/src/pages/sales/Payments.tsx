@@ -38,6 +38,9 @@ const METHODS = [
 const methodLabel = (m: string): string => METHODS.find((x) => x.value === m)?.label ?? m;
 const today = (): string => new Date().toLocaleDateString('en-CA');
 
+/** The printed receipt voucher (server-side form with the company's details). */
+const loadReceiptPdf = async (id: string): Promise<Blob> => (await paymentsApi.getPdf(id)).data as Blob;
+
 async function loadPaymentDocument(id: string): Promise<ExportDocument> {
   const p = unwrapNode<Payment>((await paymentsApi.get(id)).data);
   if (!p) throw new Error('السند غير موجود');
@@ -247,7 +250,7 @@ export default function Payments(): JSX.Element {
             header: ' ', nowrap: true,
             render: (p) => (
               <Stack direction="row" gap={1}>
-                <DocumentViewButton browse={{ kind: 'payments', id: p.id, load: loadPaymentDocument }} />
+                <DocumentViewButton browse={{ kind: 'payments', id: p.id, load: loadPaymentDocument, pdf: loadReceiptPdf }} />
                 {!p.isReversed ? <Button size="small" color="error" onClick={() => setReverseId(p.id)}>↩ عكس</Button> : null}
               </Stack>
             ),

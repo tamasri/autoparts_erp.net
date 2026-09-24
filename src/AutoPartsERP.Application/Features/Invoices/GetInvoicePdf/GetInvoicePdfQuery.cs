@@ -1,5 +1,6 @@
-using System.Globalization;
+using AutoPartsERP.Application.Features.CompanyProfile;
 using AutoPartsERP.Application.Features.Invoices.GetInvoiceById;
+using AutoPartsERP.Application.Features.Printing;
 
 namespace AutoPartsERP.Application.Features.Invoices.GetInvoicePdf;
 
@@ -9,16 +10,20 @@ public sealed record GetInvoicePdfQuery(Guid InvoiceId)
     public string RequiredPermission => PermissionCodes.Invoices.Read;
 }
 
-/// <summary>Renders the invoice through the shared document engine (real PDF, embedded Arabic font, RTL).</summary>
+/// <summary>The printed invoice (sale, return or credit note) in the approved design, with the company's details.</summary>
 public sealed class GetInvoicePdfQueryHandler : IRequestHandler<GetInvoicePdfQuery, Result<byte[]>>
 {
     private readonly ISender _sender;
+    private readonly IDbConnectionFactory _connectionFactory;
     private readonly IDocumentRenderer _renderer;
+    private readonly IAppLinks _links;
 
-    public GetInvoicePdfQueryHandler(ISender sender, IDocumentRenderer renderer)
+    public GetInvoicePdfQueryHandler(ISender sender, IDbConnectionFactory connectionFactory, IDocumentRenderer renderer, IAppLinks links)
     {
         _sender = sender;
+        _connectionFactory = connectionFactory;
         _renderer = renderer;
+        _links = links;
     }
 
     public async Task<Result<byte[]>> Handle(GetInvoicePdfQuery request, CancellationToken cancellationToken)
@@ -30,37 +35,10 @@ public sealed class GetInvoicePdfQueryHandler : IRequestHandler<GetInvoicePdfQue
         }
 
         var invoice = loaded.Value!;
-        string N(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var customer = await PrintedCustomer.LoadAsync(connection, invoice.CustomerId, cancellationToken);
+        var company = await CompanyProfiles.LoadAsync(connection, cancellationToken);
 
-        var document = new ExportDocument(
-            $"فاتورة {invoice.InvoiceNumber}",
-            $"{invoice.TypeDisplay} · {invoice.StatusDisplay}",
-            [
-                new ExportField("الزبون", $"{invoice.CustomerName} ({invoice.CustomerCode})"),
-                new ExportField("تاريخ الفاتورة", invoice.InvoiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new ExportField("تاريخ الاستحقاق", invoice.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new ExportField("مجموع البنود ($)", N(Math.Abs(invoice.Amounts.SubtotalUsd))),
-                new ExportField(invoice.Amounts.DiscountPct is { } pct ? $"خصم الفاتورة {N(pct)}% ($)" : "خصم الفاتورة ($)", invoice.Amounts.DiscountAmountUsd == 0 ? null : N(invoice.Amounts.DiscountAmountUsd)),
-                new ExportField("أجور التوصيل ($)", invoice.Amounts.DeliveryFeeUsd == 0 ? null : N(invoice.Amounts.DeliveryFeeUsd)),
-                new ExportField("الإجمالي (ل.س)", N(invoice.TotalSyp)),
-                new ExportField("الإجمالي ($)", N(invoice.TotalUsd)),
-                new ExportField("المتبقي ($)", N(invoice.BalanceUsd))
-            ],
-            [
-                new ExportTable(
-                    "بنود الفاتورة",
-                    ["#", "الرمز", "الصنف", "الكمية", "السعر (ل.س)", "السعر ($)", "الخصم %", "الإجمالي (ل.س)", "الإجمالي ($)"],
-                    invoice.Lines.Select(l => (IReadOnlyList<string?>)new List<string?>
-                    {
-                        l.LineNumber.ToString(CultureInfo.InvariantCulture), l.SkuCode, l.SkuName, N(l.Quantity), N(l.UnitPriceSyp), N(l.UnitPriceUsd),
-                        N(l.DiscountPct), N(l.LineTotalSyp), N(l.LineTotalUsd)
-                    }).ToList(),
-                    ["", "", "الإجمالي", "", "", "", "", N(invoice.TotalSyp), N(invoice.TotalUsd)],
-                    [3, 4, 5, 6, 7, 8])
-            ],
-            string.IsNullOrWhiteSpace(invoice.TotalUsdInWords) ? null : $"المبلغ كتابةً: {invoice.TotalUsdInWords}",
-            $"invoice-{invoice.InvoiceNumber}");
-
-        return Result<byte[]>.Success(_renderer.ToPdf(document));
+        return Result<byte[]>.Success(_renderer.ToPdf(InvoicePrint.Build(invoice, customer, company, _links), company));
     }
 }
