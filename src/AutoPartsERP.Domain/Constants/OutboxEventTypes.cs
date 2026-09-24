@@ -19,4 +19,6 @@ public static class OutboxEventTypes
     public const string StockAdjustmentPosted = "StockAdjustmentPosted";
     public const string JournalEntryPosted = "JournalEntryPosted";
     public const string JournalEntryVoided = "JournalEntryVoided";
+    public const string LandedCostPosted = "LandedCostPosted";
+    public const string LandedCostVoided = "LandedCostVoided";
 }

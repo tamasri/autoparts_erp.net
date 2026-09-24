@@ -71,7 +71,7 @@ public sealed class GetDocumentNeighborsQueryHandler : IRequestHandler<GetDocume
 // ------------------------------------------------------------------ delete (Super Admin)
 
 /// <summary>
-/// Deletes a draft or a voided invoice, purchase invoice or accounting entry. Posted documents are never deleted: void them first
+/// Deletes a draft or a voided invoice, purchase invoice, landed cost voucher or accounting entry. Posted documents are never deleted: void them first
 /// (which reverses their stock and ledger effects and cancels them in ERPNext), as ERPNext requires cancelling before deleting.
 /// The number stays used: the series shows a recorded gap, never a reused number.
 /// </summary>
@@ -209,6 +209,20 @@ public sealed class DeleteDocumentCommandHandler : IRequestHandler<DeleteDocumen
 
     private static async Task<Error?> CheckPurchaseInvoiceAsync(DbConnection connection, DbTransaction transaction, Target target, CancellationToken ct)
     {
+        // A service bill raised by a landed cost voucher, or a goods bill carrying one, is part of that voucher.
+        var voucher = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            """
+            SELECT v.voucher_number FROM landed_cost_vouchers v
+            WHERE v.id = (SELECT landed_cost_voucher_id FROM purchase_invoices WHERE id = @Id)
+               OR v.id IN (SELECT voucher_id FROM landed_cost_voucher_bills WHERE purchase_invoice_id = @Id)
+            LIMIT 1;
+            """,
+            new { target.Id }, transaction, cancellationToken: ct));
+        if (voucher is not null)
+        {
+            return new Error("Document.HasDependants", $"Landed cost voucher {voucher} refers to this bill; delete that voucher first.");
+        }
+
         var returns = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT string_agg(bill_number, '، ') FROM purchase_invoices WHERE return_against_id = @Id;", new { target.Id }, transaction, cancellationToken: ct));
         if (returns is not null)
@@ -222,21 +236,25 @@ public sealed class DeleteDocumentCommandHandler : IRequestHandler<DeleteDocumen
             : null;
     }
 
-    /// <summary>Records the deletion (header and lines as they were) and then deletes; the database refuses the delete without the record.</summary>
+    /// <summary>
+    /// Records the deletion (the header and every child table as they were) and then deletes, children first; the database refuses
+    /// the delete without the record.
+    /// </summary>
     private async Task DeleteRecordedAsync(DbConnection connection, DbTransaction transaction, NumberedDocumentKind kind, Guid id, string reason, CancellationToken ct)
     {
         var deletion = kind.Deletion!;
+        var children = string.Join(", ", deletion.Children.Select(c =>
+            $"'{c.Table}', COALESCE((SELECT jsonb_agg(to_jsonb(c)) FROM {c.Table} c WHERE c.{c.ForeignKey} = h.id), '[]'::jsonb)"));
+        var deletes = string.Join("\n", deletion.Children.Select(c => $"DELETE FROM {c.Table} WHERE {c.ForeignKey} = @id;"));
         await connection.ExecuteAsync(new CommandDefinition(
             $"""
             INSERT INTO deleted_documents (series_code, serial_no, document_number, document_table, document_id, status_at_deletion, snapshot, reason, deleted_by)
             SELECT h.series_code, h.serial_no, h.{kind.NumberColumn}, '{kind.Table}', h.id, h.status,
-                   jsonb_build_object(
-                       'header', to_jsonb(h),
-                       'lines', COALESCE((SELECT jsonb_agg(to_jsonb(l) ORDER BY l.line_number) FROM {deletion.LinesTable} l WHERE l.{deletion.LinesForeignKey} = h.id), '[]'::jsonb)),
+                   jsonb_build_object('header', to_jsonb(h), 'children', jsonb_build_object({children})),
                    @reason, @By
             FROM {kind.Table} h WHERE h.id = @id;
 
-            DELETE FROM {deletion.LinesTable} WHERE {deletion.LinesForeignKey} = @id;
+            {deletes}
             DELETE FROM {kind.Table} WHERE id = @id;
             """,
             new { id, reason, By = _currentUser.UserId }, transaction, cancellationToken: ct));

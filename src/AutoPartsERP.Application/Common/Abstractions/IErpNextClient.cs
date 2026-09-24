@@ -32,6 +32,9 @@ public interface IErpNextClient
 
     Task<Result<string>> SyncPurchaseInvoiceAsync(ErpNextPurchaseInvoiceSync bill, CancellationToken cancellationToken = default);
 
+    /// <summary>Books a posted landed cost voucher as a Journal Entry (see <see cref="ErpNextLandedCostSync"/>).</summary>
+    Task<Result<string>> SyncLandedCostEntryAsync(ErpNextLandedCostSync entry, CancellationToken cancellationToken = default);
+
     Task<Result<string>> SyncSupplierPaymentAsync(ErpNextSupplierPaymentSync payment, CancellationToken cancellationToken = default);
 
 
@@ -151,7 +154,19 @@ public sealed record ErpNextPurchaseInvoiceSync(
     bool IsReturn,
     IReadOnlyList<ErpNextInvoiceLineSync> Lines,
     decimal DiscountAmount = 0,
-    string? ReturnAgainst = null);
+    string? ReturnAgainst = null,
+    /// <summary>A supplier's bill for landed costs: its lines are charge types (non-stock service items) booked to the landed-cost clearing account.</summary>
+    bool IsLandedCostService = false);
+
+/// <summary>
+/// A landed cost voucher: Dr inventory (the part capitalized on stock on hand), Dr cost of goods sold (the part of goods already sold),
+/// Cr the landed-cost clearing account (what suppliers billed for it on service bills, which debited that account), Cr each cash or
+/// bank account a charge was paid from.
+/// </summary>
+public sealed record ErpNextLandedCostSync(
+    Guid LocalId, string VoucherNumber, DateOnly Date, decimal CapitalizedUsd, decimal ExpensedUsd, decimal BilledUsd, IReadOnlyList<ErpNextPaidCharge> Paid);
+
+public sealed record ErpNextPaidCharge(string Account, decimal Amount);
 
 public sealed record ErpNextSupplierPaymentSync(
     Guid LocalPaymentId,

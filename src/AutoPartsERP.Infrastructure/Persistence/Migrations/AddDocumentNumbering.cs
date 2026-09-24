@@ -183,7 +183,8 @@ public sealed class AddDocumentNumbering : Migration
             """);
     }
 
-    private static string NumberingSql(string table, string number, string series)
+    /// <summary>Numbering for one table: backfilled series and serials, then the number, fixed-number and delete-guard triggers. Later migrations reuse it for new numbered tables.</summary>
+    internal static string NumberingSql(string table, string number, string series)
     {
         var onNew = series.Replace("{r}", "NEW");
         var onRow = series.Replace("{r}", "x");

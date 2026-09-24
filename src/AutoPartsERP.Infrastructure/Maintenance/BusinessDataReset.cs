@@ -15,9 +15,11 @@ public static class BusinessDataReset
     [
         "accounting_tag_links", "accounting_tags", "ai_documents", "ai_feedback", "ai_prompt_logs", "ai_sessions", "ai_suggestions", "ai_task_runs",
         "approval_decisions", "approval_requests", "assistant_links", "audit_logs", "barcode_scan_logs", "batch_movements", "batches", "customers",
-        "cycle_count_lines", "cycle_count_plans", "deleted_documents", "document_series", "erpnext_sync_log", "fx_rates", "idempotency_keys", "inventory_alerts", "inventory_balances",
-        "inventory_movements", "inventory_stock", "invoice_lines", "invoices", "issue_order_lines", "issue_orders", "item_aliases",
+        "cycle_count_lines", "cycle_count_plans", "deleted_documents", "document_series", "erpnext_sync_log", "fx_rates", "idempotency_keys",
+        "inventory_alerts", "inventory_balances", "inventory_movements", "inventory_stock", "invoice_lines", "invoices", "issue_order_lines",
+        "issue_orders", "item_aliases",
         "item_interchanges", "item_reorder_settings", "items", "journal_entries", "journal_entry_lines", "kpi_thresholds",
+        "landed_cost_allocations", "landed_cost_charges", "landed_cost_item_effects", "landed_cost_voucher_bills", "landed_cost_vouchers",
         "ledger_reconciliation_items", "ledger_reconciliations", "locations", "outbox_messages", "parties", "party_addresses", "party_contacts",
         "party_notes", "party_type_assignments", "payment_allocations", "payments", "period_locks", "pick_tasks", "purchase_invoice_lines",
         "purchase_invoices", "putaway_tasks", "receiving_documents", "receiving_lines", "rejection_attempts", "sales_reps", "skus",

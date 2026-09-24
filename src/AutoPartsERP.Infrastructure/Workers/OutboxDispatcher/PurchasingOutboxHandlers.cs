@@ -81,3 +81,35 @@ public sealed class StockAdjustmentPostedOutboxHandler : IOutboxEventHandler
         if (payload is not null) await _syncer.SyncAsync(payload.StockAdjustmentId, cancellationToken);
     }
 }
+
+/// <summary>A posted landed cost voucher becomes a Journal Entry in ERPNext (its service bills are Purchase Invoices of their own).</summary>
+public sealed class LandedCostPostedOutboxHandler : IOutboxEventHandler
+{
+    private readonly LandedCostErpNextSyncer _syncer;
+
+    public LandedCostPostedOutboxHandler(LandedCostErpNextSyncer syncer) { _syncer = syncer; }
+
+    public string EventType => OutboxEventTypes.LandedCostPosted;
+
+    public async Task HandleAsync(OutboxMessage message, CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Deserialize<LandedCostEventPayload>(message.PayloadJson);
+        if (payload is not null) await _syncer.SyncAsync(payload.VoucherId, cancellationToken);
+    }
+}
+
+/// <summary>A voided landed cost voucher is cancelled in ERPNext.</summary>
+public sealed class LandedCostVoidedOutboxHandler : IOutboxEventHandler
+{
+    private readonly LandedCostErpNextSyncer _syncer;
+
+    public LandedCostVoidedOutboxHandler(LandedCostErpNextSyncer syncer) { _syncer = syncer; }
+
+    public string EventType => OutboxEventTypes.LandedCostVoided;
+
+    public async Task HandleAsync(OutboxMessage message, CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Deserialize<LandedCostEventPayload>(message.PayloadJson);
+        if (payload is not null) await _syncer.CancelAsync(payload.VoucherId, cancellationToken);
+    }
+}

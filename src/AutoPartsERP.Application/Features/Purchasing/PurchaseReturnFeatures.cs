@@ -63,7 +63,7 @@ public sealed class CreatePurchaseReturnCommandHandler : IRequestHandler<CreateP
     }
 
     private sealed record Bill(
-        Guid Id, string Status, bool IsReturn, Guid SupplierPartyId, string? SupplierRef, Guid WarehouseId, Guid? FxRateId,
+        Guid Id, string Status, bool IsReturn, string Kind, Guid SupplierPartyId, string? SupplierRef, Guid? WarehouseId, Guid? FxRateId,
         DateOnly BillDate, decimal SubtotalUsd, decimal DiscountAmountUsd);
 
     public async Task<Result<Guid>> Handle(CreatePurchaseReturnCommand command, CancellationToken cancellationToken)
@@ -74,7 +74,7 @@ public sealed class CreatePurchaseReturnCommandHandler : IRequestHandler<CreateP
 
         var bill = await connection.QuerySingleOrDefaultAsync<Bill>(new CommandDefinition(
             """
-            SELECT id AS Id, status AS Status, is_return AS IsReturn, supplier_party_id AS SupplierPartyId, supplier_ref AS SupplierRef,
+            SELECT id AS Id, status AS Status, is_return AS IsReturn, kind AS Kind, supplier_party_id AS SupplierPartyId, supplier_ref AS SupplierRef,
                    warehouse_id AS WarehouseId, fx_rate_id AS FxRateId, bill_date AS BillDate, subtotal_usd AS SubtotalUsd, discount_amount_usd AS DiscountAmountUsd
             FROM purchase_invoices WHERE id = @BillId FOR UPDATE;
             """,
@@ -85,10 +85,10 @@ public sealed class CreatePurchaseReturnCommandHandler : IRequestHandler<CreateP
             return Result<Guid>.Failure(PurchaseDocuments.NotFound);
         }
 
-        if (bill.IsReturn || bill.Status != "POSTED")
+        if (bill.IsReturn || bill.Kind != "GOODS" || bill.Status != "POSTED")
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("PurchaseReturn.NotReturnable", "Only a posted bill (not a return) can be returned."));
+            return Result<Guid>.Failure(new Error("PurchaseReturn.NotReturnable", "Only a posted goods bill (not a return or a service bill) can be returned."));
         }
 
         if (request.ReturnDate < bill.BillDate)

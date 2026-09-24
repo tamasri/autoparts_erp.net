@@ -1,3 +1,5 @@
+using AutoPartsERP.Application.Features.Purchasing.LandedCost;
+
 namespace AutoPartsERP.Infrastructure.Services;
 
 /// <summary>
@@ -38,7 +40,7 @@ public sealed class PurchaseErpNextSyncer
             """
             SELECT p.bill_number AS BillNumber, pa.id AS PartyId, COALESCE(NULLIF(pa.display_name, ''), pa.display_name_ar) AS SupplierName,
                    pa.tax_number AS TaxNumber, p.bill_date AS BillDate, p.due_date AS DueDate, p.discount_amount_usd AS DiscountAmountUsd,
-                   p.is_return AS IsReturn, p.return_against_id AS ReturnAgainstId
+                   p.is_return AS IsReturn, p.return_against_id AS ReturnAgainstId, p.kind AS Kind
             FROM purchase_invoices p INNER JOIN parties pa ON pa.id = p.supplier_party_id
             WHERE p.id = @billId AND p.status = 'POSTED';
             """,
@@ -48,7 +50,9 @@ public sealed class PurchaseErpNextSyncer
             return;
         }
 
-        var lines = (await connection.QueryAsync<BillLineRow>(new CommandDefinition(
+        // A goods bill's lines are items; a landed-cost service bill's lines are charges, sent as non-stock service items.
+        var isService = bill.Kind == "SERVICE";
+        var lines = isService ? [] : (await connection.QueryAsync<BillLineRow>(new CommandDefinition(
             """
             SELECT k.id AS SkuId, k.code AS ItemCode, k.name AS NameEn, k.name_ar AS NameAr, k.cost_price_usd AS CostPrice, k.selling_price_usd AS SellingPrice,
                    l.quantity AS Quantity, l.unit_cost_usd AS UnitCost, l.discount_pct AS DiscountPercent
@@ -58,6 +62,12 @@ public sealed class PurchaseErpNextSyncer
             WHERE l.purchase_invoice_id = @billId ORDER BY l.line_number;
             """,
             new { billId }, cancellationToken: cancellationToken))).ToList();
+        var erpLines = isService
+            ? (await connection.QueryAsync<(string ChargeType, decimal Amount)>(new CommandDefinition(
+                "SELECT charge_type AS ChargeType, line_total_usd AS Amount FROM purchase_invoice_lines WHERE purchase_invoice_id = @billId ORDER BY line_number;",
+                new { billId }, cancellationToken: cancellationToken)))
+                .Select(c => new ErpNextInvoiceLineSync(LandedCostCharges.ServiceItemCode(c.ChargeType), 1, c.Amount, 0)).ToList()
+            : lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitCost, l.DiscountPercent)).ToList();
 
         // A return names the bill it returns (ERPNext return_against), so that bill goes first.
         string? returnAgainst = null;
@@ -87,9 +97,7 @@ public sealed class PurchaseErpNextSyncer
 
         var result = await _erpNextClient.SyncPurchaseInvoiceAsync(
             new ErpNextPurchaseInvoiceSync(
-                billId, bill.BillNumber, prerequisite.Value!, bill.BillDate, bill.DueDate, bill.IsReturn,
-                lines.Select(l => new ErpNextInvoiceLineSync(l.ItemCode, l.Quantity, l.UnitCost, l.DiscountPercent)).ToList(),
-                bill.DiscountAmountUsd, returnAgainst),
+                billId, bill.BillNumber, prerequisite.Value!, bill.BillDate, bill.DueDate, bill.IsReturn, erpLines, bill.DiscountAmountUsd, returnAgainst, isService),
             cancellationToken);
 
         await ErpNextSyncLogWriter.WriteAsync(connection, InvoiceEntity, billId, InvoiceDoctype, result.IsSuccess ? result.Value : null,
@@ -237,7 +245,7 @@ public sealed class PurchaseErpNextSyncer
 
     private sealed record BillRow(
         string BillNumber, Guid PartyId, string SupplierName, string? TaxNumber, DateOnly BillDate, DateOnly DueDate, decimal DiscountAmountUsd,
-        bool IsReturn, Guid? ReturnAgainstId);
+        bool IsReturn, Guid? ReturnAgainstId, string Kind);
 
     private sealed record BillLineRow(Guid SkuId, string ItemCode, string NameEn, string NameAr, decimal CostPrice, decimal SellingPrice, decimal Quantity, decimal UnitCost, decimal DiscountPercent);
 

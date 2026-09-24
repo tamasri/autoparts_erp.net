@@ -161,7 +161,7 @@ public sealed class GetPurchaseInvoicesQueryHandler : IRequestHandler<GetPurchas
             SELECT p.id AS Id, p.bill_number AS BillNumber, p.supplier_party_id AS SupplierPartyId,
                    COALESCE(NULLIF(pa.display_name_ar, ''), pa.display_name) AS SupplierName, p.supplier_ref AS SupplierRef,
                    p.bill_date AS BillDate, p.due_date AS DueDate, p.status AS Status,
-                   p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd, p.balance_usd AS BalanceUsd, p.is_return AS IsReturn
+                   p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd, p.balance_usd AS BalanceUsd, p.is_return AS IsReturn, p.kind AS Kind
             FROM purchase_invoices p
             INNER JOIN parties pa ON pa.id = p.supplier_party_id
             {where}
@@ -192,8 +192,8 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
 
     private sealed record Header(
         Guid Id, string BillNumber, Guid SupplierPartyId, string SupplierName, string? SupplierRef, DateOnly BillDate, DateOnly DueDate, string Status,
-        decimal TotalUsd, decimal PaidUsd, decimal BalanceUsd, Guid WarehouseId, string? Notes, string? VoidReason, DateTimeOffset? PostedAt,
-        decimal SubtotalUsd, decimal? DiscountPct, decimal DiscountAmountUsd, bool IsReturn, decimal CreditAppliedUsd, Guid? ReturnAgainstId);
+        decimal TotalUsd, decimal PaidUsd, decimal BalanceUsd, Guid? WarehouseId, string? Notes, string? VoidReason, DateTimeOffset? PostedAt,
+        decimal SubtotalUsd, decimal? DiscountPct, decimal DiscountAmountUsd, bool IsReturn, decimal CreditAppliedUsd, Guid? ReturnAgainstId, string Kind);
 
     public async Task<Result<PurchaseInvoiceDetailDto>> Handle(GetPurchaseInvoiceByIdQuery request, CancellationToken cancellationToken)
     {
@@ -205,7 +205,7 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
                    p.bill_date AS BillDate, p.due_date AS DueDate, p.status AS Status, p.total_usd AS TotalUsd, p.paid_usd AS PaidUsd,
                    p.balance_usd AS BalanceUsd, p.warehouse_id AS WarehouseId, p.notes AS Notes, p.void_reason AS VoidReason, p.posted_at AS PostedAt,
                    p.subtotal_usd AS SubtotalUsd, p.discount_pct AS DiscountPct, p.discount_amount_usd AS DiscountAmountUsd,
-                   p.is_return AS IsReturn, p.credit_applied_usd AS CreditAppliedUsd, p.return_against_id AS ReturnAgainstId
+                   p.is_return AS IsReturn, p.credit_applied_usd AS CreditAppliedUsd, p.return_against_id AS ReturnAgainstId, p.kind AS Kind
             FROM purchase_invoices p INNER JOIN parties pa ON pa.id = p.supplier_party_id
             WHERE p.id = @Id;
             """,
@@ -217,10 +217,10 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
 
         var lines = (await connection.QueryAsync<PurchaseLineDto>(new CommandDefinition(
             """
-            SELECT l.id AS Id, l.line_number AS LineNumber, l.item_id AS ItemId, i.part_number AS ItemCode,
-                   COALESCE(NULLIF(i.name_ar, ''), i.name_en) AS ItemName, l.quantity AS Quantity, l.unit_cost_usd AS UnitCostUsd,
-                   l.discount_pct AS DiscountPct, l.line_total_usd AS LineTotalUsd, l.return_of_line_id AS ReturnOfLineId
-            FROM purchase_invoice_lines l INNER JOIN items i ON i.id = l.item_id
+            SELECT l.id AS Id, l.line_number AS LineNumber, l.item_id AS ItemId, COALESCE(i.part_number, l.charge_type) AS ItemCode,
+                   COALESCE(NULLIF(i.name_ar, ''), i.name_en, l.description, l.charge_type) AS ItemName, l.quantity AS Quantity, l.unit_cost_usd AS UnitCostUsd,
+                   l.discount_pct AS DiscountPct, l.line_total_usd AS LineTotalUsd, l.return_of_line_id AS ReturnOfLineId, l.charge_type AS ChargeType
+            FROM purchase_invoice_lines l LEFT JOIN items i ON i.id = l.item_id
             WHERE l.purchase_invoice_id = @Id ORDER BY l.line_number;
             """,
             new { request.Id }, cancellationToken: cancellationToken))).ToArray();
@@ -234,10 +234,21 @@ public sealed class GetPurchaseInvoiceByIdQueryHandler : IRequestHandler<GetPurc
             """,
             new { request.Id, h.ReturnAgainstId }, cancellationToken: cancellationToken))).ToList();
 
-        var list = new PurchaseInvoiceListDto(h.Id, h.BillNumber, h.SupplierPartyId, h.SupplierName, h.SupplierRef, h.BillDate, h.DueDate, h.Status, h.TotalUsd, h.PaidUsd, h.BalanceUsd, h.IsReturn);
+        // The landed cost vouchers carrying costs on a goods bill, or the voucher that raised a service bill.
+        var vouchers = (await connection.QueryAsync<DocumentLinkDto>(new CommandDefinition(
+            """
+            SELECT v.id AS Id, v.voucher_number AS Number, v.status AS Status, v.voucher_date AS Date, v.total_usd AS TotalUsd
+            FROM landed_cost_vouchers v
+            WHERE v.id IN (SELECT voucher_id FROM landed_cost_voucher_bills WHERE purchase_invoice_id = @Id)
+               OR v.id = (SELECT landed_cost_voucher_id FROM purchase_invoices WHERE id = @Id)
+            ORDER BY v.serial_no;
+            """,
+            new { request.Id }, cancellationToken: cancellationToken))).ToList();
+
+        var list = new PurchaseInvoiceListDto(h.Id, h.BillNumber, h.SupplierPartyId, h.SupplierName, h.SupplierRef, h.BillDate, h.DueDate, h.Status, h.TotalUsd, h.PaidUsd, h.BalanceUsd, h.IsReturn, h.Kind);
         return Result<PurchaseInvoiceDetailDto>.Success(new PurchaseInvoiceDetailDto(
             list, h.WarehouseId, h.Notes, h.VoidReason, h.PostedAt, lines, h.SubtotalUsd, h.DiscountPct, h.DiscountAmountUsd, h.CreditAppliedUsd,
-            links.FirstOrDefault(l => l.Id == h.ReturnAgainstId), links.Where(l => l.Id != h.ReturnAgainstId).ToList()));
+            links.FirstOrDefault(l => l.Id == h.ReturnAgainstId), links.Where(l => l.Id != h.ReturnAgainstId).ToList(), vouchers));
     }
 }
 
@@ -282,10 +293,10 @@ public sealed class PostPurchaseInvoiceCommandHandler : IRequestHandler<PostPurc
             return Result<Guid>.Failure(PurchaseDocuments.NotFound);
         }
 
-        if (bill.Status != "DRAFT")
+        if (bill.Status != "DRAFT" || bill.Kind != "GOODS")
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Result<Guid>.Failure(new Error("Purchase.InvalidState", "Only a draft can be posted."));
+            return Result<Guid>.Failure(new Error("Purchase.InvalidState", "Only a draft goods bill can be posted (a service bill is posted by its landed cost voucher)."));
         }
 
         if (await _periodLock.IsLockedAsync(bill.BillDate.Year, bill.BillDate.Month, PurchaseDocuments.Module, cancellationToken))
@@ -416,10 +427,28 @@ public sealed class VoidPurchaseInvoiceCommandHandler : IRequestHandler<VoidPurc
             return Result<Guid>.Failure(new Error("Purchase.InvalidState", "The document is already void."));
         }
 
+        if (bill.LandedCostVoucherId is not null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(new Error("Purchase.PartOfLandedCost", "This service bill belongs to a landed cost voucher; void the voucher instead."));
+        }
+
         if (bill.PaidUsd > 0)
         {
             await transaction.RollbackAsync(cancellationToken);
             return Result<Guid>.Failure(new Error("Purchase.HasPayments", "Reverse the supplier payments allocated to this bill before voiding it."));
+        }
+
+        var vouchers = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            """
+            SELECT string_agg(v.voucher_number, '، ') FROM landed_cost_voucher_bills b INNER JOIN landed_cost_vouchers v ON v.id = b.voucher_id
+            WHERE b.purchase_invoice_id = @Id AND v.status <> 'VOID';
+            """,
+            new { request.Id }, transaction, cancellationToken: cancellationToken));
+        if (vouchers is not null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result<Guid>.Failure(new Error("Purchase.HasLandedCosts", $"Landed cost vouchers {vouchers} carry costs on this bill; void or delete them first."));
         }
 
         var returns = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
@@ -498,8 +527,8 @@ internal static class PurchaseDocuments
     public static readonly Error PeriodLocked = new("Period.Locked", "The accounting period of this document is locked.");
 
     public sealed record Header(
-        Guid Id, string BillNumber, string Status, bool IsReturn, Guid? ReturnAgainstId, Guid WarehouseId, DateOnly BillDate, Guid? FxRateId,
-        decimal TotalUsd, decimal PaidUsd, decimal CreditAppliedUsd, decimal BalanceUsd, Guid SupplierPartyId);
+        Guid Id, string BillNumber, string Status, bool IsReturn, Guid? ReturnAgainstId, Guid? WarehouseId, DateOnly BillDate, Guid? FxRateId,
+        decimal TotalUsd, decimal PaidUsd, decimal CreditAppliedUsd, decimal BalanceUsd, Guid SupplierPartyId, string Kind, Guid? LandedCostVoucherId);
 
     /// <summary>A line with its cost after the line discount and its share of the document discount.</summary>
     public sealed record NetLine(Guid LineId, Guid ItemId, Guid SkuId, string ItemCode, decimal Qty, decimal NetCost);
@@ -509,7 +538,8 @@ internal static class PurchaseDocuments
             """
             SELECT id AS Id, bill_number AS BillNumber, status AS Status, is_return AS IsReturn, return_against_id AS ReturnAgainstId,
                    warehouse_id AS WarehouseId, bill_date AS BillDate, fx_rate_id AS FxRateId, total_usd AS TotalUsd, paid_usd AS PaidUsd,
-                   credit_applied_usd AS CreditAppliedUsd, balance_usd AS BalanceUsd, supplier_party_id AS SupplierPartyId
+                   credit_applied_usd AS CreditAppliedUsd, balance_usd AS BalanceUsd, supplier_party_id AS SupplierPartyId, kind AS Kind,
+                   landed_cost_voucher_id AS LandedCostVoucherId
             FROM purchase_invoices WHERE id = @id FOR UPDATE;
             """,
             new { id }, transaction, cancellationToken: ct));
@@ -556,7 +586,8 @@ internal static class PurchaseDocuments
     public static async Task<Result> MoveAsync(
         DbConnection connection, DbTransaction transaction, Header bill, NetLine line, bool isIn, string movementType, string note, Guid by, CancellationToken ct)
     {
-        var stocked = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, bill.WarehouseId, isIn ? line.Qty : -line.Qty, ct);
+        var warehouseId = bill.WarehouseId!.Value;
+        var stocked = await StockLevelWriter.ApplyAvailableAsync(connection, transaction, line.ItemId, warehouseId, isIn ? line.Qty : -line.Qty, ct);
         if (stocked.IsFailure)
         {
             return stocked;
@@ -570,10 +601,10 @@ internal static class PurchaseDocuments
                   ON CONFLICT (item_id, location_id, batch_id, status) DO UPDATE SET qty = inventory_balances.qty + EXCLUDED.qty, updated_at = now();
                   """
                 : "UPDATE inventory_balances SET qty = GREATEST(qty - @Qty, 0), updated_at = now() WHERE item_id = @ItemId AND location_id = @WarehouseId AND batch_id IS NULL AND status = 'AVAILABLE';",
-            new { line.ItemId, bill.WarehouseId, line.Qty }, transaction, cancellationToken: ct));
+            new { line.ItemId, WarehouseId = warehouseId, line.Qty }, transaction, cancellationToken: ct));
 
         await InventoryMovementWriter.RecordAsync(
-            connection, transaction, line.SkuId, bill.WarehouseId, null, line.Qty, isIn, movementType, "PURCHASE_INVOICE", bill.Id, by, note, ct);
+            connection, transaction, line.SkuId, warehouseId, null, line.Qty, isIn, movementType, "PURCHASE_INVOICE", bill.Id, by, note, ct);
         return Result.Success();
     }
 }

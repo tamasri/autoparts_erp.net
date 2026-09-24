@@ -55,7 +55,8 @@ public sealed class GetErpNextConsistencyQueryHandler : IRequestHandler<GetErpNe
             FROM supplier_payments s
             LEFT JOIN erpnext_sync_log l ON l.local_entity_type = 'SupplierPayment' AND l.local_entity_id = s.id AND l.erpnext_doctype = 'Payment Entry';
             """),
-        // Manual entries, the cost-of-goods entry of each invoice and the entry of each stock adjustment. An adjustment is valued at the item cost
+        // Manual entries, the cost-of-goods entry of each invoice, the entry of each landed cost voucher (its debits = its charges) and the
+        // entry of each stock adjustment. An adjustment is valued at the item cost
         // when it was sent, which cannot be re-derived, so its amount is not compared; one skipped for having no value is not expected in ERPNext.
         new("journal-entries", "Journal Entry", false,
             """
@@ -75,7 +76,12 @@ public sealed class GetErpNextConsistencyQueryHandler : IRequestHandler<GetErpNe
             SELECT 'StockAdjustment', a.id, a.adjustment_no, NULL::numeric, a.status = 'POSTED' AND COALESCE(l.status, '') <> 'SKIPPED', l.status, l.erpnext_name, l.last_error
             FROM stock_adjustments a
             LEFT JOIN erpnext_sync_log l ON l.local_entity_type = 'StockAdjustment' AND l.local_entity_id = a.id AND l.erpnext_doctype = 'Journal Entry'
-            WHERE a.status = 'POSTED';
+            WHERE a.status = 'POSTED'
+            UNION ALL
+            SELECT 'LandedCost', v.id, v.voucher_number, v.total_usd, v.status = 'POSTED', l.status, l.erpnext_name, l.last_error
+            FROM landed_cost_vouchers v
+            LEFT JOIN erpnext_sync_log l ON l.local_entity_type = 'LandedCost' AND l.local_entity_id = v.id AND l.erpnext_doctype = 'Journal Entry'
+            WHERE v.status IN ('POSTED', 'VOID') AND v.posted_at IS NOT NULL;
             """),
     ];
 

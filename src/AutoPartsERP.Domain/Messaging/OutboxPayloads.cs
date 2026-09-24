@@ -65,3 +65,5 @@ public sealed record SupplierPaymentEventPayload(Guid SupplierPaymentId);
 public sealed record StockAdjustmentPostedPayload(Guid StockAdjustmentId);
 
 public sealed record JournalEntryEventPayload(Guid JournalEntryId);
+
+public sealed record LandedCostEventPayload(Guid VoucherId);

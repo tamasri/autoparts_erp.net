@@ -76,6 +76,7 @@ export const QUICK_ACTIONS: Array<{ to: string; label: string }> = [
   { to: '/payments', label: 'سند قبض' },
   { to: '/accounting/entries', label: 'قيد محاسبي' },
   { to: '/purchasing', label: 'فاتورة شراء' },
+  { to: '/purchasing?tab=landed-costs', label: 'قيد رسملة مصاريف شراء' },
   { to: '/inventory/receiving', label: 'استلام بضاعة' },
   { to: '/inventory/transfers', label: 'تحويل مخزون' },
   { to: '/accounts', label: 'حساب جديد' },

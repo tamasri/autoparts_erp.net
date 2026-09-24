@@ -1,6 +1,7 @@
 /**
  * Purchasing: supplier bills (post = goods received, cost updated, sent to ERPNext), purchase returns made from a posted bill
- * (post = goods sent back at their cost, the bill credited), and supplier payments.
+ * (post = goods sent back at their cost, the bill credited), landed cost vouchers (the costs that follow a purchase, added to the
+ * goods' cost), and supplier payments.
  */
 import { ARABIC_PAGINATION } from '../../lib/tablePagination';
 import { useCallback, useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Tab, Table, TableBody, TableCell, TableContainer,
   TableHead, TablePagination, TableRow, Tabs, TextField,
 } from '@mui/material';
-import { purchasingApi, type PurchaseInvoiceDetail, type PurchaseInvoiceRow, type SupplierPaymentRow } from '../../api/endpoints/purchasing';
+import { CHARGE_LABEL, purchasingApi, type LandedCostRow, type PurchaseInvoiceDetail, type PurchaseInvoiceRow, type SupplierPaymentRow } from '../../api/endpoints/purchasing';
 import type { CreateReturn, ReturnableLine } from '../../api/endpoints/returns';
 import { unwrapList, unwrapNode, unwrapPaged } from '../../api/apiData';
 import { extractApiError, toast } from '../../lib/toast';
@@ -22,6 +23,8 @@ import PurchaseInvoiceDialog from '../../features/purchasing/PurchaseInvoiceDial
 import SupplierPaymentDialog from '../../features/purchasing/SupplierPaymentDialog';
 import Money from '../../components/ui/Money';
 import ReturnDialog from '../../features/returns/ReturnDialog';
+import LandedCostDialog from '../../features/purchasing/LandedCostDialog';
+import StatusChip from '../../components/ui/StatusChip';
 import DeleteDocumentButton from '../../components/documents/DeleteDocumentButton';
 
 const STATUS: Record<string, { label: string; color: 'default' | 'success' | 'error' }> = {
@@ -35,10 +38,11 @@ async function billDocument(id: string): Promise<ExportDocument> {
   const d = unwrapNode<PurchaseInvoiceDetail>((await purchasingApi.getInvoice(id)).data) as PurchaseInvoiceDetail;
   const i = d.invoice;
   return {
-    title: `${i.isReturn ? 'مرتجع مشتريات' : 'فاتورة شراء'} ${i.billNumber}`, subtitle: STATUS[i.status]?.label, fileName: `purchase-${i.billNumber}`,
+    title: `${i.isReturn ? 'مرتجع مشتريات' : i.kind === 'SERVICE' ? 'فاتورة خدمة (مصاريف شراء)' : 'فاتورة شراء'} ${i.billNumber}`, subtitle: STATUS[i.status]?.label, fileName: `purchase-${i.billNumber}`,
     fields: [
       ...(d.returnAgainst ? [{ label: 'مرتجع من الفاتورة', value: d.returnAgainst.number }] : []),
       ...(d.returns.length > 0 ? [{ label: 'المرتجعات', value: d.returns.map((r) => `${r.number} (${STATUS[r.status]?.label ?? r.status})`).join('، ') }] : []),
+      ...(d.landedCosts.length > 0 ? [{ label: i.kind === 'SERVICE' ? 'قيد الرسملة' : 'قيود رسملة المصاريف', value: d.landedCosts.map((v) => `${v.number} (${STATUS[v.status]?.label ?? v.status})`).join('، ') }] : []),
       { label: 'المورّد', value: i.supplierName }, { label: 'رقم فاتورة المورّد', value: i.supplierRef }, { label: 'التاريخ', value: ymd(i.billDate) },
       { label: 'الاستحقاق', value: ymd(i.dueDate) }, { label: 'المدفوع ($)', value: money(i.paidUsd) },
       ...(d.creditAppliedUsd !== 0 ? [{ label: i.isReturn ? 'طُبِّق على الفاتورة ($)' : 'مرتجعات مطبّقة ($)', value: money(Math.abs(d.creditAppliedUsd)) }] : []),
@@ -49,7 +53,7 @@ async function billDocument(id: string): Promise<ExportDocument> {
     ],
     tables: [{
       title: 'الأصناف', columns: ['#', 'الرمز', 'الصنف', 'الكمية', 'التكلفة ($)', 'الخصم %', 'الإجمالي ($)'],
-      rows: d.lines.map((l) => [String(l.lineNumber), l.itemCode, l.itemName, num(l.quantity), num(l.unitCostUsd), num(l.discountPct), num(l.lineTotalUsd)]),
+      rows: d.lines.map((l) => [String(l.lineNumber), l.chargeType ? CHARGE_LABEL[l.chargeType] : l.itemCode, l.itemName, num(l.quantity), num(l.unitCostUsd), num(l.discountPct), num(l.lineTotalUsd)]),
       totals: ['', '', 'الإجمالي', '', '', '', num(i.totalUsd)], numericColumns: [3, 4, 5, 6],
     }],
     footer: d.notes ?? undefined,
@@ -69,6 +73,7 @@ function BillsTab(): JSX.Element {
   const [paying, setPaying] = useState<{ id: string; name: string } | null>(null);
   const [voiding, setVoiding] = useState<PurchaseInvoiceRow | null>(null);
   const [returning, setReturning] = useState<PurchaseInvoiceRow | null>(null);
+  const [landing, setLanding] = useState<PurchaseInvoiceRow | null>(null);
   const loadReturnable = useCallback(async (): Promise<ReturnableLine[]> =>
     (returning ? unwrapList<ReturnableLine>((await purchasingApi.returnable(returning.id)).data) : []), [returning]);
   const createReturn = useCallback(async (body: CreateReturn): Promise<string> =>
@@ -129,7 +134,7 @@ function BillsTab(): JSX.Element {
             {rows.length === 0 ? <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد فواتير شراء</TableCell></TableRow> : null}
             {rows.map((b) => (
               <TableRow key={b.id} hover>
-                <TableCell sx={{ fontWeight: 700 }}>{b.billNumber}{b.isReturn ? <Chip size="small" color="warning" label="مرتجع" sx={{ mx: 1 }} /> : null}{b.supplierRef ? <Box component="span" sx={{ mx: 1, color: 'text.secondary', fontSize: 12 }}>({b.supplierRef})</Box> : null}</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>{b.billNumber}{b.isReturn ? <Chip size="small" color="warning" label="مرتجع" sx={{ mx: 1 }} /> : null}{b.kind === 'SERVICE' ? <Chip size="small" color="info" label="خدمة" sx={{ mx: 1 }} /> : null}{b.supplierRef ? <Box component="span" sx={{ mx: 1, color: 'text.secondary', fontSize: 12 }}>({b.supplierRef})</Box> : null}</TableCell>
                 <TableCell>{b.supplierName}</TableCell><TableCell>{ymd(b.billDate)}</TableCell><TableCell>{ymd(b.dueDate)}</TableCell>
                 <TableCell align="left"><Money usd={b.totalUsd} /></TableCell>
                 <TableCell align="left"><Money usd={b.balanceUsd} fontWeight={700} color={b.balanceUsd > 0 ? 'error.main' : 'text.secondary'} /></TableCell>
@@ -138,8 +143,9 @@ function BillsTab(): JSX.Element {
                   <DocumentViewButton browse={{ kind: 'purchase-invoices', id: b.id, load: billDocument }} />
                   {b.status === 'DRAFT' ? <Button size="small" onClick={() => void post(b)}>{b.isReturn ? 'ترحيل وإرجاع' : 'ترحيل واستلام'}</Button> : null}
                   {b.status === 'POSTED' && b.balanceUsd > 0 ? <Button size="small" onClick={() => setPaying({ id: b.supplierPartyId, name: b.supplierName })}>دفع</Button> : null}
-                  {b.status === 'POSTED' && !b.isReturn ? <Button size="small" color="warning" onClick={() => setReturning(b)}>↩ مرتجع</Button> : null}
-                  {b.status !== 'VOID' ? <Button size="small" color="error" onClick={() => { setVoiding(b); setReason(''); }}>إلغاء</Button> : null}
+                  {b.status === 'POSTED' && !b.isReturn && b.kind === 'GOODS' ? <Button size="small" color="warning" onClick={() => setReturning(b)}>↩ مرتجع</Button> : null}
+                  {b.status === 'POSTED' && !b.isReturn && b.kind === 'GOODS' ? <Button size="small" color="secondary" onClick={() => setLanding(b)}>رسملة مصاريف</Button> : null}
+                  {b.status !== 'VOID' && b.kind === 'GOODS' ? <Button size="small" color="error" onClick={() => { setVoiding(b); setReason(''); }}>إلغاء</Button> : null}
                   <DeleteDocumentButton kind="purchase-invoices" id={b.id} number={b.billNumber} status={b.status} onDeleted={() => void load()} />
                 </TableCell>
               </TableRow>
@@ -151,6 +157,7 @@ function BillsTab(): JSX.Element {
       </TableContainer>
 
       <PurchaseInvoiceDialog open={creating} onClose={() => setCreating(false)} onSaved={() => void load()} />
+      <LandedCostDialog open={landing !== null} voucherId={null} initialBill={landing} onClose={() => setLanding(null)} onChanged={() => void load()} />
       <ReturnDialog open={returning !== null} title={`مرتجع مشتريات من الفاتورة ${returning?.billNumber ?? ''}`} load={loadReturnable} submit={createReturn}
         onClose={() => setReturning(null)} onCreated={() => { setReturning(null); void load(); }} />
       <SupplierPaymentDialog open={paying !== null} supplier={paying} onClose={() => setPaying(null)} onSaved={() => void load()} />
@@ -164,6 +171,61 @@ function BillsTab(): JSX.Element {
         </DialogContent>
         <DialogActions><Button onClick={() => setVoiding(null)}>رجوع</Button><Button color="error" variant="contained" onClick={() => void doVoid()}>تأكيد الإلغاء</Button></DialogActions>
       </Dialog>
+    </Box>
+  );
+}
+
+/** Landed cost vouchers: transport, customs, shipping and insurance spread over the goods of posted bills and added to their cost. */
+function LandedCostsTab(): JSX.Element {
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [rows, setRows] = useState<LandedCostRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState<{ id: string | null } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const data = unwrapPaged<LandedCostRow>((await purchasingApi.listLandedCosts({ page: page + 1, pageSize, status: status || undefined })).data);
+      setRows(data.items); setTotal(data.totalCount); setError('');
+    } catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل قيود الرسملة')); }
+  }, [page, pageSize, status]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <Box>
+      <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
+        <Tabs value={FILTERS.findIndex((f) => f.key === status)} onChange={(_, i: number) => { setStatus(FILTERS[i].key); setPage(0); }}>{FILTERS.map((f) => <Tab key={f.key} label={f.label} />)}</Tabs>
+        <Box sx={{ mr: 'auto' }} />
+        <Button variant="contained" size="small" onClick={() => setOpen({ id: null })}>＋ قيد رسملة</Button>
+      </Stack>
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
+        <Table size="small">
+          <TableHead><TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'action.hover' } }}>
+            <TableCell>الرقم</TableCell><TableCell>التاريخ</TableCell><TableCell>فواتير الشراء</TableCell><TableCell align="left">المصاريف</TableCell>
+            <TableCell align="left">البنود</TableCell><TableCell>الحالة</TableCell><TableCell />
+          </TableRow></TableHead>
+          <TableBody>
+            {rows.length === 0 ? <TableRow><TableCell colSpan={7} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد قيود رسملة</TableCell></TableRow> : null}
+            {rows.map((v) => (
+              <TableRow key={v.id} hover>
+                <TableCell sx={{ fontWeight: 700, fontFamily: 'monospace' }}>{v.voucherNumber}</TableCell>
+                <TableCell>{ymd(v.voucherDate)}</TableCell><TableCell>{v.billNumbers}</TableCell>
+                <TableCell align="left"><Money usd={v.totalUsd} fontWeight={700} /></TableCell>
+                <TableCell align="left">{v.chargeCount}</TableCell>
+                <TableCell><StatusChip status={v.status} /></TableCell>
+                <TableCell align="left"><Button size="small" variant="outlined" onClick={() => setOpen({ id: v.id })}>{v.status === 'DRAFT' ? 'فتح / ترحيل' : 'عرض'}</Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <TablePagination component="div" count={total} page={page} rowsPerPage={pageSize} rowsPerPageOptions={[10, 20, 50, 100]}
+          onPageChange={(_, p) => setPage(p)} onRowsPerPageChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} {...ARABIC_PAGINATION} />
+      </TableContainer>
+      <LandedCostDialog open={open !== null} voucherId={open?.id ?? null} onClose={() => setOpen(null)} onChanged={() => void load()} />
     </Box>
   );
 }
@@ -226,16 +288,18 @@ function PaymentsTab(): JSX.Element {
   );
 }
 
+const TABS = ['bills', 'landed-costs', 'payments'] as const;
+
 export default function Purchasing(): JSX.Element {
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'payments' ? 1 : 0;
+  const tab = Math.max(TABS.indexOf((params.get('tab') ?? 'bills') as (typeof TABS)[number]), 0);
   return (
     <Box>
-      <PageHeader title="المشتريات" subtitle="فواتير الموردين (الترحيل يستلم البضاعة ويحدّث التكلفة ويرسل إلى ERPNext) ومدفوعاتهم" />
-      <Tabs value={tab} onChange={(_, i: number) => setParams(i === 1 ? { tab: 'payments' } : {})} sx={{ mb: 2 }}>
-        <Tab label="فواتير الشراء" /><Tab label="مدفوعات الموردين" />
+      <PageHeader title="المشتريات" subtitle="فواتير الموردين (الترحيل يستلم البضاعة ويحدّث التكلفة ويرسل إلى ERPNext)، رسملة مصاريف الشراء، ومدفوعات الموردين" />
+      <Tabs value={tab} onChange={(_, i: number) => setParams(i === 0 ? {} : { tab: TABS[i] })} sx={{ mb: 2 }}>
+        <Tab label="فواتير الشراء" /><Tab label="رسملة مصاريف الشراء" /><Tab label="مدفوعات الموردين" />
       </Tabs>
-      {tab === 0 ? <BillsTab /> : <PaymentsTab />}
+      {tab === 0 ? <BillsTab /> : tab === 1 ? <LandedCostsTab /> : <PaymentsTab />}
     </Box>
   );
 }

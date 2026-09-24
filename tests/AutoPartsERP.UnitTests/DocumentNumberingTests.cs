@@ -13,23 +13,24 @@ public sealed class DocumentNumberingTests
     public void The_api_kinds_and_the_database_triggers_cover_the_same_tables_and_number_columns()
     {
         var api = NumberedDocuments.All.Select(k => (k.Table, k.NumberColumn)).OrderBy(x => x.Table);
-        var database = AddDocumentNumbering.NumberedTables.Select(t => (t.Table, t.NumberColumn)).OrderBy(x => x.Table);
+        var database = AddDocumentNumbering.NumberedTables.Concat(AddLandedCost.NumberedTables).Select(t => (t.Table, t.NumberColumn)).OrderBy(x => x.Table);
 
         api.Should().Equal(database);
     }
 
     [Fact]
-    public void Every_numbered_table_and_the_numbering_tables_are_wiped_by_the_business_data_reset()
+    public void Every_numbered_table_its_children_and_the_numbering_tables_are_wiped_by_the_business_data_reset()
     {
         BusinessDataReset.Wiped.Should().Contain(NumberedDocuments.All.Select(k => k.Table));
+        BusinessDataReset.Wiped.Should().Contain(NumberedDocuments.All.SelectMany(k => k.Deletion?.Children ?? []).Select(c => c.Table));
         BusinessDataReset.Wiped.Should().Contain(["document_series", "deleted_documents"]);
     }
 
     [Fact]
-    public void Only_invoices_purchase_invoices_and_journal_entries_can_be_deleted()
+    public void Only_invoices_purchase_invoices_landed_costs_and_journal_entries_can_be_deleted()
     {
         NumberedDocuments.All.Where(k => k.Deletion is not null).Select(k => k.Kind)
-            .Should().BeEquivalentTo(NumberedDocuments.Invoices, NumberedDocuments.PurchaseInvoices, NumberedDocuments.JournalEntries);
+            .Should().BeEquivalentTo(NumberedDocuments.Invoices, NumberedDocuments.PurchaseInvoices, NumberedDocuments.LandedCosts, NumberedDocuments.JournalEntries);
     }
 
     [Fact]

@@ -302,14 +302,28 @@ public sealed partial class ErpNextClient : IErpNextClient
             return Result<string>.Failure(company.Error);
         }
 
-        var inventory = await EnsureInventoryAccountAsync(company.Value!, cancellationToken);
-        if (inventory.IsFailure)
+        // Goods are received (and counted) in this application, so a goods bill debits the externally-managed inventory account
+        // rather than creating stock in ERPNext (update_stock = 0); a landed-cost service bill debits the landed-cost clearing account.
+        var expenseAccount = bill.IsLandedCostService
+            ? await EnsureLandedCostClearingAccountAsync(company.Value!, cancellationToken)
+            : await EnsureInventoryAccountAsync(company.Value!, cancellationToken);
+        if (expenseAccount.IsFailure)
         {
-            return Result<string>.Failure(inventory.Error);
+            return Result<string>.Failure(expenseAccount.Error);
         }
 
-        // Goods are received (and counted) in this application, so the bill debits the externally-managed inventory account
-        // rather than creating stock in ERPNext (update_stock = 0).
+        if (bill.IsLandedCostService)
+        {
+            foreach (var code in bill.Lines.Select(l => l.ItemCode).Distinct())
+            {
+                var service = await EnsureServiceItemAsync(code, cancellationToken);
+                if (service.IsFailure)
+                {
+                    return service;
+                }
+            }
+        }
+
         var items = new JsonArray();
         foreach (var line in bill.Lines)
         {
@@ -319,7 +333,7 @@ public sealed partial class ErpNextClient : IErpNextClient
                 ["qty"] = bill.IsReturn ? -line.Quantity : line.Quantity,
                 ["rate"] = line.UnitPrice,
                 ["discount_percentage"] = line.DiscountPercent,
-                ["expense_account"] = inventory.Value
+                ["expense_account"] = expenseAccount.Value
             });
         }
 
@@ -344,6 +358,93 @@ public sealed partial class ErpNextClient : IErpNextClient
                 ["docstatus"] = 1
             }.WithReturnAgainst(bill.ReturnAgainst).WithInvoiceDiscount(bill.DiscountAmount, bill.IsReturn),
             cancellationToken);
+    }
+
+    /// <summary>A non-stock, purchase-only item that names a kind of landed cost on a supplier's service bill.</summary>
+    private Task<Result<string>> EnsureServiceItemAsync(string code, CancellationToken cancellationToken) =>
+        UpsertAsync(
+            "Item",
+            code,
+            new JsonObject
+            {
+                ["item_code"] = code,
+                ["item_name"] = code,
+                ["item_group"] = "All Item Groups",
+                ["stock_uom"] = "Nos",
+                ["is_stock_item"] = 0,
+                ["is_purchase_item"] = 1,
+                ["is_sales_item"] = 0,
+                ["description"] = "AutoPartsERP landed cost"
+            },
+            cancellationToken);
+
+    public async Task<Result<string>> SyncLandedCostEntryAsync(ErpNextLandedCostSync entry, CancellationToken cancellationToken = default)
+    {
+        var company = await GetCompanyAsync(cancellationToken);
+        if (company.IsFailure)
+        {
+            return Result<string>.Failure(company.Error);
+        }
+
+        var c = company.Value!;
+        var accounts = new JsonArray();
+        void Line(string account, decimal debit, decimal credit)
+        {
+            if (debit != 0 || credit != 0)
+            {
+                accounts.Add(new JsonObject { ["account"] = account, ["debit_in_account_currency"] = debit, ["credit_in_account_currency"] = credit });
+            }
+        }
+
+        if (entry.CapitalizedUsd > 0)
+        {
+            var inventory = await EnsureInventoryAccountAsync(c, cancellationToken);
+            if (inventory.IsFailure)
+            {
+                return inventory;
+            }
+
+            Line(inventory.Value!, entry.CapitalizedUsd, 0);
+        }
+
+        if (entry.ExpensedUsd > 0)
+        {
+            if (string.IsNullOrWhiteSpace(c.CogsAccount))
+            {
+                return Result<string>.Failure(new Error("ErpNext.AccountsMissing", $"Company '{c.Name}' has no default Cost of Goods Sold account in ERPNext."));
+            }
+
+            Line(c.CogsAccount, entry.ExpensedUsd, 0);
+        }
+
+        if (entry.BilledUsd > 0)
+        {
+            var clearing = await EnsureLandedCostClearingAccountAsync(c, cancellationToken);
+            if (clearing.IsFailure)
+            {
+                return clearing;
+            }
+
+            Line(clearing.Value!, 0, entry.BilledUsd);
+        }
+
+        foreach (var paid in entry.Paid)
+        {
+            Line(paid.Account, 0, paid.Amount);
+        }
+
+        var date = entry.Date.ToString("yyyy-MM-dd");
+        return await UpsertAsync("Journal Entry", entry.LocalId.ToString(), new JsonObject
+        {
+            ["voucher_type"] = "Journal Entry",
+            ["company"] = c.Name,
+            ["posting_date"] = date,
+            ["user_remark"] = $"AutoPartsERP landed cost voucher {entry.VoucherNumber}",
+            ["cheque_no"] = entry.VoucherNumber,
+            ["cheque_date"] = date,
+            ["accounts"] = accounts,
+            ["docstatus"] = 1
+        }, cancellationToken);
     }
 
     public async Task<Result<string>> SyncSupplierPaymentAsync(ErpNextSupplierPaymentSync payment, CancellationToken cancellationToken = default)
@@ -400,51 +501,66 @@ public sealed partial class ErpNextClient : IErpNextClient
     }
 
     /// <summary>The account that carries inventory value while this application (not ERPNext) owns the stock; created on first use.</summary>
-    private async Task<Result<string>> EnsureInventoryAccountAsync(CompanyInfo company, CancellationToken cancellationToken)
+    private Task<Result<string>> EnsureInventoryAccountAsync(CompanyInfo company, CancellationToken cancellationToken) =>
+        EnsureOwnAccountAsync(company, "AutoPartsERP Inventory", "Asset", "Balance Sheet", null, ["Current Assets", "Stock Assets"], cancellationToken);
+
+    /// <summary>
+    /// The clearing account of landed costs (ERPNext's "Expenses Included In Valuation"): a supplier's service bill debits it, the landed
+    /// cost voucher moves it into inventory and cost of goods sold, so it returns to zero. Created on first use.
+    /// </summary>
+    private Task<Result<string>> EnsureLandedCostClearingAccountAsync(CompanyInfo company, CancellationToken cancellationToken) =>
+        EnsureOwnAccountAsync(company, "AutoPartsERP Landed Costs", "Expense", "Profit and Loss", "Expenses Included In Valuation",
+            ["Stock Expenses", "Direct Expenses", "Expenses"], cancellationToken);
+
+    /// <summary>
+    /// An account this application books to, created under the first of <paramref name="preferredParents"/> the company's chart has
+    /// (charts differ, so ERPNext is asked for its groups of that root type; any such group otherwise).
+    /// </summary>
+    private async Task<Result<string>> EnsureOwnAccountAsync(
+        CompanyInfo company, string accountName, string rootType, string reportType, string? accountType, IReadOnlyList<string> preferredParents,
+        CancellationToken cancellationToken)
     {
-        var name = $"AutoPartsERP Inventory - {company.Abbr}";
+        var name = $"{accountName} - {company.Abbr}";
         var probe = await _httpClient.GetAsync($"api/resource/Account/{Uri.EscapeDataString(name)}", cancellationToken);
         if (probe.IsSuccessStatusCode)
         {
             return Result<string>.Success(name);
         }
 
-        var created = await _httpClient.PostAsJsonAsync(
-            "api/resource/Account",
-            new JsonObject
-            {
-                ["account_name"] = "AutoPartsERP Inventory",
-                ["company"] = company.Name,
-                ["parent_account"] = await FindInventoryParentAccountAsync(company, cancellationToken),
-                ["is_group"] = 0,
-                ["root_type"] = "Asset",
-                ["report_type"] = "Balance Sheet"
-            },
-            cancellationToken);
+        var account = new JsonObject
+        {
+            ["account_name"] = accountName,
+            ["company"] = company.Name,
+            ["parent_account"] = await FindParentGroupAsync(company, rootType, preferredParents, cancellationToken),
+            ["is_group"] = 0,
+            ["root_type"] = rootType,
+            ["report_type"] = reportType
+        };
+        if (accountType is not null)
+        {
+            account["account_type"] = accountType;
+        }
 
+        var created = await _httpClient.PostAsJsonAsync("api/resource/Account", account, cancellationToken);
         if (created.IsSuccessStatusCode)
         {
             return Result<string>.Success(name);
         }
 
         var body = await created.Content.ReadAsStringAsync(cancellationToken);
-        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"Could not create the inventory account '{name}': {Explain(created.StatusCode, body)}"));
+        return Result<string>.Failure(new Error("ErpNext.AccountCreateFailed", $"Could not create the account '{name}': {Explain(created.StatusCode, body)}"));
     }
 
-    /// <summary>
-    /// The group account under which the inventory account is created. ERPNext charts differ ("Current Assets - ABBR" is not
-    /// guaranteed), so ask ERPNext for the company's asset groups and prefer Current Assets / Stock Assets.
-    /// </summary>
-    private async Task<string> FindInventoryParentAccountAsync(CompanyInfo company, CancellationToken cancellationToken)
+    private async Task<string> FindParentGroupAsync(CompanyInfo company, string rootType, IReadOnlyList<string> preferredParents, CancellationToken cancellationToken)
     {
-        var fallback = $"Current Assets - {company.Abbr}";
+        var fallback = $"{preferredParents[0]} - {company.Abbr}";
         try
         {
             var filters = Uri.EscapeDataString(JsonSerializer.Serialize(new object[]
             {
                 new object[] { "company", "=", company.Name },
                 new object[] { "is_group", "=", 1 },
-                new object[] { "root_type", "=", "Asset" }
+                new object[] { "root_type", "=", rootType }
             }));
             var fields = Uri.EscapeDataString("[\"name\",\"account_name\",\"parent_account\"]");
             var response = await _httpClient.GetAsync($"api/resource/Account?filters={filters}&fields={fields}&limit_page_length=200", cancellationToken);
@@ -462,15 +578,14 @@ public sealed partial class ErpNextClient : IErpNextClient
                 .Where(r => r.Name.Length > 0)
                 .ToList();
 
-            return rows.FirstOrDefault(r => string.Equals(r.Account, "Current Assets", StringComparison.OrdinalIgnoreCase)).Name
-                ?? rows.FirstOrDefault(r => string.Equals(r.Account, "Stock Assets", StringComparison.OrdinalIgnoreCase)).Name
+            return preferredParents.Select(p => rows.FirstOrDefault(r => string.Equals(r.Account, p, StringComparison.OrdinalIgnoreCase)).Name).FirstOrDefault(n => n is not null)
                 ?? rows.FirstOrDefault(r => !string.IsNullOrEmpty(r.Parent)).Name
                 ?? rows.FirstOrDefault().Name
                 ?? fallback;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not list ERPNext asset groups; using the default parent account.");
+            _logger.LogWarning(ex, "Could not list ERPNext {RootType} groups; using the default parent account.", rootType);
             return fallback;
         }
     }

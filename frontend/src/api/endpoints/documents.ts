@@ -2,7 +2,7 @@ import { apiClient } from '../client';
 
 /** The numbered kinds of document (the server's NumberedDocuments). The database numbers each series 1, 2, 3 … without gaps. */
 export type DocumentKind =
-  | 'invoices' | 'payments' | 'purchase-invoices' | 'supplier-payments' | 'journal-entries'
+  | 'invoices' | 'payments' | 'purchase-invoices' | 'landed-costs' | 'supplier-payments' | 'journal-entries'
   | 'stock-adjustments' | 'transfer-orders' | 'receiving' | 'issue-orders';
 
 export type DocumentRef = { id: string; serialNo: number; number: string };
@@ -23,7 +23,7 @@ export type SeriesHealth = { code: string; prefix: string; nameAr: string; lastN
 export const DELETE_DOCUMENTS = 'documents:delete';
 
 /** Kinds the Super Admin may delete, and in which states (posted documents are voided first). */
-export const DELETABLE_KINDS: readonly DocumentKind[] = ['invoices', 'purchase-invoices', 'journal-entries'];
+export const DELETABLE_KINDS: readonly DocumentKind[] = ['invoices', 'purchase-invoices', 'landed-costs', 'journal-entries'];
 export const DELETABLE_STATUSES: readonly string[] = ['DRAFT', 'CONFIRMED', 'VOID'];
 
 export const documentsApi = {

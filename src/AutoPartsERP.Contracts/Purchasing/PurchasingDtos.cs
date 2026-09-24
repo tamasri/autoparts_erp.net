@@ -46,23 +46,26 @@ public sealed record PurchaseInvoiceListDto(
     decimal TotalUsd,
     decimal PaidUsd,
     decimal BalanceUsd,
-    bool IsReturn);
+    bool IsReturn,
+    /// <summary>GOODS (stock lines) or SERVICE (landed-cost charges owed to a supplier, raised by a landed cost voucher).</summary>
+    string Kind);
 
 public sealed record PurchaseLineDto(
     Guid Id,
     int LineNumber,
-    Guid ItemId,
+    Guid? ItemId,
     string ItemCode,
     string ItemName,
     decimal Quantity,
     decimal UnitCostUsd,
     decimal DiscountPct,
     decimal LineTotalUsd,
-    Guid? ReturnOfLineId);
+    Guid? ReturnOfLineId,
+    string? ChargeType);
 
 public sealed record PurchaseInvoiceDetailDto(
     PurchaseInvoiceListDto Invoice,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     string? Notes,
     string? VoidReason,
     DateTimeOffset? PostedAt,
@@ -72,7 +75,8 @@ public sealed record PurchaseInvoiceDetailDto(
     decimal DiscountAmountUsd,
     decimal CreditAppliedUsd,
     DocumentLinkDto? ReturnAgainst,
-    IReadOnlyCollection<DocumentLinkDto> Returns);
+    IReadOnlyCollection<DocumentLinkDto> Returns,
+    IReadOnlyCollection<DocumentLinkDto> LandedCosts);
 
 public sealed record SupplierPaymentDto(
     Guid Id,

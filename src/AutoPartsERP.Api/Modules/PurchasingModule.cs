@@ -1,8 +1,9 @@
 using AutoPartsERP.Application.Features.Purchasing;
+using AutoPartsERP.Application.Features.Purchasing.LandedCost;
 
 namespace AutoPartsERP.Api.Modules;
 
-/// <summary>Supplier bills (purchase invoices) and supplier payments.</summary>
+/// <summary>Supplier bills (purchase invoices), purchase returns, landed cost vouchers and supplier payments.</summary>
 public sealed class PurchasingModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -32,6 +33,27 @@ public sealed class PurchasingModule : ICarterModule
         bills.MapPost("/{id:guid}/returns", async Task<IResult> (Guid id, CreateReturnRequest request, HttpContext http, ISender sender, CancellationToken ct) =>
                 (await sender.Send(new CreatePurchaseReturnCommand(id, request, EndpointRequestHelpers.GetIdempotencyKey(http)), ct)).ToApiResult())
             .WithIdempotency();
+
+        // Landed cost vouchers (قيد رسملة مصاريف الشراء): drafts are saved and previewed, then posted (with approval) or voided.
+        var landed = app.MapGroup("/api/v1/landed-costs").RequireAuthorization();
+
+        landed.MapGet("/", async Task<IResult> (int? page, int? pageSize, string? status, Guid? purchaseInvoiceId, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new GetLandedCostsQuery(page ?? 1, pageSize ?? 20, status, purchaseInvoiceId), ct)).ToApiResult());
+
+        landed.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new GetLandedCostQuery(id), ct)).ToApiResult());
+
+        landed.MapPost("/", async Task<IResult> (SaveLandedCostRequest request, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new SaveLandedCostCommand(null, request), ct)).ToApiResult());
+
+        landed.MapPut("/{id:guid}", async Task<IResult> (Guid id, SaveLandedCostRequest request, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new SaveLandedCostCommand(id, request), ct)).ToApiResult());
+
+        landed.MapPost("/{id:guid}/post", async Task<IResult> (Guid id, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new PostLandedCostCommand(id), ct)).ToApiResult());
+
+        landed.MapPost("/{id:guid}/void", async Task<IResult> (Guid id, VoidLandedCostRequest request, ISender sender, CancellationToken ct) =>
+            (await sender.Send(new VoidLandedCostCommand(id, request.Reason), ct)).ToApiResult());
 
         var payments = app.MapGroup("/api/v1/supplier-payments").RequireAuthorization();
 

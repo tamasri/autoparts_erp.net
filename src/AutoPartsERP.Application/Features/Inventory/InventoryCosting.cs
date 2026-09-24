@@ -11,6 +11,7 @@ namespace AutoPartsERP.Application.Features.Inventory;
 /// coming back).</item>
 /// <item><see cref="BlendOutAsync"/>: goods leave at the cost they came in with (a purchase return, a voided purchase, a voided
 /// customer return): the average goes back to what it was without them. A sale does not change the average and does not call this.</item>
+/// <item><see cref="AddValueAsync"/>: value added to what is already on hand (a landed cost), or taken back when it is voided.</item>
 /// </list>
 /// The lira cost follows the dollar cost at the document's rate.
 /// </summary>
@@ -37,6 +38,24 @@ internal static class InventoryCosting
 
         var newCost = Math.Max(Math.Round((onHand * cost - quantity * unitCostUsd) / remaining, 4), 0m);
         await SetAsync(connection, transaction, skuId, newCost, fxRate, by, ct);
+    }
+
+    /// <summary>
+    /// Adds value (a landed cost) to the stock on hand without moving any: the average rises by value ÷ quantity on hand; a negative
+    /// value (a voided landed cost) takes it back. Nothing changes while nothing is on hand. Returns the average before and after.
+    /// </summary>
+    public static async Task<(decimal Before, decimal After)> AddValueAsync(
+        DbConnection connection, DbTransaction transaction, Guid skuId, decimal valueUsd, decimal fxRate, Guid by, CancellationToken ct)
+    {
+        var (onHand, cost) = await CurrentAsync(connection, transaction, skuId, ct);
+        if (onHand <= 0 || valueUsd == 0)
+        {
+            return (cost, cost);
+        }
+
+        var newCost = Math.Max(Math.Round((onHand * cost + valueUsd) / onHand, 4), 0m);
+        await SetAsync(connection, transaction, skuId, newCost, fxRate, by, ct);
+        return (cost, newCost);
     }
 
     private static Task<(decimal OnHand, decimal Cost)> CurrentAsync(DbConnection connection, DbTransaction transaction, Guid skuId, CancellationToken ct) =>
