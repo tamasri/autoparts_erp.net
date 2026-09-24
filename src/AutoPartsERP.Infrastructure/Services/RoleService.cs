@@ -98,6 +98,16 @@ public sealed class RoleService : IRoleService
             return Result<RoleSummaryDto>.Failure(new Error("Roles.NotFound", "Role was not found."));
         }
 
+        if (!PermissionCodes.All.Contains(permissionCode))
+        {
+            return Result<RoleSummaryDto>.Failure(new Error("Roles.UnknownPermission", "There is no such permission."));
+        }
+
+        if (PermissionCodes.Reserved.Contains(permissionCode) && !string.Equals(role.Name, RoleCodes.SystemAdministrator, StringComparison.Ordinal))
+        {
+            return Result<RoleSummaryDto>.Failure(new Error("Roles.ReservedPermission", "This permission belongs to the Super Admin (SYSTEM_ADMIN) only."));
+        }
+
         await _roleManager.AddClaimAsync(role, new Claim("permission", permissionCode));
         return Result<RoleSummaryDto>.Success(await ToDto(role));
     }

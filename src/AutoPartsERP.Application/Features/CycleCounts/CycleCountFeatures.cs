@@ -269,24 +269,18 @@ public sealed class ApproveCycleCountVarianceCommandHandler : IRequestHandler<Ap
             return Result.Failure(new Error("CycleCount.NotFound", "Cycle count plan was not found."));
         }
 
-        var adjustmentNo = await connection.QuerySingleAsync<string>(
-            new CommandDefinition(
-                "SELECT 'ADJ-' || to_char(CURRENT_DATE, 'YYYY') || '-' || lpad(nextval('stock_adjustment_seq')::text, 5, '0');",
-                transaction: transaction,
-                cancellationToken: cancellationToken));
-
         var adjustmentId = Guid.NewGuid();
-        await connection.ExecuteAsync(new CommandDefinition(
+        var adjustmentNo = await connection.QuerySingleAsync<string>(new CommandDefinition(
             """
             INSERT INTO stock_adjustments (
-                id, adjustment_no, adjustment_type, warehouse_id, reason_code, status, created_at, created_by)
+                id, adjustment_type, warehouse_id, reason_code, status, created_at, created_by)
             VALUES (
-                @Id, @AdjustmentNo, 'CYCLE_COUNT', @WarehouseId, 'CYCLE_COUNT', 'DRAFT', now(), @CreatedBy);
+                @Id, 'CYCLE_COUNT', @WarehouseId, 'CYCLE_COUNT', 'DRAFT', now(), @CreatedBy)
+            RETURNING adjustment_no;
             """,
             new
             {
                 Id = adjustmentId,
-                AdjustmentNo = adjustmentNo,
                 header.WarehouseId,
                 CreatedBy = _currentUser.UserId
             },

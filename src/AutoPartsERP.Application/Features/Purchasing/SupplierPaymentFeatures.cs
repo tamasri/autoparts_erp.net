@@ -58,10 +58,9 @@ public sealed class CreateSupplierPaymentCommandHandler : IRequestHandler<Create
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO supplier_payments (
-                id, payment_number, supplier_party_id, payment_date, payment_method, amount_usd, reference_number, bank_name, cheque_number, notes, created_by)
+                id, supplier_party_id, payment_date, payment_method, amount_usd, reference_number, bank_name, cheque_number, notes, created_by)
             VALUES (
-                @id, 'SPAY-' || to_char(@PaymentDate, 'YYYY') || '-' || lpad(nextval('supplier_payment_seq')::text, 5, '0'),
-                @SupplierPartyId, @PaymentDate, @method, @AmountUsd, @ReferenceNumber, @BankName, @ChequeNumber, @Notes, @By);
+                @id, @SupplierPartyId, @PaymentDate, @method, @AmountUsd, @ReferenceNumber, @BankName, @ChequeNumber, @Notes, @By);
             """,
             new
             {

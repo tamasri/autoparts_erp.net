@@ -217,6 +217,15 @@ public static class PermissionCodes
         public const string Manage = "assistant:manage";
     }
 
+    /// <summary>
+    /// Deleting a numbered document (a draft, or a voided one) — reserved to SYSTEM_ADMIN, the Super Admin: <see cref="Reserved"/> keeps it
+    /// off every other role. The number stays used and the deletion is recorded with a full snapshot (deleted_documents).
+    /// </summary>
+    public static class Documents
+    {
+        public const string Delete = "documents:delete";
+    }
+
     public static class System
     {
         public const string ConfigRead = "system:config_read";
@@ -339,6 +348,10 @@ public static class PermissionCodes
         Ai.ScheduledTasksRead,
         Ai.ScheduledTasksWrite,
         System.ConfigRead,
-        System.ConfigWrite
+        System.ConfigWrite,
+        Documents.Delete
     };
+
+    /// <summary>Permissions that only SYSTEM_ADMIN may hold; granting one to any other role is refused.</summary>
+    public static readonly IReadOnlyCollection<string> Reserved = new HashSet<string>(StringComparer.Ordinal) { Documents.Delete };
 }

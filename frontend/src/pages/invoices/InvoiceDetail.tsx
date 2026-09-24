@@ -1,6 +1,6 @@
 /** One sales invoice or return: lines, how the total is made up, what is paid, and the draft → confirmed → posted steps. */
 import { useCallback, useEffect, useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Card, CardContent, Chip, Divider, LinearProgress, Link, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Typography,
@@ -13,6 +13,8 @@ import PageHeader from '../../components/ui/PageHeader';
 import StatusChip from '../../components/ui/StatusChip';
 import ReasonDialog from '../../components/ui/ReasonDialog';
 import Money from '../../components/ui/Money';
+import DocumentNavigator from '../../components/documents/DocumentNavigator';
+import DeleteDocumentButton from '../../components/documents/DeleteDocumentButton';
 
 type InvoiceLine = {
   id: string; lineNumber: number; skuCode: string; skuName: string; quantity: number;
@@ -36,6 +38,7 @@ function Row({ label, children, strong }: { label: string; children: React.React
 
 export default function InvoiceDetail(): JSX.Element {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -97,11 +100,13 @@ export default function InvoiceDetail(): JSX.Element {
         subtitle={`${invoice.customerName} · ${invoice.invoiceDate}`}
         crumbs={[{ label: 'الفواتير', to: '/invoices' }, { label: invoice.invoiceNumber || invoice.id.slice(0, 8) }]}
         actions={(
-          <Stack direction="row" gap={1} flexWrap="wrap">
+          <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
+            <DocumentNavigator kind="invoices" id={id} onNavigate={(next) => navigate(`/invoices/${next}`)} />
             <Button variant="outlined" disabled={busy} onClick={() => void downloadPdf()}>⬇ PDF</Button>
             {status === 'DRAFT' ? <Button variant="contained" disabled={busy} onClick={() => void run(() => invoicesApi.confirm(id), 'تم تأكيد الفاتورة', 'تعذر تأكيد الفاتورة')}>✓ تأكيد</Button> : null}
             {status === 'CONFIRMED' ? <Button variant="contained" color="success" disabled={busy} onClick={() => void run(() => invoicesApi.post(id), 'تم ترحيل الفاتورة', 'تعذر ترحيل الفاتورة')}>✓ ترحيل</Button> : null}
-            {status !== 'VOID' ? <Button color="error" disabled={busy} onClick={() => setVoiding(true)}>✕ إلغاء</Button> : null}
+            {status === 'POSTED' ? <Button color="error" disabled={busy} onClick={() => setVoiding(true)}>✕ إلغاء</Button> : null}
+            <DeleteDocumentButton kind="invoices" id={id} number={invoice.invoiceNumber} status={status} size="medium" onDeleted={() => navigate('/invoices')} />
           </Stack>
         )}
       />

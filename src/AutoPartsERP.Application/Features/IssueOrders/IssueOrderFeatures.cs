@@ -93,24 +93,18 @@ public sealed class CreateIssueOrderCommandHandler : IRequestHandler<CreateIssue
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var orderNo = await connection.QuerySingleAsync<string>(
-            new CommandDefinition(
-                "SELECT 'ISO-' || to_char(CURRENT_DATE, 'YYYY') || '-' || lpad(nextval('issue_order_seq')::text, 5, '0');",
-                transaction: transaction,
-                cancellationToken: cancellationToken));
-
         var orderId = Guid.NewGuid();
-        await connection.ExecuteAsync(new CommandDefinition(
+        var orderNo = await connection.QuerySingleAsync<string>(new CommandDefinition(
             """
             INSERT INTO issue_orders (
-                id, order_no, source_type, source_id, warehouse_id, status, created_by, created_at)
+                id, source_type, source_id, warehouse_id, status, created_by, created_at)
             VALUES (
-                @Id, @OrderNo, @SourceType, @SourceId, @WarehouseId, 'DRAFT', @CreatedBy, now());
+                @Id, @SourceType, @SourceId, @WarehouseId, 'DRAFT', @CreatedBy, now())
+            RETURNING order_no;
             """,
             new
             {
                 Id = orderId,
-                OrderNo = orderNo,
                 SourceType = request.SourceType.Trim().ToUpperInvariant(),
                 request.SourceId,
                 request.WarehouseId,

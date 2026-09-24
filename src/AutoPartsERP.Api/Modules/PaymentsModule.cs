@@ -26,6 +26,9 @@ public sealed class PaymentsModule : ICarterModule
                 return result.ToApiResult();
             });
 
+        group.MapGet("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            (await sender.Send(new GetPaymentByIdQuery(id), cancellationToken)).ToApiResult());
+
         group.MapPost("/", async Task<IResult> (CreatePaymentRequest request, HttpContext httpContext, ISender sender, CancellationToken cancellationToken) =>
             {
                 var result = await sender.Send(new CreatePaymentCommand(

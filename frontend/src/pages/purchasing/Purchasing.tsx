@@ -120,7 +120,7 @@ function BillsTab(): JSX.Element {
                 <TableCell align="left"><Money usd={b.balanceUsd} fontWeight={700} color={b.balanceUsd > 0 ? 'error.main' : 'text.secondary'} /></TableCell>
                 <TableCell><Chip size="small" color={STATUS[b.status]?.color} label={STATUS[b.status]?.label ?? b.status} variant="outlined" /></TableCell>
                 <TableCell align="left" sx={{ whiteSpace: 'nowrap' }}>
-                  <DocumentViewButton load={() => billDocument(b.id)} />
+                  <DocumentViewButton browse={{ kind: 'purchase-invoices', id: b.id, load: billDocument }} />
                   {b.status === 'DRAFT' ? <Button size="small" onClick={() => void post(b.id)}>ترحيل واستلام</Button> : null}
                   {b.status === 'POSTED' && b.balanceUsd > 0 ? <Button size="small" onClick={() => setPaying({ id: b.supplierPartyId, name: b.supplierName })}>دفع</Button> : null}
                   {b.status !== 'VOID' ? <Button size="small" color="error" onClick={() => { setVoiding(b); setReason(''); }}>إلغاء</Button> : null}

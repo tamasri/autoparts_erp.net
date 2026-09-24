@@ -145,7 +145,7 @@ export default function StockAdjustments(): JSX.Element {
             header: 'إجراءات', nowrap: true,
             render: (a) => (
               <Stack direction="row" gap={1} alignItems="center">
-                <DocumentViewButton load={() => adjustmentDocument(a.id, names.label)} />
+                <DocumentViewButton browse={{ kind: 'stock-adjustments', id: a.id, load: (id) => adjustmentDocument(id, names.label) }} />
                 {a.status !== 'POSTED' ? <Button size="small" variant="contained" color="success" disabled={busy === a.id} onClick={() => void post(a.id)}>✓ ترحيل</Button> : null}
               </Stack>
             ),

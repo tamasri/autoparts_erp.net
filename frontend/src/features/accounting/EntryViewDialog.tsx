@@ -1,4 +1,4 @@
-/** Read-only view of an entry (draft, posted or voided) with its lines, ledger status, and print / export. */
+/** Read-only view of an entry (draft, posted or voided) with its lines, ledger status, print / export, and stepping through its series by number. */
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { accountingApi, type JournalEntryDetail } from '../../api/endpoints/accounting';
@@ -9,8 +9,12 @@ import StatusChip from '../../components/ui/StatusChip';
 import { SYNC_LABEL } from './labels';
 import { entryDocument } from './documents';
 import Money from '../../components/ui/Money';
+import DocumentNavigator from '../../components/documents/DocumentNavigator';
+import DeleteDocumentButton from '../../components/documents/DeleteDocumentButton';
 
-export default function EntryViewDialog({ entryId, onClose }: { entryId: string | null; onClose: () => void }): JSX.Element {
+type Props = { entryId: string | null; onClose: () => void; onNavigate: (id: string) => void; onDeleted: () => void };
+
+export default function EntryViewDialog({ entryId, onClose, onNavigate, onDeleted }: Props): JSX.Element {
   const [detail, setDetail] = useState<JournalEntryDetail | null>(null);
   const [error, setError] = useState('');
 
@@ -25,7 +29,12 @@ export default function EntryViewDialog({ entryId, onClose }: { entryId: string 
 
   return (
     <Dialog open={Boolean(entryId)} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{e ? `${e.typeNameAr} ${e.entryNumber}` : 'قيد'}</DialogTitle>
+      <DialogTitle>
+        <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
+          <span>{e ? `${e.typeNameAr} ${e.entryNumber}` : 'قيد'}</span>
+          {entryId ? <Box sx={{ mr: 'auto' }}><DocumentNavigator kind="journal-entries" id={entryId} onNavigate={onNavigate} /></Box> : null}
+        </Stack>
+      </DialogTitle>
       <DialogContent dividers>
         {error ? <Alert severity="error">{error}</Alert> : null}
         {e && detail ? (
@@ -58,6 +67,7 @@ export default function EntryViewDialog({ entryId, onClose }: { entryId: string 
         ) : null}
       </DialogContent>
       <DialogActions>
+        {e ? <DeleteDocumentButton kind="journal-entries" id={e.id} number={e.entryNumber} status={e.status} onDeleted={onDeleted} /> : null}
         {detail ? <ExportMenu build={async () => entryDocument(detail)} label="⬇ طباعة / تصدير" /> : null}
         <Button onClick={onClose}>إغلاق</Button>
       </DialogActions>

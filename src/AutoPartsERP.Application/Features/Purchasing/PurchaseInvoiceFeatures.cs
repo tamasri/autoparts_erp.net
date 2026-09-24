@@ -90,11 +90,10 @@ public sealed class CreatePurchaseInvoiceCommandHandler : IRequestHandler<Create
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO purchase_invoices (
-                id, bill_number, supplier_party_id, supplier_ref, bill_date, due_date, warehouse_id, status, fx_rate_id,
+                id, supplier_party_id, supplier_ref, bill_date, due_date, warehouse_id, status, fx_rate_id,
                 subtotal_usd, discount_pct, discount_amount_usd, total_usd, paid_usd, balance_usd, notes, created_by)
             VALUES (
-                @id, 'PUR-' || to_char(@BillDate, 'YYYY') || '-' || lpad(nextval('purchase_invoice_seq')::text, 5, '0'),
-                @SupplierPartyId, @SupplierRef, @BillDate, @DueDate, @WarehouseId, 'DRAFT', @FxRateId, @Subtotal, @DiscountPct, @DiscountAmount, @Total, 0, 0, @Notes, @By);
+                @id, @SupplierPartyId, @SupplierRef, @BillDate, @DueDate, @WarehouseId, 'DRAFT', @FxRateId, @Subtotal, @DiscountPct, @DiscountAmount, @Total, 0, 0, @Notes, @By);
             """,
             new
             {

@@ -4,8 +4,9 @@ using AutoPartsERP.Contracts.Accounting;
 
 namespace AutoPartsERP.Application.Features.Accounting;
 
-// Manual accounting entries: a draft is prepared and can be edited or deleted; posting makes it final and hands it to ERPNext as a
-// Journal Entry; a posted entry is never edited, only voided (which cancels it in ERPNext).
+// Manual accounting entries: a draft is prepared and can be edited; posting makes it final and hands it to ERPNext as a
+// Journal Entry; a posted entry is never edited, only voided (which cancels it in ERPNext). Only a Super Admin deletes an entry
+// (a draft or a voided one), through DeleteDocumentCommand; its number stays used.
 
 internal static class EntryLineRules
 {
@@ -144,43 +145,45 @@ public sealed class SaveJournalEntryCommandHandler : IRequestHandler<SaveJournal
 
         if (command.Id is null)
         {
-            var number = await connection.ExecuteScalarAsync<string>(new CommandDefinition(
-                """
-                UPDATE entry_types SET last_number = last_number + 1 WHERE id = @EntryTypeId
-                RETURNING prefix || '-' || to_char(@EntryDate, 'YYYY') || '-' || lpad(last_number::text, 5, '0');
-                """,
-                new { request.EntryTypeId, request.EntryDate }, transaction, cancellationToken: cancellationToken));
+            // The database numbers the entry in its type's series (document_series), inside this transaction.
             await connection.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO journal_entries (id, entry_number, entry_type_id, entry_date, narration, reference_number, total_usd, created_by)
-                VALUES (@id, @number, @EntryTypeId, @EntryDate, @Narration, @ReferenceNumber, @total, @By);
+                INSERT INTO journal_entries (id, entry_type_id, entry_date, narration, reference_number, total_usd, created_by)
+                VALUES (@id, @EntryTypeId, @EntryDate, @Narration, @ReferenceNumber, @total, @By);
                 """,
-                new { id, number, request.EntryTypeId, request.EntryDate, request.Narration, request.ReferenceNumber, total, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
+                new { id, request.EntryTypeId, request.EntryDate, request.Narration, request.ReferenceNumber, total, By = _currentUser.UserId }, transaction, cancellationToken: cancellationToken));
         }
         else
         {
-            var status = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT status FROM journal_entries WHERE id = @id FOR UPDATE;", new { id }, transaction, cancellationToken: cancellationToken));
-            if (status is null)
+            var current = await connection.QuerySingleOrDefaultAsync<(string Status, Guid EntryTypeId)>(new CommandDefinition(
+                "SELECT status AS Status, entry_type_id AS EntryTypeId FROM journal_entries WHERE id = @id FOR UPDATE;", new { id }, transaction, cancellationToken: cancellationToken));
+            if (current.Status is null)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return Result<Guid>.Failure(new Error("JournalEntry.NotFound", "Entry was not found."));
             }
 
-            if (status != "DRAFT")
+            if (current.Status != "DRAFT")
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return Result<Guid>.Failure(new Error("JournalEntry.NotDraft", "Only a draft can be edited; void a posted entry and enter it again."));
             }
 
+            // The number belongs to the type's series; another type would need another number.
+            if (current.EntryTypeId != request.EntryTypeId)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result<Guid>.Failure(new Error("JournalEntry.TypeFixed", "An entry keeps the type it was numbered under; enter a new entry of the other type."));
+            }
+
             await connection.ExecuteAsync(new CommandDefinition(
                 """
                 UPDATE journal_entries
-                SET entry_type_id = @EntryTypeId, entry_date = @EntryDate, narration = @Narration, reference_number = @ReferenceNumber, total_usd = @total, updated_at = now()
+                SET entry_date = @EntryDate, narration = @Narration, reference_number = @ReferenceNumber, total_usd = @total, updated_at = now()
                 WHERE id = @id;
                 DELETE FROM journal_entry_lines WHERE journal_entry_id = @id;
                 """,
-                new { id, request.EntryTypeId, request.EntryDate, request.Narration, request.ReferenceNumber, total }, transaction, cancellationToken: cancellationToken));
+                new { id, request.EntryDate, request.Narration, request.ReferenceNumber, total }, transaction, cancellationToken: cancellationToken));
         }
 
         var lineNumber = 0;
@@ -345,47 +348,6 @@ public sealed class VoidJournalEntryCommandHandler : IRequestHandler<VoidJournal
             new JournalEntryEventPayload(command.Id), _currentUser.CorrelationId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Result<Guid>.Success(command.Id);
-    }
-}
-
-public sealed record DeleteJournalEntryCommand(Guid Id) : IRequest<Result>, IAuthorizedRequest, IAuditableRequest
-{
-    public string RequiredPermission => PermissionCodes.Accounting.PostEntries;
-    public string AuditModule => "ACCOUNTING";
-}
-
-public sealed class DeleteJournalEntryCommandHandler : IRequestHandler<DeleteJournalEntryCommand, Result>
-{
-    private readonly IDbConnectionFactory _connectionFactory;
-
-    public DeleteJournalEntryCommandHandler(IDbConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-
-    public async Task<Result> Handle(DeleteJournalEntryCommand command, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var status = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            "SELECT status FROM journal_entries WHERE id = @Id FOR UPDATE;", new { command.Id }, transaction, cancellationToken: cancellationToken));
-        if (status is null)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return Result.Failure(new Error("JournalEntry.NotFound", "Entry was not found."));
-        }
-
-        if (status != "DRAFT")
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return Result.Failure(new Error("JournalEntry.NotDraft", "Only a draft can be deleted; void a posted entry instead."));
-        }
-
-        await connection.ExecuteAsync(new CommandDefinition(
-            """
-            DELETE FROM accounting_tag_links WHERE target_type = 'JOURNAL_ENTRY' AND target_key = @Key;
-            DELETE FROM journal_entries WHERE id = @Id;
-            """,
-            new { command.Id, Key = command.Id.ToString() }, transaction, cancellationToken: cancellationToken));
-        await transaction.CommitAsync(cancellationToken);
-        return Result.Success();
     }
 }
 

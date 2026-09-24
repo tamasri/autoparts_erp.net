@@ -129,7 +129,7 @@ export default function IssueOrders(): JSX.Element {
             header: 'إجراءات', nowrap: true,
             render: (o) => (
               <Stack direction="row" gap={1} alignItems="center">
-                <DocumentViewButton load={() => issueOrderDocument(o.id, names.label)} />
+                <DocumentViewButton browse={{ kind: 'issue-orders', id: o.id, load: (id) => issueOrderDocument(id, names.label) }} />
                 <Button size="small" variant="outlined" onClick={() => toggle(o.id)}>التفاصيل والسحب</Button>
               </Stack>
             ),

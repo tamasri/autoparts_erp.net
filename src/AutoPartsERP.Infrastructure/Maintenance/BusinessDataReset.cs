@@ -15,7 +15,7 @@ public static class BusinessDataReset
     [
         "accounting_tag_links", "accounting_tags", "ai_documents", "ai_feedback", "ai_prompt_logs", "ai_sessions", "ai_suggestions", "ai_task_runs",
         "approval_decisions", "approval_requests", "assistant_links", "audit_logs", "barcode_scan_logs", "batch_movements", "batches", "customers",
-        "cycle_count_lines", "cycle_count_plans", "erpnext_sync_log", "fx_rates", "idempotency_keys", "inventory_alerts", "inventory_balances",
+        "cycle_count_lines", "cycle_count_plans", "deleted_documents", "document_series", "erpnext_sync_log", "fx_rates", "idempotency_keys", "inventory_alerts", "inventory_balances",
         "inventory_movements", "inventory_stock", "invoice_lines", "invoices", "issue_order_lines", "issue_orders", "item_aliases",
         "item_interchanges", "item_reorder_settings", "items", "journal_entries", "journal_entry_lines", "kpi_thresholds",
         "ledger_reconciliation_items", "ledger_reconciliations", "locations", "outbox_messages", "parties", "party_addresses", "party_contacts",
@@ -32,12 +32,8 @@ public static class BusinessDataReset
         "inventory_statuses", "kpi_definitions", "party_type_catalog", "reason_codes",
     ];
 
-    /// <summary>Document numbering (INV-…, PAY-…, …) restarts at 1.</summary>
-    private static readonly string[] NumberSequences =
-    [
-        "invoice_number_seq", "payment_number_seq", "purchase_invoice_seq", "supplier_payment_seq", "receiving_document_seq", "transfer_order_seq",
-        "issue_order_seq", "stock_adjustment_seq", "warranty_number_seq", "party_code_seq",
-    ];
+    /// <summary>Codes that are not documents (parties, warranties) restart at 1 too. Documents are numbered by document_series (reseeded below).</summary>
+    private static readonly string[] NumberSequences = ["warranty_number_seq", "party_code_seq"];
 
     public static async Task<bool> RunAsync(string connectionString, bool dryRun, bool keepAllUsers, Action<string> log, CancellationToken ct)
     {
@@ -87,8 +83,8 @@ public static class BusinessDataReset
             await connection.ExecuteAsync($"ALTER SEQUENCE IF EXISTS \"{seq}\" RESTART WITH 1;", transaction: tx);
         }
 
-        // Entry types: keep the built-in ones (numbering from 1), drop the ones added while trying the system.
-        await connection.ExecuteAsync("DELETE FROM entry_types WHERE NOT is_system; UPDATE entry_types SET last_number = 0;", transaction: tx);
+        // Entry types: keep the built-in ones, drop the ones added while trying the system; then every document series starts again at 1.
+        await connection.ExecuteAsync("DELETE FROM entry_types WHERE NOT is_system; SELECT seed_document_series();", transaction: tx);
 
         if (!keepAllUsers)
         {

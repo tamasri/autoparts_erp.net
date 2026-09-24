@@ -109,7 +109,8 @@ export default function EntryDialog({ open, editId, types, accounts, onClose, on
         <Stack spacing={2}>
           {error ? <Alert severity="error">{error}</Alert> : null}
           <Stack direction={{ xs: 'column', md: 'row' }} gap={2}>
-            <TextField select size="small" label="نوع القيد" value={typeId} onChange={(e) => setTypeId(e.target.value)} sx={{ minWidth: 220 }}>
+            <TextField select size="small" label="نوع القيد" value={typeId} onChange={(e) => setTypeId(e.target.value)} sx={{ minWidth: 220 }}
+              disabled={Boolean(editId)} helperText={editId ? 'الرقم من سلسلة هذا النوع، فلا يتغير النوع بعد الترقيم' : undefined}>
               {activeTypes.map((t) => <MenuItem key={t.id} value={t.id}>{t.nameAr} ({t.prefix})</MenuItem>)}
             </TextField>
             <TextField size="small" type="date" label="التاريخ" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} />

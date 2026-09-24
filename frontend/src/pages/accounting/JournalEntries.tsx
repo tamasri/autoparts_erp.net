@@ -12,7 +12,6 @@ import { usePagedList } from '../../hooks/usePagedList';
 import { ACCOUNTING, useCan } from '../../hooks/useCan';
 import { useChartAccounts } from '../../hooks/useChartAccounts';
 import { extractApiError, toast } from '../../lib/toast';
-import { useConfirm } from '../../hooks/useConfirm';
 import { notifyResult } from '../../lib/notify';
 import { num, ymd, type ExportDocument } from '../../lib/exportClient';
 import PageHeader from '../../components/ui/PageHeader';
@@ -23,6 +22,7 @@ import StatusChip from '../../components/ui/StatusChip';
 import EntryDialog from '../../features/accounting/EntryDialog';
 import EntryTypesDialog from '../../features/accounting/EntryTypesDialog';
 import EntryViewDialog from '../../features/accounting/EntryViewDialog';
+import DeleteDocumentButton from '../../components/documents/DeleteDocumentButton';
 import TagChips from '../../features/accounting/TagChips';
 import TagsDialog from '../../features/accounting/TagsDialog';
 import { SYNC_LABEL } from '../../features/accounting/labels';
@@ -35,7 +35,6 @@ export default function JournalEntries(): JSX.Element {
   const canConfigure = useCan(ACCOUNTING.manageAccounts);
   const [params, setParams] = useSearchParams();
   const { ledgers } = useChartAccounts();
-  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const [status, setStatus] = useState('');
   const [typeId, setTypeId] = useState('');
@@ -80,11 +79,6 @@ export default function JournalEntries(): JSX.Element {
     catch (e: unknown) { toast.error(extractApiError(e, 'تعذر تنفيذ العملية')); }
   }
 
-  async function remove(row: JournalEntryRow): Promise<void> {
-    if (!(await confirm(`حذف المسودة ${row.entryNumber}؟`, { confirmLabel: 'حذف' }))) return;
-    await run(() => accountingApi.deleteEntry(row.id), 'حُذفت المسودة');
-  }
-
   const buildExport = async (): Promise<ExportDocument> => {
     const res = await accountingApi.entries({ page: 1, pageSize: 200, status: status || undefined, entryTypeId: typeId || undefined, tagId: tagId || undefined, from: from || undefined, to: to || undefined, search: list.search || undefined });
     const data = (res.data as { data: { items: JournalEntryRow[]; totalCount: number } }).data;
@@ -115,14 +109,14 @@ export default function JournalEntries(): JSX.Element {
     },
     {
       header: '', nowrap: true,
-      render: (r) => canPost ? (
+      render: (r) => (
         <Stack direction="row" gap={0.5}>
-          {r.status === 'DRAFT' ? <Button size="small" onClick={() => setEditor({ open: true, id: r.id })}>تعديل</Button> : null}
-          {r.status === 'DRAFT' ? <Button size="small" color="success" onClick={() => void run(() => accountingApi.postEntry(r.id), 'تم الترحيل')}>ترحيل</Button> : null}
-          {r.status === 'DRAFT' ? <Button size="small" color="error" onClick={() => void remove(r)}>حذف</Button> : null}
-          {r.status === 'POSTED' ? <Button size="small" color="error" onClick={() => setVoiding(r)}>إلغاء</Button> : null}
+          {canPost && r.status === 'DRAFT' ? <Button size="small" onClick={() => setEditor({ open: true, id: r.id })}>تعديل</Button> : null}
+          {canPost && r.status === 'DRAFT' ? <Button size="small" color="success" onClick={() => void run(() => accountingApi.postEntry(r.id), 'تم الترحيل')}>ترحيل</Button> : null}
+          {canPost && r.status === 'POSTED' ? <Button size="small" color="error" onClick={() => setVoiding(r)}>إلغاء</Button> : null}
+          <DeleteDocumentButton kind="journal-entries" id={r.id} number={r.entryNumber} status={r.status} onDeleted={list.reload} />
         </Stack>
-      ) : null,
+      ),
     },
   ];
 
@@ -158,10 +152,9 @@ export default function JournalEntries(): JSX.Element {
       />
 
       <EntryDialog open={editor.open} editId={editor.id} types={types} accounts={ledgers} onClose={() => setEditor({ open: false, id: null })} onSaved={list.reload} />
-      <EntryViewDialog entryId={viewing} onClose={closeView} />
+      <EntryViewDialog entryId={viewing} onClose={closeView} onNavigate={setViewing} onDeleted={() => { closeView(); list.reload(); }} />
       <EntryTypesDialog open={typesOpen} types={types} canEdit={canConfigure} onClose={() => setTypesOpen(false)} onChanged={() => void loadLookups()} />
       <TagsDialog open={tagsOpen} onClose={() => setTagsOpen(false)} onChanged={() => { void loadLookups(); list.reload(); }} />
-      {confirmDialog}
       <ReasonDialog
         open={Boolean(voiding)} title={`إلغاء القيد ${voiding?.entryNumber ?? ''}`} confirmLabel="إلغاء القيد" minLength={5} onClose={() => setVoiding(null)}
         onConfirm={async (reason) => { if (!voiding) return; await run(() => accountingApi.voidEntry(voiding.id, reason), 'أُلغي القيد وسيُلغى في دفتر الأستاذ'); setVoiding(null); }}

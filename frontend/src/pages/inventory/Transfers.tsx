@@ -124,7 +124,7 @@ export default function Transfers(): JSX.Element {
             nowrap: true,
             render: (o) => (
               <Stack direction="row" gap={1} alignItems="center">
-                <DocumentViewButton load={() => transferDocument(o.id, names.label)} />
+                <DocumentViewButton browse={{ kind: 'transfer-orders', id: o.id, load: (id) => transferDocument(id, names.label) }} />
                 {o.status === 'DRAFT' ? <Button size="small" variant="contained" disabled={busy === o.id} onClick={() => void act(o.id, 'ship')}>✈ شحن</Button> : null}
                 {o.status === 'IN_TRANSIT' || o.status === 'SHIPPED' ? <Button size="small" variant="contained" color="success" disabled={busy === o.id} onClick={() => void act(o.id, 'receive')}>✓ استلام</Button> : null}
               </Stack>

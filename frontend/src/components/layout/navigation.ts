@@ -58,7 +58,10 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'الإدارة والرقابة',
     items: [
       { to: '/approvals', label: 'الموافقات', icon: '✓' },
-      { to: '/audit', label: 'سجل التدقيق', icon: '◎' },
+      {
+        to: '/audit', label: 'سجل التدقيق', icon: '◎',
+        tabs: [{ to: '/audit', label: 'سجل التدقيق', end: true }, { to: '/audit/numbering', label: 'الترقيم والمحذوفات' }],
+      },
       { to: '/periods', label: 'إقفال الفترات', icon: '⊝' },
       { to: '/accounting/sync', label: 'مزامنة ERPNext', icon: '⇄' },
       { to: '/users', label: 'المستخدمون والأدوار', icon: '◉', tabs: [{ to: '/users', label: 'المستخدمون' }, { to: '/roles', label: 'الأدوار والصلاحيات' }] },

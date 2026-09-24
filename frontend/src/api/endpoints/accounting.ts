@@ -98,7 +98,6 @@ export const accountingApi = {
   updateEntry: (id: string, body: SaveEntryBody) => apiClient.put(`/accounting/entries/${id}`, body),
   postEntry: (id: string) => apiClient.post(`/accounting/entries/${id}/post`),
   voidEntry: (id: string, reason: string) => apiClient.post(`/accounting/entries/${id}/void`, { reason }),
-  deleteEntry: (id: string) => apiClient.delete(`/accounting/entries/${id}`),
 
   tags: () => apiClient.get('/accounting/tags'),
   saveTag: (id: string | null, body: { name: string; color?: string }) => (id ? apiClient.put(`/accounting/tags/${id}`, body) : apiClient.post('/accounting/tags', body)),

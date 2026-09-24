@@ -117,9 +117,6 @@ public sealed class AccountingModule : ICarterModule
 
         entries.MapPost("/{id:guid}/void", async Task<IResult> (Guid id, VoidJournalEntryRequest request, ISender sender, CancellationToken ct) =>
             (await sender.Send(new VoidJournalEntryCommand(id, request.Reason), ct)).ToApiResult());
-
-        entries.MapDelete("/{id:guid}", async Task<IResult> (Guid id, ISender sender, CancellationToken ct) =>
-            (await sender.Send(new DeleteJournalEntryCommand(id), ct)).ToApiResult());
     }
 
     private static void MapTags(RouteGroupBuilder group)

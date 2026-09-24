@@ -110,19 +110,14 @@ public sealed class CreateReceivingDocumentCommandHandler : IRequestHandler<Crea
     public async Task<Result<ReceivingDocumentDto>> Handle(CreateReceivingDocumentCommand request, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var documentNo = await connection.QuerySingleAsync<string>(
-            new CommandDefinition(
-                "SELECT 'RCV-' || to_char(CURRENT_DATE, 'YYYY') || '-' || lpad(nextval('receiving_document_seq')::text, 5, '0');",
-                cancellationToken: cancellationToken));
-
         var created = await connection.QuerySingleAsync<CreatedRow>(
             new CommandDefinition(
                 """
                 INSERT INTO receiving_documents (
-                    id, document_no, vendor_party_id, purchase_order_ref,
+                    id, vendor_party_id, purchase_order_ref,
                     warehouse_id, status, received_by, notes, created_at, created_by)
                 VALUES (
-                    @Id, @DocumentNo, @VendorPartyId, @PurchaseOrderRef,
+                    @Id, @VendorPartyId, @PurchaseOrderRef,
                     @WarehouseId, 'DRAFT', @ReceivedBy, @Notes, now(), @CreatedBy)
                 RETURNING
                     id AS Id,
@@ -139,7 +134,6 @@ public sealed class CreateReceivingDocumentCommandHandler : IRequestHandler<Crea
                 new
                 {
                     Id = Guid.NewGuid(),
-                    DocumentNo = documentNo,
                     request.Request.VendorPartyId,
                     request.Request.PurchaseOrderRef,
                     request.Request.WarehouseId,

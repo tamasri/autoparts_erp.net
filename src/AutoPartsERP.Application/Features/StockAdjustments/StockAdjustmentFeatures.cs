@@ -105,24 +105,18 @@ public sealed class CreateStockAdjustmentCommandHandler : IRequestHandler<Create
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var adjustmentNo = await connection.QuerySingleAsync<string>(
-            new CommandDefinition(
-                "SELECT 'ADJ-' || to_char(CURRENT_DATE, 'YYYY') || '-' || lpad(nextval('stock_adjustment_seq')::text, 5, '0');",
-                transaction: transaction,
-                cancellationToken: cancellationToken));
-
         var adjustmentId = Guid.NewGuid();
-        await connection.ExecuteAsync(new CommandDefinition(
+        var adjustmentNo = await connection.QuerySingleAsync<string>(new CommandDefinition(
             """
             INSERT INTO stock_adjustments (
-                id, adjustment_no, adjustment_type, warehouse_id, reason_code, status, created_at, created_by)
+                id, adjustment_type, warehouse_id, reason_code, status, created_at, created_by)
             VALUES (
-                @Id, @AdjustmentNo, @AdjustmentType, @WarehouseId, @ReasonCode, 'DRAFT', now(), @CreatedBy);
+                @Id, @AdjustmentType, @WarehouseId, @ReasonCode, 'DRAFT', now(), @CreatedBy)
+            RETURNING adjustment_no;
             """,
             new
             {
                 Id = adjustmentId,
-                AdjustmentNo = adjustmentNo,
                 AdjustmentType = request.Request.AdjustmentType.Trim().ToUpperInvariant(),
                 request.Request.WarehouseId,
                 request.Request.ReasonCode,

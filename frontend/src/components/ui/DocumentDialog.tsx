@@ -15,6 +15,8 @@ type Props = {
   /** null while loading */
   document: ExportDocument | null;
   loading?: boolean;
+  /** Shown beside the title, e.g. stepping to the previous / next document by number. */
+  toolbar?: React.ReactNode;
 };
 
 const fmt = (table: { numericColumns?: number[] }, col: number, v?: string | null): string => {
@@ -26,7 +28,7 @@ const fmt = (table: { numericColumns?: number[] }, col: number, v?: string | nul
   return String(v);
 };
 
-export default function DocumentDialog({ open, onClose, document: doc, loading }: Props): JSX.Element {
+export default function DocumentDialog({ open, onClose, document: doc, loading, toolbar }: Props): JSX.Element {
   const [busy, setBusy] = useState('');
 
   async function run(kind: 'print' | 'preview' | ExportFormat): Promise<void> {
@@ -44,8 +46,13 @@ export default function DocumentDialog({ open, onClose, document: doc, loading }
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth scroll="paper">
       <DialogTitle sx={{ pb: 0.5 }}>
-        <Typography variant="h6" fontWeight={800}>{doc?.title ?? '...'}</Typography>
-        {doc?.subtitle ? <Typography variant="body2" color="text.secondary">{doc.subtitle}</Typography> : null}
+        <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
+          <Box>
+            <Typography variant="h6" fontWeight={800}>{doc?.title ?? '...'}</Typography>
+            {doc?.subtitle ? <Typography variant="body2" color="text.secondary">{doc.subtitle}</Typography> : null}
+          </Box>
+          {toolbar ? <Box sx={{ mr: 'auto' }}>{toolbar}</Box> : null}
+        </Stack>
       </DialogTitle>
       <DialogContent dividers>
         {loading || !doc ? (

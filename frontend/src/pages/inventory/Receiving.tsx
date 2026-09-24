@@ -199,7 +199,7 @@ export default function Receiving(): JSX.Element {
             header: 'إجراءات', nowrap: true,
             render: (d) => (
               <Stack direction="row" gap={1} alignItems="center">
-                <DocumentViewButton load={() => receivingDocument(d.id, names.label)} />
+                <DocumentViewButton browse={{ kind: 'receiving', id: d.id, load: (id) => receivingDocument(id, names.label) }} />
                 <Button size="small" variant="outlined" onClick={() => toggle(d.id)}>الأسطر والتخزين</Button>
               </Stack>
             ),

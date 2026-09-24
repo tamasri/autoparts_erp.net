@@ -45,6 +45,7 @@ const Roles            = lazy(() => import('./pages/settings/Roles'));
 const WhatsAppAssistant = lazy(() => import('./pages/settings/WhatsAppAssistant'));
 const Approvals        = lazy(() => import('./pages/approvals/Approvals'));
 const AuditLog         = lazy(() => import('./pages/audit/AuditLog'));
+const Numbering        = lazy(() => import('./pages/audit/Numbering'));
 const Items            = lazy(() => import('./pages/items/Items'));
 const ItemCard         = lazy(() => import('./pages/items/ItemCard'));
 const AccountingSync   = lazy(() => import('./pages/accounting/AccountingSync'));
@@ -150,6 +151,7 @@ export default function App(): JSX.Element {
         <Route path="parties/:id/statement"   element={<RouteWrapper><CombinedStatement /></RouteWrapper>} />
         <Route path="approvals"               element={<RouteWrapper><Approvals /></RouteWrapper>} />
         <Route path="audit"                   element={<RouteWrapper><AuditLog /></RouteWrapper>} />
+        <Route path="audit/numbering"         element={<RouteWrapper><Numbering /></RouteWrapper>} />
         <Route path="accounting/sync"         element={<RouteWrapper><AccountingSync /></RouteWrapper>} />
 
         <Route path="accounting/chart"           element={<RouteWrapper><ChartOfAccounts /></RouteWrapper>} />

@@ -1,5 +1,4 @@
 using Dapper;
-using Humanizer;
 
 namespace AutoPartsERP.Application.Features.Payments.GetPayments;
 
@@ -69,25 +68,7 @@ public sealed class GetPaymentsQueryHandler : IRequestHandler<GetPaymentsQuery, 
 
         var items = (await connection.QueryAsync<PaymentDto>(
             new CommandDefinition($"""
-                SELECT
-                    p.id AS Id,
-                    COALESCE(p.payment_number, '') AS PaymentNumber,
-                    p.payment_type AS PaymentType,
-                    p.customer_id AS CustomerId,
-                    c.name AS CustomerName,
-                    p.payment_date AS PaymentDate,
-                    p.payment_method AS PaymentMethod,
-                    p.amount_syp AS AmountSyp,
-                    p.amount_usd AS AmountUsd,
-                    p.allocated_syp AS AllocatedSyp,
-                    p.allocated_usd AS AllocatedUsd,
-                    p.unallocated_syp AS UnallocatedSyp,
-                    p.unallocated_usd AS UnallocatedUsd,
-                    p.is_reversed AS IsReversed,
-                    p.payment_method AS PaymentMethodDisplay,
-                    '' AS ReceivedDisplay
-                FROM payments p
-                INNER JOIN customers c ON c.id = p.customer_id
+                {PaymentMappings.Select}
                 {where}
                 ORDER BY p.payment_date DESC, p.created_at DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
@@ -95,11 +76,7 @@ public sealed class GetPaymentsQueryHandler : IRequestHandler<GetPaymentsQuery, 
                 parameters,
                 cancellationToken: cancellationToken))).ToArray();
 
-        var mapped = items.Select(item => item with
-        {
-            PaymentMethodDisplay = item.PaymentMethod.Humanize(LetterCasing.Title),
-            ReceivedDisplay = PaymentMappings.GetReceivedDisplay(item.PaymentDate)
-        }).ToArray();
+        var mapped = items.Select(PaymentMappings.WithDisplay).ToArray();
 
         var total = await connection.ExecuteScalarAsync<int>(
             new CommandDefinition($"""

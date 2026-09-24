@@ -61,11 +61,19 @@ public sealed class SaveEntryTypeCommandHandler : IRequestHandler<SaveEntryTypeC
         var prefix = request.Prefix.Trim().ToUpperInvariant();
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
 
+        // Every document series (invoices, payments, other entry types) prints its own prefix; two series never share one.
+        // The type's own series does not count (a new type 'X_<prefix>' continues the series of an earlier one with that code).
         var clash = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-            "SELECT EXISTS (SELECT 1 FROM entry_types WHERE prefix = @prefix AND id IS DISTINCT FROM @Id);", new { prefix, command.Id }, cancellationToken: cancellationToken));
+            """
+            SELECT EXISTS (SELECT 1 FROM entry_types WHERE prefix = @prefix AND id IS DISTINCT FROM @Id)
+                OR EXISTS (
+                    SELECT 1 FROM document_series
+                    WHERE prefix = @prefix AND code <> 'JE.' || COALESCE((SELECT code FROM entry_types WHERE id = @Id), 'X_' || @prefix));
+            """,
+            new { prefix, command.Id }, cancellationToken: cancellationToken));
         if (clash)
         {
-            return Result<Guid>.Failure(new Error("EntryType.PrefixConflict", "Another entry type already uses this prefix."));
+            return Result<Guid>.Failure(new Error("EntryType.PrefixConflict", "Another entry type or document series already uses this prefix."));
         }
 
         if (command.Id is null)
@@ -89,9 +97,10 @@ public sealed class SaveEntryTypeCommandHandler : IRequestHandler<SaveEntryTypeC
             return Result<Guid>.Failure(new Error("EntryType.SystemLocked", "A built-in entry type keeps its kind and prefix."));
         }
 
-        // Numbers already issued carry the old prefix, so a used type keeps it too.
+        // Numbers already issued (even of since-deleted drafts) carry the old prefix, so a used type keeps it too.
         var used = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-            "SELECT EXISTS (SELECT 1 FROM journal_entries WHERE entry_type_id = @Id);", new { command.Id }, cancellationToken: cancellationToken));
+            "SELECT COALESCE((SELECT s.last_number > 0 FROM document_series s INNER JOIN entry_types t ON s.code = 'JE.' || t.code WHERE t.id = @Id), FALSE);",
+            new { command.Id }, cancellationToken: cancellationToken));
         if (used && (current.Kind != request.Kind || current.Prefix != prefix))
         {
             return Result<Guid>.Failure(new Error("EntryType.InUse", "Entries already use this type, so its kind and prefix cannot change."));

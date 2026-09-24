@@ -242,25 +242,20 @@ public sealed class CreateTransferOrderCommandHandler : IRequestHandler<CreateTr
         await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var transferNo = await connection.QuerySingleAsync<string>(new CommandDefinition(
-            "SELECT 'TRF-' || to_char(CURRENT_DATE, 'YYYY') || '-' || lpad(nextval('transfer_order_seq')::text, 5, '0');",
-            transaction: transaction,
-            cancellationToken: cancellationToken));
-
         var transferOrderId = Guid.NewGuid();
-        await connection.ExecuteAsync(new CommandDefinition(
+        var transferNo = await connection.QuerySingleAsync<string>(new CommandDefinition(
             """
             INSERT INTO transfer_orders (
-                id, transfer_no, source_warehouse_id, destination_warehouse_id,
+                id, source_warehouse_id, destination_warehouse_id,
                 status, created_at, created_by)
             VALUES (
-                @Id, @TransferNo, @SourceWarehouseId, @DestinationWarehouseId,
-                'DRAFT', now(), @CreatedBy);
+                @Id, @SourceWarehouseId, @DestinationWarehouseId,
+                'DRAFT', now(), @CreatedBy)
+            RETURNING transfer_no;
             """,
             new
             {
                 Id = transferOrderId,
-                TransferNo = transferNo,
                 request.Request.SourceWarehouseId,
                 request.Request.DestinationWarehouseId,
                 CreatedBy = _currentUser.UserId
