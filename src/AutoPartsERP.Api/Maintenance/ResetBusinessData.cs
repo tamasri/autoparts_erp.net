@@ -49,8 +49,10 @@ public static class ResetBusinessData
             {
                 if (!await new ErpNextCompanyWipe(erpNext, Log).RunAsync(dryRun, TimeSpan.FromMinutes(30), cts.Token))
                 {
-                    Log("Stopped: ERPNext was not fully emptied, so this database was left untouched. Fix the cause and run again "
-                        + "(it is safe to repeat), or use --skip-erpnext to wipe only this database.");
+                    Log(dryRun
+                        ? "Stopped: the reset could not empty ERPNext as things are. Fix the cause above and run again, or use --skip-erpnext to wipe only this database."
+                        : "Stopped: ERPNext was not fully emptied, so this database was left untouched. Fix the cause and run again "
+                          + "(it is safe to repeat), or use --skip-erpnext to wipe only this database.");
                     return 1;
                 }
             }

@@ -756,7 +756,7 @@ erpnext_section() {
   echo "versions:"; erp_get "/api/method/frappe.utils.change_log.get_versions"
   if [[ -n "$user" ]]; then
     echo "roles of $user:"
-    local roles; roles=$(erp_get "/api/resource/Has Role?fields=[\"role\"]&filters=[[\"parent\",\"=\",\"$user\"],[\"parenttype\",\"=\",\"User\"]]&limit_page_length=0")
+    local roles; roles=$(erp_get "/api/resource/Has Role?parent_doctype=User&fields=[\"role\"]&filters=[[\"parent\",\"=\",\"$user\"],[\"parenttype\",\"=\",\"User\"]]&limit_page_length=0")
     echo "$roles"
     if [[ "$roles" == *"HTTP 200"* ]]; then
       for role in "System Manager" "Accounts Manager" "Accounts User" "Stock Manager" "Sales Manager" "Purchase Manager"; do

@@ -85,22 +85,32 @@ public sealed class ErpNextCompanyWipe
 
     /// <summary>
     /// Checked before anything is deleted (and in the dry run, so nobody types the confirmation for a run that cannot finish): only
-    /// System Manager may read or create a Transaction Deletion Record.
+    /// System Manager may create a Transaction Deletion Record. Other roles may be allowed to read one, so the role itself is checked:
+    /// a user's roles (Has Role rows under User) are readable by System Manager; refused means the role is missing.
     /// </summary>
     private async Task<bool> CanDeleteTransactionsAsync(CancellationToken ct)
     {
-        var r = await _http.GetAsync("api/resource/Transaction Deletion Record?fields=%5B%22name%22%5D&limit_page_length=1", ct);
-        if (r.IsSuccessStatusCode)
-        {
-            return true;
-        }
-
         var who = await _http.GetAsync("api/method/frappe.auth.get_logged_user", ct);
         var user = who.IsSuccessStatusCode
             ? JsonNode.Parse(await who.Content.ReadAsStringAsync(ct))?["message"]?.GetValue<string>() ?? "the API key's user"
             : "the API key's user";
-        _log($"ERPNext: {user} may not use Transaction Deletion Record ({ErpNextErrors.Describe(r.StatusCode, await r.Content.ReadAsStringAsync(ct))}).");
-        _log($"ERPNext: give {user} the System Manager role (ERPNext → User → {user} → Roles → System Manager → Save), then run again.");
+
+        var filters = JsonSerializer.Serialize(new object[] { new object[] { "parent", "=", user }, new object[] { "parenttype", "=", "User" } });
+        var r = await _http.GetAsync(
+            "api/resource/Has Role?parent_doctype=User&fields=%5B%22role%22%5D&limit_page_length=0&filters=" + Uri.EscapeDataString(filters), ct);
+        var body = await r.Content.ReadAsStringAsync(ct);
+        var roles = r.IsSuccessStatusCode
+            ? JsonNode.Parse(body)?["data"]?.AsArray().Select(x => x?["role"]?.GetValue<string>()).OfType<string>().ToList() ?? []
+            : [];
+        if (roles.Contains("System Manager"))
+        {
+            return true;
+        }
+
+        _log(r.IsSuccessStatusCode
+            ? $"ERPNext: {user} does not have the System Manager role (roles: {string.Join(", ", roles)}), which the Transaction Deletion Record needs."
+            : $"ERPNext: {user} may not read user roles, so it does not have the System Manager role ({ErpNextErrors.Describe(r.StatusCode, body)}).");
+        _log($"ERPNext: sign in to ERPNext as Administrator → User → {user} → Roles → tick System Manager → Save, then run again.");
         return false;
     }
 

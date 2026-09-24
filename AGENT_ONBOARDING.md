@@ -117,6 +117,7 @@ In Production the app refuses to start without a real password (the deploy scrip
 | E-mail / SMS | Free solutions: SMTP for e-mail; SMS via a pluggable channel (see ROADMAP §7) |
 | Git | Push straight to `main`; GitHub Actions must always be green |
 | Secrets | Never in chat/commits; anything ever pasted in chat is considered exposed and must be rotated |
+| Trial server | 130.94.45.230 is a trial deployment; a new server and domain come at the real launch. Until then ERPNext stays open on port 8080 (plain HTTP) and SSH keeps root password sign-in — do not change them; the launch steps are in SETUP_HARDENING "Trial-phase exceptions" |
 
 ---
 
