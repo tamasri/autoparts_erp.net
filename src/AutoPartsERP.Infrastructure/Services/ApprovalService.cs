@@ -6,11 +6,13 @@ public sealed class ApprovalService : IApprovalService
 {
     private readonly IDbConnectionFactory _dbConnectionFactory;
     private readonly AppDbContext _dbContext;
+    private readonly ApprovalNotifications _notifications;
 
-    public ApprovalService(IDbConnectionFactory dbConnectionFactory, AppDbContext dbContext)
+    public ApprovalService(IDbConnectionFactory dbConnectionFactory, AppDbContext dbContext, ApprovalNotifications notifications)
     {
         _dbConnectionFactory = dbConnectionFactory;
         _dbContext = dbContext;
+        _notifications = notifications;
     }
 
     public async Task<Result<Guid>> CreatePendingApprovalAsync(PendingApprovalSubmission submission, CancellationToken cancellationToken = default)
@@ -48,6 +50,7 @@ public sealed class ApprovalService : IApprovalService
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
+        await _notifications.RequestedAsync(id, cancellationToken);
         return Result<Guid>.Success(id);
     }
 

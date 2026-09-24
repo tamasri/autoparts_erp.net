@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, NavLink, Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import {
-  AppBar, Avatar, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tab, Tabs, ToggleButton, ToggleButtonGroup, Toolbar, Tooltip, Typography,
+  AppBar, Avatar, Badge, Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tab, Tabs, ToggleButton, ToggleButtonGroup, Toolbar, Tooltip, Typography,
   useMediaQuery,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -10,6 +10,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { signOut } from '../../lib/session';
 import { useDisplayStore, type PrimaryCurrency } from '../../stores/displayStore';
 import { NAV_GROUPS, QUICK_ACTIONS, type NavItem, type NavTab } from './navigation';
+import { useRealtime } from '../../hooks/useRealtime';
+import { useRealtimeStore } from '../../stores/realtimeStore';
 
 const WIDTH = 260;
 const WIDTH_COLLAPSED = 68;
@@ -27,6 +29,11 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   const theme = useTheme();
   const bg = theme.palette.vex.sidebarBg;
   const { pathname } = useLocation();
+  // Live counts on the menu: requests waiting for this user, open stock alerts (a section counts its tabs).
+  const pendingApprovals = useRealtimeStore((st) => st.pendingApprovals);
+  const openStockAlerts = useRealtimeStore((st) => st.openStockAlerts);
+  const countFor = (to: string): number => (to === '/approvals' ? pendingApprovals : to === '/inventory/alerts' ? openStockAlerts : 0);
+  const badgeOf = (item: NavItem): number => [item.to, ...(item.tabs ?? []).map((t) => t.to)].reduce((n, to) => n + countFor(to), 0);
   return (
     <Box
       component="aside"
@@ -63,7 +70,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.07)' },
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'inherit', minWidth: collapsed ? 0 : 34, justifyContent: 'center', fontSize: 16 }}>{item.icon}</ListItemIcon>
+                  <ListItemIcon sx={{ color: 'inherit', minWidth: collapsed ? 0 : 34, justifyContent: 'center', fontSize: 16 }}>
+                    <Badge badgeContent={badgeOf(item)} color="error" max={99} overlap="circular">{item.icon}</Badge>
+                  </ListItemIcon>
                   {!collapsed ? <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, noWrap: true }} /> : null}
                 </ListItemButton>
               </Tooltip>
@@ -80,6 +89,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 }
 
 export default function AppLayout(): JSX.Element {
+  useRealtime();
   const theme = useTheme();
   const narrow = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();

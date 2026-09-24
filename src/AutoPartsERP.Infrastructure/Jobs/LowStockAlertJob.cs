@@ -1,27 +1,30 @@
+using AutoPartsERP.Infrastructure.Services;
+
 namespace AutoPartsERP.Infrastructure.Jobs;
 
 public sealed class LowStockAlertJob
 {
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly StockAlertService _stockAlerts;
     private readonly ILogger<LowStockAlertJob> _logger;
 
-    public LowStockAlertJob(IDbConnectionFactory connectionFactory, ILogger<LowStockAlertJob> logger)
+    public LowStockAlertJob(StockAlertService stockAlerts, ILogger<LowStockAlertJob> logger)
     {
-        _connectionFactory = connectionFactory;
+        _stockAlerts = stockAlerts;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Every 10 minutes: raises and resolves stock alerts for all items. Sales are scanned at once (invoice outbox handlers);
+    /// this catches everything else — transfers, adjustments, counts, receipts, reorder levels changed on the item card.
+    /// (Before 2026-09-24 this job only logged a count and inventory_alerts stayed empty.)
+    /// </summary>
     [Queue("governance")]
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await _connectionFactory.CreateAsync(cancellationToken);
-        var lowStockCount = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            "SELECT COUNT(*) FROM sku_stock_summary WHERE low_stock_flag = true;",
-            cancellationToken: cancellationToken));
-
-        if (lowStockCount > 0)
+        var raised = await _stockAlerts.ScanAllAsync(cancellationToken);
+        if (raised > 0)
         {
-            _logger.LogWarning("Low stock alert job found {Count} low-stock SKUs.", lowStockCount);
+            _logger.LogInformation("Stock alert scan raised {Count} alert(s).", raised);
         }
     }
 }

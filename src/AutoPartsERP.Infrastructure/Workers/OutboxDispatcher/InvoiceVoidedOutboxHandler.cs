@@ -6,10 +6,12 @@ namespace AutoPartsERP.Infrastructure.Workers.OutboxDispatcher;
 public sealed class InvoiceVoidedOutboxHandler : IOutboxEventHandler
 {
     private readonly SalesInvoiceErpNextSyncer _erpNextSyncer;
+    private readonly StockAlertService _stockAlerts;
 
-    public InvoiceVoidedOutboxHandler(SalesInvoiceErpNextSyncer erpNextSyncer)
+    public InvoiceVoidedOutboxHandler(SalesInvoiceErpNextSyncer erpNextSyncer, StockAlertService stockAlerts)
     {
         _erpNextSyncer = erpNextSyncer;
+        _stockAlerts = stockAlerts;
     }
 
     public string EventType => OutboxEventTypes.InvoiceVoided;
@@ -19,6 +21,8 @@ public sealed class InvoiceVoidedOutboxHandler : IOutboxEventHandler
         var payload = JsonSerializer.Deserialize<InvoiceVoidedPayload>(message.PayloadJson);
         if (payload is not null)
         {
+            // The void put the goods back: alerts for them may resolve (or a voided return may raise one).
+            await _stockAlerts.ScanInvoiceAsync(payload.InvoiceId, cancellationToken);
             await _erpNextSyncer.CancelAsync(payload.InvoiceId, cancellationToken);
         }
     }

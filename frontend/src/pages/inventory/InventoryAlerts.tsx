@@ -7,6 +7,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import ReasonDialog from '../../components/ui/ReasonDialog';
 import StatusChip from '../../components/ui/StatusChip';
+import { useRealtimeStore } from '../../stores/realtimeStore';
 
 type StockAlert = {
   id: string; itemId: string; alertType: string; severity: string; message: string;
@@ -30,7 +31,9 @@ export default function InventoryAlerts(): JSX.Element {
     catch (e: unknown) { setError(extractApiError(e, 'تعذر تحميل التنبيهات')); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  // New alerts pushed by the server appear without a manual refresh.
+  const alertsVersion = useRealtimeStore((s) => s.alertsVersion);
+  useEffect(() => { void load(); }, [load, alertsVersion]);
 
   async function acknowledge(id: string): Promise<void> {
     setBusy(id);

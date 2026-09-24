@@ -53,6 +53,27 @@ export function refreshSession(): Promise<boolean> {
   return inFlight;
 }
 
+/** Seconds until the access token expires (from its own "exp" claim), or 0 when unreadable. */
+function secondsLeft(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    return payload.exp ? payload.exp - Date.now() / 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * An access token good for at least another minute, renewing it first if needed — for connections that do not go through the API
+ * client's 401 retry (the SignalR WebSocket reconnects on its own and would otherwise retry with an expired token).
+ */
+export async function freshToken(): Promise<string> {
+  const current = useAuthStore.getState().token;
+  if (current && secondsLeft(current) > 60) return current;
+  await refreshSession();
+  return useAuthStore.getState().token ?? '';
+}
+
 /** Ends the session on the server (revokes the refresh token, clears the cookie) and in this tab. */
 export async function signOut(): Promise<void> {
   try { await axios.post('/api/v1/auth/logout', null, { headers: CSRF_HEADER, timeout: 10000 }); } catch { /* signed out locally anyway */ }

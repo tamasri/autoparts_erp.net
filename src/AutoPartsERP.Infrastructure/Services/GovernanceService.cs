@@ -14,6 +14,7 @@ public sealed class GovernanceService : IGovernanceService
     private readonly ICurrentUser _currentUser;
     private readonly IWarehouseAccess _warehouses;
     private readonly IManualAuditService _audit;
+    private readonly ApprovalNotifications _notifications;
     private readonly bool _allowSelfApproval;
 
     public GovernanceService(
@@ -25,6 +26,7 @@ public sealed class GovernanceService : IGovernanceService
         ICurrentUser currentUser,
         IWarehouseAccess warehouses,
         IManualAuditService audit,
+        ApprovalNotifications notifications,
         Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
         _dbContext = dbContext;
@@ -35,6 +37,7 @@ public sealed class GovernanceService : IGovernanceService
         _currentUser = currentUser;
         _warehouses = warehouses;
         _audit = audit;
+        _notifications = notifications;
 
         // Maker-checker means a second person approves. Single-operator installs can opt out explicitly with
         // Governance:AllowSelfApproval=true (env Governance__AllowSelfApproval); the default is the safe one.
@@ -89,6 +92,7 @@ public sealed class GovernanceService : IGovernanceService
         var entity = new ApprovalRequest(Guid.NewGuid(), request.EntityType, request.EntityId, request.ActionCode, requesterUserId, request.Reason, request.RequiredApprovals);
         _dbContext.ApprovalRequests.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _notifications.RequestedAsync(entity.Id, cancellationToken);
         return Result<ApprovalRequestDto>.Success(ToDto(entity));
     }
 
@@ -132,6 +136,12 @@ public sealed class GovernanceService : IGovernanceService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        // Tell the requester only when the request is finally decided (a multi-approver request stays pending in between).
+        if (string.Equals(entity.Status, ApprovalStatuses.Approved, StringComparison.OrdinalIgnoreCase))
+        {
+            await _notifications.DecidedAsync(entity.Id, entity.ActionCode, entity.RequestedByUserId, ApprovalStatuses.Approved, reviewerUserId, comment, cancellationToken);
+        }
+
         return Result<ApprovalRequestDto>.Success(ToDto(entity));
     }
 
@@ -208,6 +218,7 @@ public sealed class GovernanceService : IGovernanceService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _notifications.DecidedAsync(entity.Id, entity.ActionCode, entity.RequestedByUserId, entity.Status, reviewerUserId, comment, cancellationToken);
         return Result<ApprovalRequestDto>.Success(ToDto(entity));
     }
 

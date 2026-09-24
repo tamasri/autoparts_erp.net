@@ -4,11 +4,13 @@ import { approvalsApi } from '../../api/endpoints/approvals';
 import { usersApi } from '../../api/endpoints/users';
 import { unwrapPaged } from '../../api/apiData';
 import { usePagedList } from '../../hooks/usePagedList';
+import { useRealtimeStore } from '../../stores/realtimeStore';
 import { extractApiError, toast } from '../../lib/toast';
 import PageHeader from '../../components/ui/PageHeader';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import ReasonDialog from '../../components/ui/ReasonDialog';
 import StatusChip from '../../components/ui/StatusChip';
+import { APPROVAL_ACTIONS } from '../../features/approvals/actionLabels';
 
 type Approval = {
   id: string; entityType?: string; actionCode?: string; reason?: string; status?: string; requestedByUserId?: string;
@@ -17,19 +19,17 @@ type Approval = {
   warehouses?: string[];
 };
 
-/** What each governed action is, in words (the code name is shown for anything not listed). */
-const ACTION: Record<string, string> = {
-  ShipTransferOrderCommand: 'شحن أمر تحويل', TransferStockCommand: 'تحويل مخزون مباشر', CreateTransferRequestCommand: 'طلب تحويل',
-  PostJournalEntryCommand: 'ترحيل قيد', VoidJournalEntryCommand: 'إلغاء قيد', PostInvoiceCommand: 'ترحيل فاتورة', VoidInvoiceCommand: 'إلغاء فاتورة',
-  AssignRolesToUserCommand: 'تعديل أدوار مستخدم', DeactivateUserCommand: 'إيقاف مستخدم', SetUserWarehousesCommand: 'تعيين مستودعات مستخدم',
-  LockPeriodCommand: 'إقفال فترة', UnlockPeriodCommand: 'فتح فترة',
-};
+const ACTION = APPROVAL_ACTIONS;
 const OPEN = new Set(['PENDING', 'IN_REVIEW']);
 
 const when = (v?: string): string => (v ? new Date(v).toLocaleString('ar') : '—');
 
 export default function Approvals(): JSX.Element {
   const list = usePagedList<Approval>({ errorMessage: 'تعذر تحميل الطلبات', fetcher: ({ page, pageSize }) => approvalsApi.getPending(page, pageSize) });
+  // A new request or a decision pushed by the server: show the current list without a manual refresh.
+  const approvalsVersion = useRealtimeStore((s) => s.approvalsVersion);
+  const { reload } = list;
+  useEffect(() => { if (approvalsVersion > 0) reload(); }, [approvalsVersion, reload]);
   const [busy, setBusy] = useState('');
   const [names, setNames] = useState<Record<string, string>>({});
   useEffect(() => {

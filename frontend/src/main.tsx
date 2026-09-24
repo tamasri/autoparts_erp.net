@@ -8,7 +8,6 @@
  *   CssBaseline                        — MUI CSS reset
  *   BrowserRouter → App               — routing (unchanged)
  *   Toaster                            — sonner notifications (unchanged)
- *   SignalRBootstrap                   — SignalR connection (unchanged)
  *
  * Phase 0 — feat(frontend): wire QueryClient + ThemeProvider + RTL (phase0)
  * Policy: PROJECT_VISION.md §2a (owner-approved 2026-09-19)
@@ -24,13 +23,6 @@ import { cacheRtl } from './lib/rtlCache';
 import { theme } from './theme/theme';
 import './i18n';
 import App from './App';
-import { useSignalR } from './hooks/useSignalR';
-
-// ── SignalR connection bootstrapped inside React tree ───────────────────────
-function SignalRBootstrap(): null {
-  useSignalR();
-  return null;
-}
 
 // ── TanStack Query client ───────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -69,7 +61,6 @@ ReactDOM.createRoot(rootElement).render(
               closeButton
               toastOptions={{ style: { fontFamily: 'Noto Kufi Arabic, sans-serif', fontSize: '14px' } }}
             />
-            <SignalRBootstrap />
             <App />
           </BrowserRouter>
         </ThemeProvider>

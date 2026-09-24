@@ -52,7 +52,7 @@
 | AuthN / AuthZ | ASP.NET Identity (Guid keys) + **JWT RS256**; permission-based (`PermissionCodes`) with seeded role→permission map (`RolePermissionMap`) | |
 | Cache | Redis (StackExchange.Redis, distributed cache) | |
 | Jobs | **Hangfire** (Postgres storage), queues `default` + `governance`; **Outbox** dispatcher hosted service | |
-| Realtime | SignalR hub `/hubs/erp` | one frontend consumer |
+| Realtime | SignalR hub `/hubs/erp` | server-decided groups; approvals (new/decided) and stock alerts pushed as toasts + menu badges (2026-09-24) |
 | Audit | Audit.NET (EF + PostgreSql sinks) + immutable audit tables | |
 | Idempotency | IdempotentAPI + `DistributedIdempotencyService` + `IdempotencyBehavior` | send `Idempotency-Key` on POSTs |
 | **Accounting engine** | **ERPNext (Frappe) via REST**, `IErpNextClient` → `ErpNextClient` / `NullErpNextClient`; `erpnext_sync_log` | Live on the VPS, port 8080 |

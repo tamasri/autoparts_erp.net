@@ -220,6 +220,10 @@ builder.Services.AddSingleton<AutoPartsERP.Application.Features.Assistant.IAssis
 builder.Services.AddScoped<IAssistantIdentity, AutoPartsERP.Infrastructure.Http.AssistantIdentity>();
 builder.Services.AddScoped<AutoPartsERP.Application.Features.Assistant.AssistantAnswers>();
 builder.Services.AddScoped<AutoPartsERP.Application.Features.Assistant.WhatsAppAssistant>();
+// Real-time notices to browsers (SignalR groups chosen on the server; see ErpHub).
+builder.Services.AddSingleton<IRealtimeNotifier, AutoPartsERP.Api.Hubs.HubRealtimeNotifier>();
+builder.Services.AddScoped<ApprovalNotifications>();
+builder.Services.AddScoped<StockAlertService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
@@ -391,7 +395,7 @@ if (!app.Environment.IsEnvironment("Testing"))
         "operational-low-stock-alert",
         "governance",
         job => job.RunAsync(CancellationToken.None),
-        Cron.Daily(8, 0));
+        "*/10 * * * *");
 
     RecurringJob.AddOrUpdate<AccountingCheckJob>(
         "ai-accounting-check",
@@ -408,6 +412,13 @@ if (!app.Environment.IsEnvironment("Testing"))
     dbContext.Database.Migrate();
     await DatabaseSeeder.SeedAsync(app.Services);
     await ReferenceDataSeeder.SeedAsync(app.Services);
+
+    // One-off maintenance run (scripts/reset-business-data.sh): wipe trial data here and in ERPNext, then exit without serving.
+    if (args.Contains("--reset-business-data"))
+    {
+        Environment.ExitCode = await AutoPartsERP.Api.Maintenance.ResetBusinessData.RunAsync(app.Services, args);
+        return;
+    }
 
     // Sample customers, items, stock and invoices are for trying the system out. Never in a real company's books (they would be
     // posted to ERPNext too): Development only, or when explicitly asked for with Seed:DemoData=true.
