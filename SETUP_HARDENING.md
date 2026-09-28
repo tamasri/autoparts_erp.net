@@ -224,8 +224,13 @@ The current server (130.94.45.230) is a trial deployment for development. The ow
 - [ ] **H-0 Dev key in git history:** `appsettings.Development.json` (a dev JWT private key and the dev DB password) sat in the public repository from the first commit until 2026-09-21 and is still in history. It never signed production tokens (the VPS generates its own pair), but treat it as public: do not reuse that DB password anywhere; decide whether to purge history (force-push, owner decision).
 - [ ] **H-1 Rotate exposed secrets:** Postgres password, JWT key pair (invalidates sessions), Redis password. Then
       delete/relocate any local `ADMIN PASSWORD.txt`.
-- [ ] **H-2 Domain + real TLS** (Let's Encrypt or Cloudflare). `docs/cloudflare-setup.md` is a template that still
-      mentions another provider — adapt before use. Then set `ALLOWED_ORIGINS` to the real origins.
+- [ ] **H-2 Domain + real TLS:** domain **almajdauto.com** (NameSilo, DNS on dnsowl; registered 2026-09-27). At the
+      registrar keep only `@` and `www` A records → the server's address (delete the parking A records), then
+      `bash scripts/setup-domain.sh almajdauto.com [email]`: checks DNS, issues a Let's Encrypt certificate (webroot
+      `nginx/acme`, served on port 80 at `/.well-known/acme-challenge/`), copies it to `nginx/certs/` through the deploy
+      hook `/etc/letsencrypt/renewal-hooks/deploy/autoparts-erp.sh` (which also reloads nginx), puts the domain first in
+      `ALLOWED_ORIGINS` (so document QR links use it) and recreates the api. Renewal: the host's `certbot.timer`.
+      nginx keeps the 443 server as `default_server`, so the bare IP still answers (with a name-mismatch warning).
 - [ ] **H-3 SSH:** install a key, verify a second session works, *then* set `PasswordAuthentication no`; add `fail2ban`.
 - [ ] **H-4 ERPNext:** change the `Administrator` password; close port 8080 to the internet (`ufw status` to check).
 - [ ] **H-5 (rest) Off-server copy:** set `BACKUP_REMOTE=user@host:/path` in `.env.vps` (a second machine with the server's SSH key in its `authorized_keys`); until then backups live only on the VPS. The one-click backup screen is Phase 5.

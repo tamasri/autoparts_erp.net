@@ -161,7 +161,7 @@ docker run --rm \
 echo "PostgreSQL connectivity check passed."
 
 step "Prepare TLS certificate files for Nginx"
-mkdir -p "$CERT_DIR"
+mkdir -p "$CERT_DIR" nginx/acme
 if [[ ! -f "$CERT_FILE" || ! -f "$KEY_FILE" ]]; then
   cert_cn="$(echo "$ALLOWED_ORIGINS" | awk -F',' '{print $1}' | sed -E 's#https?://##; s#/.*##')"
   cert_cn="${cert_cn:-localhost}"

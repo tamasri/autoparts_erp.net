@@ -90,3 +90,7 @@ C:/NuGetPackages/
 ADMIN PASSWORD.txt
 *PASSWORD*.txt
 *password*.txt
+
+# TLS material and Let's Encrypt challenges on the server (never commit a private key)
+nginx/certs/
+nginx/acme/
