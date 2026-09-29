@@ -55,6 +55,7 @@ public sealed class ImportItemsCommandHandler : IRequestHandler<ImportItemsComma
 
         var results = new List<ImportRowResult>();
         var seenCodes = new HashSet<string>();
+        var aliases = new Dictionary<string, IReadOnlyList<string>>();
         var created = 0;
         var duplicates = 0;
         var failed = 0;
@@ -70,6 +71,7 @@ public sealed class ImportItemsCommandHandler : IRequestHandler<ImportItemsComma
                 if (string.IsNullOrWhiteSpace(row.Name) && string.IsNullOrWhiteSpace(row.NameAr)) return "الاسم مطلوب (عربي أو إنجليزي)";
                 if (row.PriceUsd < 0 || row.PriceSyp < 0 || row.MinPriceUsd < 0) return "الأسعار لا يمكن أن تكون سالبة";
                 if (row.WarrantyMonths < 0) return "مدة الضمان لا يمكن أن تكون سالبة";
+                if (row.Aliases?.Any(a => a.Length > 120) == true) return "رقم إضافي أطول من 120 حرفاً";
                 return null;
             }
 
@@ -129,7 +131,7 @@ public sealed class ImportItemsCommandHandler : IRequestHandler<ImportItemsComma
             var warranty = row.WarrantyMonths ?? 0;
             var create = await _sender.Send(new CreateSkuCommand(
                 new CreateSkuRequest(code!, name, nameAr, categoryId, string.IsNullOrWhiteSpace(row.Barcode) ? null : row.Barcode.Trim(),
-                    syp, usd, 0m, 0m, false, warranty > 0, warranty, null),
+                    syp, usd, 0m, 0m, false, warranty > 0, warranty, row.Tags is { Count: > 0 } ? row.Tags.ToArray() : null),
                 $"import-{request.FileKey}-{row.RowNumber}"), cancellationToken);
 
             if (create.IsSuccess)
@@ -137,6 +139,7 @@ public sealed class ImportItemsCommandHandler : IRequestHandler<ImportItemsComma
                 created++;
                 existingCodes.Add(code!);
                 if (!string.IsNullOrWhiteSpace(row.Barcode)) existingBarcodes.Add(row.Barcode.Trim());
+                if (row.Aliases is { Count: > 0 }) aliases[code!] = row.Aliases;
                 results.Add(new ImportRowResult(row.RowNumber, code, "OK", "تم الإنشاء"));
             }
             else
@@ -150,6 +153,21 @@ public sealed class ImportItemsCommandHandler : IRequestHandler<ImportItemsComma
         {
             // Create the warehouse-side item rows for the new SKUs right away, so they can be received and stocked at once.
             await connection.ExecuteAsync(new CommandDefinition("SELECT sync_items_from_skus();", cancellationToken: cancellationToken));
+
+            // The extra part numbers (original / cross numbers) become the item's aliases, so the item is found by any of them.
+            var aliasRows = aliases.SelectMany(a => a.Value.Select(alias => new { Code = a.Key, Alias = alias })).ToList();
+            if (aliasRows.Count > 0)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    """
+                    INSERT INTO item_aliases (id, item_id, alias, source, created_at)
+                    SELECT uuid_generate_v4(), i.id, @Alias, 'IMPORT', now()
+                    FROM skus s JOIN items i ON i.sku_id = s.id
+                    WHERE upper(s.code) = @Code AND normalize_part_number(@Alias) <> ''
+                    ON CONFLICT (item_id, alias_canonical) DO NOTHING;
+                    """,
+                    aliasRows, cancellationToken: cancellationToken));
+            }
         }
 
         return Result<ImportItemsResult>.Success(new ImportItemsResult(request.DryRun, request.Rows.Count, created, duplicates, failed, results));

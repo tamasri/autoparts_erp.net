@@ -39,6 +39,7 @@ function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: 
   const [nameAr, setNameAr] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [tax, setTax] = useState('');
+  const [notes, setNotes] = useState('');
   const [roles, setRoles] = useState<string[]>(['VENDOR']);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -48,9 +49,9 @@ function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: 
     if (roles.length === 0) { setError('اختر دوراً واحداً على الأقل'); return; }
     setSaving(true); setError('');
     try {
-      const res = await partiesApi.createParty({ displayName: nameEn.trim() || nameAr.trim(), displayNameAr: nameAr.trim(), taxNumber: tax.trim() || undefined, initialTypeCodes: roles });
+      const res = await partiesApi.createParty({ displayName: nameEn.trim() || nameAr.trim(), displayNameAr: nameAr.trim(), taxNumber: tax.trim() || undefined, notes: notes.trim() || undefined, initialTypeCodes: roles });
       notifyResult(res, 'تم إنشاء الحساب');
-      setNameAr(''); setNameEn(''); setTax(''); onSaved(); onClose();
+      setNameAr(''); setNameEn(''); setTax(''); setNotes(''); onSaved(); onClose();
     } catch (e: unknown) { setError(extractApiError(e, 'تعذر إنشاء الحساب')); }
     finally { setSaving(false); }
   }
@@ -64,6 +65,7 @@ function NewAccountDialog({ open, onClose, onSaved }: { open: boolean; onClose: 
           <TextField size="small" label="الاسم بالعربية *" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
           <TextField size="small" label="الاسم بالإنجليزية" value={nameEn} onChange={(e) => setNameEn(e.target.value)} inputProps={{ dir: 'ltr' }} />
           <TextField size="small" label="الرقم الضريبي" value={tax} onChange={(e) => setTax(e.target.value)} autoComplete="off" />
+          <TextField size="small" label="العنوان والاتصال / ملاحظات" value={notes} onChange={(e) => setNotes(e.target.value)} multiline minRows={2} />
           <Box>
             {OTHER_ROLES.map((r) => (
               <FormControlLabel key={r} label={ROLES[r].label} control={<Checkbox size="small" checked={roles.includes(r)}

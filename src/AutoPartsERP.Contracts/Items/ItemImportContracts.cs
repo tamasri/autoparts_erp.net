@@ -12,7 +12,9 @@ public sealed record ImportItemRow(
     decimal? PriceSyp,
     decimal? MinPriceUsd,
     int? WarrantyMonths,
-    string? ParseError = null);
+    string? ParseError = null,
+    IReadOnlyList<string>? Aliases = null,
+    IReadOnlyList<string>? Tags = null);
 
 public sealed record ImportRowResult(int RowNumber, string? Code, string Status, string? Message);
 

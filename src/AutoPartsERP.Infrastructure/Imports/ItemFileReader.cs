@@ -6,7 +6,7 @@ namespace AutoPartsERP.Infrastructure.Imports;
 /// <summary>Reads an item import file (.xlsx or .csv) into rows, tolerating English or Arabic column titles, and builds the blank template.</summary>
 public static class ItemFileReader
 {
-    private static readonly string[] TemplateHeaders = ["Code", "Name", "NameAr", "Category", "Barcode", "PriceUsd", "PriceSyp", "MinPriceUsd", "WarrantyMonths"];
+    private static readonly string[] TemplateHeaders = ["Code", "Name", "NameAr", "Category", "Barcode", "PriceUsd", "PriceSyp", "MinPriceUsd", "WarrantyMonths", "Aliases", "Tags"];
 
     private static readonly Dictionary<string, string[]> Aliases = new()
     {
@@ -18,7 +18,9 @@ public static class ItemFileReader
         ["PriceUsd"] = ["priceusd", "price_usd", "price usd", "price", "سعر البيع $", "سعر البيع بالدولار", "السعر بالدولار", "السعر"],
         ["PriceSyp"] = ["pricesyp", "price_syp", "price syp", "سعر البيع ل.س", "السعر بالليرة", "السعر بالليرة السورية"],
         ["MinPriceUsd"] = ["minpriceusd", "min_price_usd", "min price", "الحد الأدنى للسعر", "أدنى سعر"],
-        ["WarrantyMonths"] = ["warrantymonths", "warranty_months", "warranty", "الضمان", "مدة الضمان"]
+        ["WarrantyMonths"] = ["warrantymonths", "warranty_months", "warranty", "الضمان", "مدة الضمان"],
+        ["Aliases"] = ["aliases", "alias", "oem", "oe numbers", "الأرقام الإضافية", "أرقام إضافية", "الأرقام البديلة", "أرقام بديلة", "الأسماء البديلة"],
+        ["Tags"] = ["tags", "الوسوم", "وسوم", "العلامات"]
     };
 
     public static IReadOnlyList<ImportItemRow> Read(Stream stream, string fileName)
@@ -58,15 +60,21 @@ public static class ItemFileReader
 
             var warranty = Number("WarrantyMonths");
             rows.Add(new ImportItemRow(r + 1, Text("Code"), Text("Name"), Text("NameAr"), Text("Category"), Text("Barcode"),
-                Number("PriceUsd"), Number("PriceSyp"), Number("MinPriceUsd"), warranty is null ? null : (int)warranty, error));
+                Number("PriceUsd"), Number("PriceSyp"), Number("MinPriceUsd"), warranty is null ? null : (int)warranty, error, List(Text("Aliases")), List(Text("Tags"))));
         }
 
         return rows;
     }
 
-    public static byte[] BuildTemplateXlsx() => TabularFile.BuildXlsx(
-        "Items", TemplateHeaders, ["OIL-FILT-001", "Oil filter Toyota", "فلتر زيت تويوتا", "فلاتر", "6291234567890", 12.5, "", 9, 6],
-        "Code إلزامي. Name أو NameAr إلزامي (أحدهما يكفي). الفئة تُطابق اسم فئة موجودة (وإلا تُستخدم أول فئة).\nPriceSyp اختياري: إن تُرك فارغاً يُحسب من PriceUsd بآخر سعر صرف. الأصناف الموجودة مسبقاً تُتجاوز ولا تُعدَّل.");
+    /// <summary>Several values in one cell: "04465-20150 | 04465-26060", one per line, or separated by ; or , or ،.</summary>
+    private static IReadOnlyList<string>? List(string? cell) =>
+        cell?.Split(['|', ';', ',', '\n', '،'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-    public static byte[] BuildTemplateCsv() => TabularFile.BuildCsv(TemplateHeaders, "OIL-FILT-001,Oil filter Toyota,فلتر زيت تويوتا,فلاتر,6291234567890,12.5,,9,6");
+    public static byte[] BuildTemplateXlsx() => TabularFile.BuildXlsx(
+        "Items", TemplateHeaders, ["OIL-FILT-001", "Oil filter Toyota", "فلتر زيت تويوتا", "فلاتر", "6291234567890", 12.5, "", 9, 6, "90915-YZZE1 | 90915-10003", "تويوتا | لكزس"],
+        "Code إلزامي. Name أو NameAr إلزامي (أحدهما يكفي). الفئة تُطابق اسم فئة موجودة (وإلا تُستخدم أول فئة).\nPriceSyp اختياري: إن تُرك فارغاً يُحسب من PriceUsd بآخر سعر صرف. الأصناف الموجودة مسبقاً تُتجاوز ولا تُعدَّل.\n" +
+        "Aliases اختياري: الأرقام الإضافية (الرقم الأصلي، أرقام بديلة) مفصولة بـ | ، ويُعثر على الصنف بأي منها. Tags اختياري: وسوم مثل ماركات السيارات، مفصولة بـ |.");
+
+    public static byte[] BuildTemplateCsv() => TabularFile.BuildCsv(TemplateHeaders, "OIL-FILT-001,Oil filter Toyota,فلتر زيت تويوتا,فلاتر,6291234567890,12.5,,9,6,90915-YZZE1 | 90915-10003,تويوتا | لكزس");
 }
