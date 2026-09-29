@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Production is served at https://almajdauto.com/erp/ (nginx.conf); the dev server stays at the root.
+  base: command === 'build' ? '/erp/' : '/',
   plugins: [react()],
 
   server: {
@@ -38,5 +40,4 @@ export default defineConfig({
       },
     },
   },
-});
-
+}));

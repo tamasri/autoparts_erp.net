@@ -53,7 +53,8 @@ ReactDOM.createRoot(rootElement).render(
         <ThemeProvider theme={theme}>
           {/* MUI CSS reset — sets box-sizing, removes default margin etc. */}
           <CssBaseline />
-          <BrowserRouter>
+          {/* The production build lives at /erp/ (vite.config.ts base); in development at the root. */}
+          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <Toaster
               position="top-right"
               dir="rtl"

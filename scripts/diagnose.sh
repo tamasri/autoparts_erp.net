@@ -192,12 +192,12 @@ app_section() {
   local path code
   # /health and /metrics are private on purpose (nginx allows only its own loopback): 403 from here is correct.
   # The API's real health is checked inside its container further down.
-  for path in / /robots.txt /api/v1/auth/me /health /metrics; do
+  for path in / /erp/ /robots.txt /api/v1/auth/me /health /metrics; do
     code=$(curl -sk -o /dev/null -m 15 -w '%{http_code} %{time_total}s' "https://localhost$path" 2>&1)
     echo "  GET https://localhost$path -> $code"
   done
-  code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' https://localhost/ || true)
-  [[ "$code" == "200" ]] || flag FAIL "https://localhost/ answered $code"
+  code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' https://localhost/erp/ || true)
+  [[ "$code" == "200" ]] || flag FAIL "https://localhost/erp/ (the app) answered $code"
   for path in /health /metrics; do
     code=$(curl -sk -o /dev/null -m 15 -w '%{http_code}' "https://localhost$path" || true)
     [[ "$code" == "200" ]] && flag WARN "https://localhost$path is reachable through nginx (it should be private)"
@@ -207,11 +207,11 @@ app_section() {
   code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' http://localhost/ || true)
   echo "  GET http://localhost/ -> $code (a redirect to https is expected)"
   sub "Security headers"
-  local headers h; headers=$(curl -skI -m 15 https://localhost/ 2>/dev/null)
+  local headers h; headers=$(curl -skI -m 15 https://localhost/erp/ 2>/dev/null)
   grep -iE '^(strict-transport-security|content-security-policy|x-frame-options|x-content-type-options|referrer-policy|permissions-policy|x-robots-tag|server):' <<<"$headers"
   if [[ -n "$headers" ]]; then
     for h in strict-transport-security content-security-policy x-frame-options x-content-type-options; do
-      grep -qi "^$h:" <<<"$headers" || flag WARN "security header $h is missing on https://localhost/"
+      grep -qi "^$h:" <<<"$headers" || flag WARN "security header $h is missing on https://localhost/erp/"
     done
   fi
 
@@ -949,7 +949,7 @@ security_section() {
   local p code
   # The SPA answers unknown paths with its own index.html (200), so a 200 alone proves nothing: compare with the app shell.
   local shell body
-  shell=$(curl -sk -m 10 https://localhost/ | sha256sum)
+  shell=$(curl -sk -m 10 https://localhost/erp/ | sha256sum)
   for p in /hangfire /metrics /swagger /swagger/index.html /.env /.git/config /appsettings.json; do
     code=$(curl -sk -o /dev/null -m 10 -w '%{http_code}' "https://localhost$p" || true)
     body=$(curl -sk -m 10 "https://localhost$p" | sha256sum)

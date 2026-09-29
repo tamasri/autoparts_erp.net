@@ -3,6 +3,8 @@
 #
 #   bash scripts/setup-domain.sh almajdauto.com [email-for-expiry-notices]
 #
+# The app is served at https://<domain>/erp/ (nginx.conf, vite base); the domain root redirects there.
+#
 # Before running: the domain's A records (@ and www) point to this server, and scripts/deploy-vps.sh has run once
 # with the nginx.conf that serves /.well-known/acme-challenge/ (it is in the repository).
 # Safe to run again: it keeps a valid certificate, re-copies it, and re-writes the renewal hook.
@@ -96,6 +98,13 @@ else
   echo "ALLOWED_ORIGINS=$origins" >> "$ENV_FILE"
 fi
 echo "ALLOWED_ORIGINS=$origins"
+public_url="https://$DOMAIN/erp"
+if grep -q '^APP_PUBLIC_URL=' "$ENV_FILE"; then
+  sed -i "s|^APP_PUBLIC_URL=.*|APP_PUBLIC_URL=$public_url|" "$ENV_FILE"
+else
+  echo "APP_PUBLIC_URL=$public_url" >> "$ENV_FILE"
+fi
+echo "APP_PUBLIC_URL=$public_url (links and QR codes on printed documents)"
 "${COMPOSE[@]}" up -d api
 
 step "Renewal"
@@ -105,7 +114,7 @@ certbot renew --dry-run --cert-name "$DOMAIN" >/dev/null 2>&1 && echo "Renewal d
 
 step "Check"
 sleep 3
-code=$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || true)
-echo "https://$DOMAIN/ -> HTTP $code (a trusted certificate, or curl would have refused)"
+code=$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/erp/" || true)
+echo "https://$DOMAIN/erp/ -> HTTP $code (a trusted certificate, or curl would have refused)"
 echo
-echo "Done. Open https://$DOMAIN"
+echo "Done. Open https://$DOMAIN/erp"

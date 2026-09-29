@@ -229,7 +229,7 @@ The current server (130.94.45.230) is a trial deployment for development. The ow
       `bash scripts/setup-domain.sh almajdauto.com [email]`: checks DNS, issues a Let's Encrypt certificate (webroot
       `nginx/acme`, served on port 80 at `/.well-known/acme-challenge/`), copies it to `nginx/certs/` through the deploy
       hook `/etc/letsencrypt/renewal-hooks/deploy/autoparts-erp.sh` (which also reloads nginx), puts the domain first in
-      `ALLOWED_ORIGINS` (so document QR links use it) and recreates the api. Renewal: the host's `certbot.timer`.
+      `ALLOWED_ORIGINS` (so document QR links use it) and recreates the api. Renewal: the host's `certbot.timer`. The app is served at **https://almajdauto.com/erp/** (vite `base` /erp/ for builds, router basename, dist mounted at `html/erp`); `/api`, `/hubs`, `/hangfire` stay at the root; `/` and old paths 301 to `/erp…`; `APP_PUBLIC_URL` (`App:PublicUrl`) = `https://almajdauto.com/erp` for document links.
       nginx keeps the 443 server as `default_server`, so the bare IP still answers (with a name-mismatch warning).
 - [ ] **H-3 SSH:** install a key, verify a second session works, *then* set `PasswordAuthentication no`; add `fail2ban`.
 - [ ] **H-4 ERPNext:** change the `Administrator` password; close port 8080 to the internet (`ufw status` to check).
