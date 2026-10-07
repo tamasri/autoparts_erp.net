@@ -1,0 +1,16 @@
+# Build contexts (Dockerfile, deploy/coolify/*.Dockerfile) need only sources: keep secrets, builds and history out.
+.git
+**/bin
+**/obj
+**/node_modules
+frontend/dist
+tests
+docs
+observability
+.env*
+!.env.vps.template
+**/appsettings.Development.json
+*password*.txt
+nginx/certs
+nginx/acme
+*.md

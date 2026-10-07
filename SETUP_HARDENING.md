@@ -67,6 +67,11 @@ CI runs them. Frontend: `cd frontend && npx tsc --noEmit && npm run build`.
 
 ## 3. Production topology (the VPS as deployed)
 
+> **Moving to Coolify (2026-10):** the system is moving to a Coolify-managed server as one Docker Compose resource
+> (`docker-compose.coolify.yml`: app, PostgreSQL, Redis, ERPNext, nightly backups; HTTPS by Coolify; ERPNext private).
+> Setup and the move (`scripts/migrate-export.sh` → `scripts/migrate-import.sh`): **docs/COOLIFY.md**. This section describes
+> the old self-managed server until it is switched off.
+
 ```
 Internet ─▶ nginx (Docker, 80→443 redirect, self-signed TLS on the IP)
               ├─ /              → static SPA (frontend/dist, built on the host)
